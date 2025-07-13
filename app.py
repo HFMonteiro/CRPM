@@ -1,6 +1,7 @@
-import os
 from datetime import datetime
 import streamlit as st
+from pathlib import Path
+import traceback
 
 try:
     from pm4py.objects.log.importer.xes import importer as xes_importer
@@ -17,19 +18,14 @@ except Exception as e:
     st.error(msg)
     st.stop()
 
-LOG_DIR = os.environ.get("LOG_DIR", os.path.join('.', 'xes_logs'))
-OUTPUT_DIR = os.environ.get("OUTPUT_DIR", os.path.join('.', 'outputs'))
-os.makedirs(LOG_DIR, exist_ok=True)
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+OUTPUT_DIR = Path(
+    r"C:\Users\hugof\OneDrive - SPMS - Serviços Partilhados do Ministério da Saúde, EPE\DEP\Rastreios\RCCR\PM_mining\run_R_pm_phd\ARTIGO 3\AA_outputs"
+)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-
-def list_xes_files():
-    return [f for f in os.listdir(LOG_DIR) if f.lower().endswith('.xes')]
-
-
-def load_log(filename):
+def load_log(file_path: Path):
     try:
-        return xes_importer.apply(os.path.join(LOG_DIR, filename))
+        return xes_importer.apply(str(file_path))
     except Exception as exc:
         st.error(f"Could not load XES log: {exc}")
         return None
@@ -63,20 +59,31 @@ def mine_heuristics_net(log: EventLog):
 
 def visualize_and_save(hnet, filename):
     gviz = hn_vis.apply(hnet)
-    path = os.path.join(OUTPUT_DIR, filename)
-    hn_vis.save(gviz, path)
+    path = OUTPUT_DIR / filename
+    hn_vis.save(gviz, str(path))
     return path
 
 
 st.set_page_config(page_title="Heuristics Miner")
+st.sidebar.title("CRPM – Process Mining App")
 st.title("Process Mining with Heuristics Miner")
 
-files = list_xes_files()
-if not files:
-    st.warning(f"No .xes files found in {LOG_DIR}")
+default_logs_path = "./xes_logs"
+logs_path_str = st.sidebar.text_input("Folder containing .xes files", default_logs_path)
+LOGS_DIR = Path(logs_path_str)
+
+if not LOGS_DIR.exists():
+    st.sidebar.error(f"Directory not found: {LOGS_DIR.resolve()}")
     st.stop()
 
-selected_file = st.selectbox("Choose log file", files)
+xes_files = sorted(LOGS_DIR.glob("*.xes"))
+if not xes_files:
+    st.sidebar.error("No .xes files in this folder.")
+    st.stop()
+
+file_choice = st.sidebar.selectbox("Choose XES log", xes_files)
+
+selected_file = file_choice
 log = load_log(selected_file)
 if log is None:
     st.stop()
@@ -86,12 +93,14 @@ start_filter = st.selectbox("Filter by first event", ["All"] + start_events)
 start_date = st.date_input("Start date", value=None)
 end_date = st.date_input("End date", value=None)
 
-if st.button("Run Heuristics Miner"):
+run_btn = st.sidebar.button("Run analysis")
+
+if run_btn:
     with st.spinner("Running Heuristics Miner..."):
         filtered = filter_by_first_event(log, start_filter if start_filter != "All" else None)
         filtered = filter_by_dates(filtered, start_date, end_date)
         hnet = mine_heuristics_net(filtered)
-        img_path = visualize_and_save(hnet, f"{os.path.splitext(selected_file)[0]}.png")
+        img_path = visualize_and_save(hnet, f"{selected_file.stem}.png")
     st.image(img_path, caption="Heuristics Net")
     with open(img_path, "rb") as f:
-        st.download_button("Download Image", f, file_name=os.path.basename(img_path))
+        st.download_button("Download Image", f, file_name=img_path.name)
