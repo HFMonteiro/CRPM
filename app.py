@@ -9,7 +9,12 @@ try:
     from pm4py.algo.discovery.heuristics import algorithm as heuristics_miner
     from pm4py.visualization.heuristics_net import visualizer as hn_vis
 except Exception as e:
-    st.error(f"Failed to import PM4Py modules: {e}")
+    msg = (
+        f"Failed to import PM4Py modules: {e}.\n"
+        "Ensure that the `lxml` package is installed correctly. "
+        "On Windows try `pip install lxml` or `conda install -c conda-forge lxml`."
+    )
+    st.error(msg)
     st.stop()
 
 LOG_DIR = os.environ.get("LOG_DIR", os.path.join('.', 'xes_logs'))

@@ -4,3 +4,4 @@ pandas
 numpy
 matplotlib
 plotly
+lxml>=4.9.4

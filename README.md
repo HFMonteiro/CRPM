@@ -33,6 +33,28 @@ Execute the app locally using Streamlit:
 streamlit run app.py
 ```
 
+### Troubleshooting
+
+If you encounter an error similar to:
+
+```
+Failed to import PM4Py modules: cannot import name 'etree' from 'lxml'
+```
+
+the `lxml` package might not be installed correctly. Install it manually with:
+
+```bash
+pip install lxml
+```
+
+or via conda:
+
+```bash
+conda install -c conda-forge lxml
+```
+
+After installation restart the app.
+
 ## Output Directory
 
 The generated images are saved to the folder defined by `OUTPUT_DIR` in
