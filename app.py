@@ -17,7 +17,11 @@ LOG_DIRS = [
 ]
 
 # Output directory
-OUTPUT_DIR = r"C:\Users\hugof\OneDrive - SPMS - Serviços Partilhados do Ministério da Saúde, EPE\DEP\Rastreios\RCCR\PM_mining\run_R_pm_phd\ARTIGO 3\AA_outputs"
+# Can be overridden by the OUTPUT_DIR environment variable
+OUTPUT_DIR = os.environ.get(
+    "OUTPUT_DIR",
+    r"C:\Users\hugof\OneDrive - SPMS - Serviços Partilhados do Ministério da Saúde, EPE\DEP\Rastreios\RCCR\PM_mining\run_R_pm_phd\ARTIGO 3\AA_outputs",
+)
 
 
 def ensure_output_dir() -> None:
