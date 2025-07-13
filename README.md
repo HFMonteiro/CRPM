@@ -22,6 +22,10 @@ Execute the app locally using Streamlit:
 streamlit run app.py
 ```
 
+Generated files are saved under the `outputs` directory by default. You can
+customize the location by setting the `CRPM_OUTPUT_DIR` environment variable
+before running the app.
+
 ## License
 
 This project is released under the [GNU GPL v3](LICENSE).

@@ -17,12 +17,14 @@ LOG_DIRS = [
 ]
 
 # Output directory
-OUTPUT_DIR = r"C:\Users\hugof\OneDrive - SPMS - Serviços Partilhados do Ministério da Saúde, EPE\DEP\Rastreios\RCCR\PM_mining\run_R_pm_phd\ARTIGO 3\AA_outputs"
+DEFAULT_OUTPUT_DIR = os.path.join('.', 'outputs')
+OUTPUT_DIR = os.environ.get('CRPM_OUTPUT_DIR', DEFAULT_OUTPUT_DIR)
 
 
-def ensure_output_dir() -> None:
-    """Create the output directory if it doesn't exist."""
+def ensure_output_dir() -> str:
+    """Ensure the output directory exists and return its path."""
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+    return OUTPUT_DIR
 
 
 def scan_xes_files():
