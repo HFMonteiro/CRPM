@@ -1,6 +1,6 @@
 # CRPM Streamlit App
 
-This repository provides a Streamlit application for process mining using PM4PY. The app scans the `xes_files/original` and `xes_files/simulated` directories for available `.xes` logs and lets you perform discovery and conformance checking algorithms. Place your event logs in one of these folders before running the app.
+This repository provides a Streamlit application for process mining using PM4PY. The app scans the `xes_logs` directory for available `.xes` logs and lets you mine a heuristics net from the selected file. Place your event logs in this folder before running the app.
 
 ## Setup
 
@@ -13,6 +13,17 @@ This repository provides a Streamlit application for process mining using PM4PY.
    ```bash
    pip install -r requirements.txt
    ```
+
+### Conda environment
+
+Alternatively, you can create the environment with conda:
+
+```bash
+conda create -n pm_env python=3.10 -y
+conda activate pm_env
+pip install streamlit pm4py plotly pandas
+conda install -c conda-forge cvxopt lxml -y
+```
 
 ## Running the App
 
