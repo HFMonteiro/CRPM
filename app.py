@@ -30,15 +30,22 @@ def ensure_output_dir() -> None:
 
 
 def scan_xes_files():
-    """Return a dictionary mapping display names to file paths."""
+    """Return a dictionary mapping display names to file paths.
+
+    The label prepends the folder name (relative to ``xes_files``) to ensure
+    uniqueness when multiple directories contain files with the same name.
+    """
     files = {}
+    base_dir = os.path.join('.', 'xes_files')
     for d in LOG_DIRS:
         if not os.path.isdir(d):
             continue
         for fname in os.listdir(d):
             if fname.lower().endswith('.xes'):
                 path = os.path.join(d, fname)
-                files[fname] = path
+                label = os.path.relpath(path, base_dir)
+                label = label.replace("\\", "/")
+                files[label] = path
     return files
 
 
