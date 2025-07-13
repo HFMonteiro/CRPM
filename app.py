@@ -3,6 +3,7 @@ from datetime import datetime
 
 import streamlit as st
 from pm4py.objects.log.importer.xes import importer as xes_importer
+from pm4py.objects.log.obj import EventLog
 from pm4py.algo.discovery.alpha import algorithm as alpha_miner
 from pm4py.algo.discovery.inductive import algorithm as inductive_miner
 from pm4py.filtering.log.attributes import attributes_filter
@@ -25,7 +26,8 @@ def ensure_output_dir() -> None:
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
-def scan_xes_files():
+@st.cache_data(show_spinner=False)
+def scan_xes_files(dir_mtimes):
     """Return a dictionary mapping display names to file paths."""
     files = {}
     for d in LOG_DIRS:
@@ -38,7 +40,8 @@ def scan_xes_files():
     return files
 
 
-def load_log(path):
+@st.cache_data(show_spinner=False)
+def load_log(path, mtime):
     """Load an XES event log."""
     try:
         log = xes_importer.apply(path)
@@ -61,6 +64,7 @@ def filter_log(log, activities, start, end):
     return log
 
 
+@st.cache_data(show_spinner=False, hash_funcs={EventLog: lambda l: id(l)})
 def discover_model(log, method, noise_threshold=0.0):
     """Discover a Petri net from the log using the selected method."""
     if method == "Inductive Miner":
@@ -91,7 +95,8 @@ def check_conformance(log, net, im, fm):
 st.set_page_config(page_title="CRPM Process Mining")
 st.title("CRPM Process Mining App")
 
-files = scan_xes_files()
+dir_mtimes = tuple(os.path.getmtime(d) if os.path.isdir(d) else 0 for d in LOG_DIRS)
+files = scan_xes_files(dir_mtimes)
 
 if not files:
     st.warning("No .xes files found in the configured directories.")
@@ -104,7 +109,9 @@ noise = 0.0
 if algorithm == "Inductive Miner":
     noise = st.sidebar.slider("Noise threshold", 0.0, 1.0, 0.0, 0.05)
 
-log = load_log(files[selected_file])
+log_path = files[selected_file]
+log_mtime = os.path.getmtime(log_path)
+log = load_log(log_path, log_mtime)
 if log is None:
     st.stop()
 
