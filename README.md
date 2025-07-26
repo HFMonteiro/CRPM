@@ -1,6 +1,6 @@
 # CRPM Streamlit App
 
-This repository provides a Streamlit application for process mining using PM4PY. The app scans the `xes_logs` directory for available `.xes` logs and lets you mine a heuristics net from the selected file. Place your event logs in this folder before running the app.
+This repository provides a Streamlit application for process mining using PM4PY. The app scans the `xes_logs` directory for available `.xes` logs and lets you mine a heuristics net from the selected file. A small example log (`running-example.xes`) is already included in this folder so you can try the app right away or replace it with your own logs.
 
 ## Setup
 
@@ -32,6 +32,10 @@ Execute the app locally using Streamlit:
 ```bash
 streamlit run app.py
 ```
+
+The repository already contains `xes_logs/running-example.xes` as a small
+sample. After starting the app, pick this log from the sidebar to view the
+generated heuristics net immediately.
 
 ### Troubleshooting
 
