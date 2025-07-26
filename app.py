@@ -22,7 +22,9 @@ except Exception as e:
 
 # 2) App configuration
 OUTPUT_DIR = Path(
-    r"C:\Users\hugof\OneDrive - SPMS - Serviços Partilhados do Ministério da Saúde, EPE\DEP\Rastreios\RCCR\PM_mining\run_R_pm_phd\ARTIGO 3\AA_outputs"
+    r"C:\Users\hugof\OneDrive - SPMS - Serviços Partilhados do "
+    r"Ministério da Saúde, EPE\DEP\Rastreios\RCCR\PM_mining"
+    r"\run_R_pm_phd\ARTIGO 3\AA_outputs"
 )
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -31,6 +33,8 @@ st.sidebar.title("CRPM – Process Mining App")
 st.title("Process Mining with Heuristics Miner")
 
 # 3) Helper functions
+
+
 def load_log(file_path: Path) -> EventLog | None:
     try:
         return xes_importer.apply(str(file_path))
@@ -38,8 +42,10 @@ def load_log(file_path: Path) -> EventLog | None:
         st.error(f"Could not load XES log: {exc}")
         return None
 
+
 def first_event_names(log: EventLog):
     return sorted({trace[0]["concept:name"] for trace in log if trace})
+
 
 def filter_by_first_event(log: EventLog, event: str):
     if not event:
@@ -50,17 +56,22 @@ def filter_by_first_event(log: EventLog, event: str):
             filtered.append(trace)
     return filtered
 
+
 def filter_by_dates(log: EventLog, start, end):
     if not start and not end:
         return log
     start_dt = datetime.combine(start, datetime.min.time()) if start else None
-    end_dt   = datetime.combine(end,   datetime.max.time()) if end   else None
+    end_dt = datetime.combine(end, datetime.max.time()) if end else None
     return timestamp_filter.apply(log, start_dt, end_dt)
+
 
 # 4) Main UI + logic wrapped in its own try/except
 try:
     default_logs_path = "./xes_logs"
-    logs_path_str = st.sidebar.text_input("Folder containing .xes files", default_logs_path)
+    logs_path_str = st.sidebar.text_input(
+        "Folder containing .xes files",
+        default_logs_path,
+    )
     LOGS_DIR = Path(logs_path_str)
 
     if not LOGS_DIR.exists():
@@ -78,20 +89,26 @@ try:
         st.stop()
 
     # First‐event filter
-    start_events  = first_event_names(log)
-    start_filter  = st.sidebar.selectbox("Filter by first event", ["All"] + start_events)
+    start_events = first_event_names(log)
+    start_filter = st.sidebar.selectbox(
+        "Filter by first event",
+        ["All"] + start_events,
+    )
 
     # Date filter (only if requested)
     if st.sidebar.checkbox("Apply date filter"):
         start_date = st.sidebar.date_input("Start date")
-        end_date   = st.sidebar.date_input("End date")
+        end_date = st.sidebar.date_input("End date")
     else:
         start_date = end_date = None
 
     # Run the mining
     if st.sidebar.button("Run analysis"):
         with st.spinner("Running Heuristics Miner..."):
-            filtered = filter_by_first_event(log, None if start_filter == "All" else start_filter)
+            filtered = filter_by_first_event(
+                log,
+                None if start_filter == "All" else start_filter,
+            )
             filtered = filter_by_dates(filtered, start_date, end_date)
 
             # Note the current PM4Py API:
