@@ -4,6 +4,7 @@ import streamlit as st
 import traceback
 from datetime import datetime
 from pathlib import Path
+import tempfile
 
 # 1) Try PM4Py imports, but keep Streamlit available even if they fail
 try:
@@ -68,11 +69,25 @@ try:
         st.stop()
 
     xes_files = sorted(LOGS_DIR.glob("*.xes"))
+
+    uploaded_file = st.sidebar.file_uploader("Upload XES log", type="xes")
+    uploaded_path = None
+    if uploaded_file is not None:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".xes") as tmp:
+            tmp.write(uploaded_file.getvalue())
+            uploaded_path = Path(tmp.name)
+        xes_files = [uploaded_path] + xes_files
+
     if not xes_files:
-        st.sidebar.error("No .xes files in this folder.")
+        st.sidebar.info("Please upload a XES log to continue.")
         st.stop()
 
-    file_choice = st.sidebar.selectbox("Choose XES log", xes_files)
+    def _fmt(p: Path):
+        if uploaded_path is not None and p == uploaded_path:
+            return f"{uploaded_file.name} (uploaded)"
+        return p.name
+
+    file_choice = st.sidebar.selectbox("Choose XES log", xes_files, format_func=_fmt)
     log = load_log(file_choice)
     if log is None:
         st.stop()
