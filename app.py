@@ -2,17 +2,12 @@
 
 import streamlit as st
 import traceback
-from datetime import datetime
 from pathlib import Path
 import tempfile
 import os
 
 # 1) Try PM4Py imports, but keep Streamlit available even if they fail
 try:
-    from pm4py.objects.log.importer.xes import importer as xes_importer
-    from pm4py.objects.log.obj import EventLog
-    from pm4py.algo.filtering.log.timestamp import timestamp_filter
-    from pm4py.algo.discovery.heuristics import algorithm as heuristics_miner
     from pm4py.visualization.heuristics_net import visualizer as hn_vis
     from pm4py.algo.discovery.heuristics.algorithm import Variants
 except Exception as e:
@@ -22,6 +17,16 @@ except Exception as e:
     )
     st.stop()
 
+from crpm.conformance import (
+    load_log,
+    filter_start_event,
+    filter_date_range,
+    run_heuristics_miner,
+    compute_alignments,
+    compute_token_replay,
+    summarize_metrics,
+)
+
 # 2) App configuration
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
 ENV_OUTPUT_DIR = Path(os.environ.get("CRPM_OUTPUT_DIR", DEFAULT_OUTPUT_DIR))
@@ -30,37 +35,10 @@ st.set_page_config(page_title="Heuristics Miner")
 st.sidebar.title("CRPM – Process Mining App")
 st.title("Process Mining with Heuristics Miner")
 
-# 3) Helper functions
 
-
-def load_log(file_path: Path) -> EventLog | None:
-    try:
-        return xes_importer.apply(str(file_path))
-    except Exception as exc:
-        st.error(f"Could not load XES log: {exc}")
-        return None
-
-
-def first_event_names(log: EventLog):
+def first_event_names(log):
+    """Return sorted set of first event names in the log."""
     return sorted({trace[0]["concept:name"] for trace in log if trace})
-
-
-def filter_by_first_event(log: EventLog, event: str):
-    if not event:
-        return log
-    filtered = EventLog()
-    for trace in log:
-        if trace and trace[0]["concept:name"] == event:
-            filtered.append(trace)
-    return filtered
-
-
-def filter_by_dates(log: EventLog, start, end):
-    if not start and not end:
-        return log
-    start_dt = datetime.combine(start, datetime.min.time()) if start else None
-    end_dt = datetime.combine(end, datetime.max.time()) if end else None
-    return timestamp_filter.apply(log, start_dt, end_dt)
 
 
 # 4) Main UI + logic wrapped in its own try/except
@@ -122,20 +100,31 @@ try:
     # Run the mining
     if st.sidebar.button("Run analysis"):
         with st.spinner("Running Heuristics Miner..."):
-            filtered = filter_by_first_event(
+            filtered = filter_start_event(
                 log,
                 None if start_filter == "All" else start_filter,
             )
-            filtered = filter_by_dates(filtered, start_date, end_date)
+            filtered = filter_date_range(filtered, start_date, end_date)
 
-            # Note the current PM4Py API:
-            hnet = heuristics_miner.apply(filtered, variant=Variants.CLASSIC)
-            gviz = hn_vis.apply(hnet)
+            heu_net, net, im, fm = run_heuristics_miner(
+                filtered, variant=Variants.CLASSIC
+            )
+            gviz = hn_vis.apply(heu_net)
 
             out_path = OUTPUT_DIR / f"{file_choice.stem}.png"
             hn_vis.save(gviz, str(out_path))
 
+            align_res = compute_alignments(filtered, net, im, fm)
+            token_res = compute_token_replay(filtered, net, im, fm)
+            summary = summarize_metrics(align_res, token_res)
+
+        st.session_state["heuristics_image"] = str(out_path)
+        st.session_state["alignments"] = align_res
+        st.session_state["token_replay"] = token_res
+        st.session_state["summary"] = summary
+
         st.image(str(out_path), caption="Heuristics Net")
+        st.write("Conformance summary", summary)
         with open(out_path, "rb") as f:
             st.download_button("Download Image", f, file_name=out_path.name)
 
