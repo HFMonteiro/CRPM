@@ -34,6 +34,7 @@ Execute the app locally using Streamlit:
 
 ```bash
 streamlit run app.py
+streamlit run pipeline_app.py  # full pipeline interface
 ```
 
 The repository already contains `xes_logs/running-example.xes` as a small
@@ -79,6 +80,38 @@ pip freeze > requirements.lock
 ```
 
 Commit both files so others can recreate the updated environment.
+
+## Process Mining Pipeline
+
+The notebook `CONFORMANCE_fullcode_may_2025.ipynb` was refactored into
+reusable functions under `crpm.pipeline`. They cover CSV loading,
+conversion to an event log, temporal splitting and model discovery using
+both the Heuristics Miner and the Inductive Miner. Conformance metrics
+such as alignments, token replay and precision can also be computed.
+
+Basic usage from Python:
+
+```python
+from datetime import date
+from pathlib import Path
+from crpm.pipeline import (
+    load_csv,
+    csv_to_event_log,
+    split_by_date,
+    discover_heuristics_net,
+    alignment_fitness,
+)
+
+df = load_csv(Path("my_data.csv"))
+log = csv_to_event_log(df, "case_id", "activity_id", "timestamp")
+train, test = split_by_date(log, date(2024, 1, 1))
+
+_, net, im, fm = discover_heuristics_net(train)
+fitness = alignment_fitness(test, net, im, fm)
+```
+
+All functions accept `pathlib.Path` objects for paths making them
+cross‑platform and ready to be triggered from a Streamlit interface.
 
 ## License
 
