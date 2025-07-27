@@ -61,10 +61,9 @@ After installation restart the app.
 
 ## Output Directory
 
-The generated images are saved to the folder defined by `OUTPUT_DIR` in
-[app.py](app.py). By default this points to a local path. Set the `OUTPUT_DIR`
-environment variable or edit the variable in the file to change where the
-visualizations are written.
+The generated images are saved to an `outputs` folder located next to
+`app.py` by default. Set the `CRPM_OUTPUT_DIR` environment variable or edit the
+"Output directory" field in the sidebar to store the visualizations elsewhere.
 
 ## License
 
