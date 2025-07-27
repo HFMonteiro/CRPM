@@ -5,6 +5,7 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 import tempfile
+import os
 
 # 1) Try PM4Py imports, but keep Streamlit available even if they fail
 try:
@@ -22,12 +23,8 @@ except Exception as e:
     st.stop()
 
 # 2) App configuration
-OUTPUT_DIR = Path(
-    r"C:\Users\hugof\OneDrive - SPMS - Serviços Partilhados do "
-    r"Ministério da Saúde, EPE\DEP\Rastreios\RCCR\PM_mining"
-    r"\run_R_pm_phd\ARTIGO 3\AA_outputs"
-)
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
+ENV_OUTPUT_DIR = Path(os.environ.get("CRPM_OUTPUT_DIR", DEFAULT_OUTPUT_DIR))
 
 st.set_page_config(page_title="Heuristics Miner")
 st.sidebar.title("CRPM – Process Mining App")
@@ -73,6 +70,11 @@ try:
         "Folder containing .xes files",
         default_logs_path,
     )
+
+    output_dir_str = st.sidebar.text_input("Output directory", str(ENV_OUTPUT_DIR))
+    OUTPUT_DIR = Path(output_dir_str)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
     LOGS_DIR = Path(logs_path_str)
 
     if not LOGS_DIR.exists():
