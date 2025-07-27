@@ -9,9 +9,12 @@ This repository provides a Streamlit application for process mining using PM4PY.
    python3 -m venv .venv
    source .venv/bin/activate
    ```
-2. Install requirements:
+2. Install requirements (for a reproducible setup you may also install from the
+   accompanying `requirements.lock` file):
    ```bash
    pip install -r requirements.txt
+   # or for the exact versions used during development
+   pip install -r requirements.lock
    ```
 
 ### Conda environment
@@ -64,6 +67,18 @@ After installation restart the app.
 The generated images are saved to an `outputs` folder located next to
 `app.py` by default. Set the `CRPM_OUTPUT_DIR` environment variable or edit the
 "Output directory" field in the sidebar to store the visualizations elsewhere.
+
+### Updating dependency versions
+
+The versions pinned in `requirements.txt` reflect combinations tested with this
+project. To upgrade them:
+
+```bash
+pip install -U -r requirements.txt
+pip freeze > requirements.lock
+```
+
+Commit both files so others can recreate the updated environment.
 
 ## License
 

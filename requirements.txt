@@ -1,7 +1,7 @@
-streamlit
-pm4py
-pandas
-numpy
-matplotlib
-plotly
-lxml>=4.9.4
+streamlit==1.47.1
+pm4py==2.7.16
+pandas==2.3.1
+numpy==2.3.2
+matplotlib==3.10.3
+plotly==6.2.0
+lxml==6.0.0
