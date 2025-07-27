@@ -36,9 +36,25 @@ Execute the app locally using Streamlit:
 streamlit run app.py
 ```
 
-The repository already contains `xes_logs/running-example.xes` as a small
-sample. After starting the app, pick this log from the sidebar to view the
-generated heuristics net immediately.
+The repository already contains `xes_logs/running-example.xes` so you can start
+right away. Launch the app and use the sidebar to:
+
+1. **Choose the log folder** – by default `xes_logs` is used. You can also
+   drag-and-drop a log via the **Upload XES log** button which temporarily adds
+   it to the list.
+2. **Set the output directory** – either via the `CRPM_OUTPUT_DIR` environment
+   variable or directly in the "Output directory" text box. Images and metrics
+   will be written there when you run the miner.
+3. **Select the log** to analyse. You may optionally filter by the first event
+   or restrict the date range.
+4. Click **Run analysis** to mine the heuristics net and compute conformance
+   metrics. The discovered model is displayed in the main page together with a
+   summary of the alignment and token-based fitness values. Use **Download
+   Image** to save the visualization.
+   Values close to `1.0` in these metrics indicate good replay fitness.
+
+You can experiment with other Heuristics Miner variants by editing the
+`variant` argument in `run_heuristics_miner` inside `crpm/conformance.py`.
 
 ### Troubleshooting
 
@@ -79,6 +95,18 @@ pip freeze > requirements.lock
 ```
 
 Commit both files so others can recreate the updated environment.
+
+## Running Tests
+
+The project uses `pytest` for automated tests. After installing the
+requirements, simply run:
+
+```bash
+pytest
+```
+
+Currently no test files are included, so the command should report `no tests
+ran` until you add your own.
 
 ## License
 
