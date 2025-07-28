@@ -9,7 +9,7 @@ from __future__ import annotations
 # ‑‑ standard library
 from datetime import datetime, date
 from pathlib import Path
-from typing import Optional, Tuple, Any, Dict
+from typing import Optional, Tuple, Any
 
 # ‑‑ third‑party
 from pm4py.objects.log.obj import EventLog
@@ -21,8 +21,7 @@ from pm4py.algo.discovery.heuristics.algorithm import Variants as HeuristicsVari
 from pm4py.algo.discovery.inductive import algorithm as inductive_miner
 from pm4py.objects.conversion.process_tree import converter as pt_converter
 from pm4py.objects.petri_net.utils import petri_utils
-from pm4py.objects.petri_net.exporter import exporter as pnml_exporter
-from pm4py.visualization.petri_net import visualizer as pn_visualizer
+import pandas as pd
 from pm4py.algo.conformance.alignments.petri_net import algorithm as alignments
 from pm4py.algo.conformance.tokenreplay import algorithm as token_replay
 from pm4py.algo.evaluation.precision import algorithm as precision_evaluator
@@ -59,26 +58,28 @@ def csv_to_event_log(
         "activity_key": "concept:name",
         "timestamp_key": "time:timestamp",
     }
-    return log_converter.apply(df, variant=log_converter.Variants.TO_EVENT_LOG, parameters=parameters)
+    return log_converter.apply(
+        df,
+        variant=log_converter.Variants.TO_EVENT_LOG,
+        parameters=parameters,
+    )
 
 
 # ---------------------------------------------------------------------------
 # Log filtering and splitting
 # ---------------------------------------------------------------------------
-
-
-from datetime import datetime, timedelta  # já deve lá estar, só confirma
-
-def filter_date_range(log: EventLog,
-                      start: Optional[date],
-                      end:   Optional[date]) -> EventLog:
+def filter_date_range(
+    log: EventLog,
+    start: Optional[date],
+    end: Optional[date],
+) -> EventLog:
     # 1) Se não há limite, devolve o log tal‑qual‑é
     if not start and not end:
         return log
 
     # 2) Constrói os datetimes limite
     start_dt = datetime.combine(start, datetime.min.time()) if start else datetime.min
-    end_dt   = datetime.combine(end,   datetime.max.time()) if end   else datetime.max
+    end_dt = datetime.combine(end, datetime.max.time()) if end else datetime.max
 
     # 3) Usa a função correcta da PM4Py para EventLog
     return timestamp_filter.apply_events(log, start_dt, end_dt)
@@ -150,4 +151,3 @@ __all__ = [
     "token_replay_fitness",
     "precision",
 ]
-
