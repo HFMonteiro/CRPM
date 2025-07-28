@@ -3,20 +3,17 @@
 from __future__ import annotations
 
 # ‑‑ standard library
-from datetime import datetime, date
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
 # ‑‑ third‑party
 from pm4py.objects.log.obj import EventLog
 from pm4py.objects.log.importer.xes import importer as xes_importer
-from pm4py.algo.filtering.log.timestamp import timestamp_filter
 from pm4py.algo.discovery.heuristics import algorithm as heuristics_miner
 from pm4py.algo.discovery.heuristics.algorithm import Variants
 from pm4py.algo.conformance.alignments.petri_net import algorithm as alignments
 from pm4py.algo.conformance.tokenreplay import algorithm as token_replay
 from pm4py.algo.evaluation.replay_fitness import algorithm as fitness_eval
-
 
 
 # ---------------------------------------------------------------------------
@@ -38,23 +35,6 @@ def filter_start_event(log: EventLog, event_name: str | None) -> EventLog:
         if trace and trace[0]["concept:name"] == event_name:
             filtered.append(trace)
     return filtered
-
-
-from datetime import datetime, timedelta  # já deve lá estar, só confirma
-
-def filter_date_range(log: EventLog,
-                      start: Optional[date],
-                      end:   Optional[date]) -> EventLog:
-    # 1) Se não há limite, devolve o log tal‑qual‑é
-    if not start and not end:
-        return log
-
-    # 2) Constrói os datetimes limite
-    start_dt = datetime.combine(start, datetime.min.time()) if start else datetime.min
-    end_dt   = datetime.combine(end,   datetime.max.time()) if end   else datetime.max
-
-    # 3) Usa a função correcta da PM4Py para EventLog
-    return timestamp_filter.apply_events(log, start_dt, end_dt)
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +92,6 @@ def summarize_metrics(
 __all__ = [
     "load_log",
     "filter_start_event",
-    "filter_date_range",
     "run_heuristics_miner",
     "compute_alignments",
     "compute_token_replay",
