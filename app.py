@@ -20,12 +20,12 @@ except Exception as e:
 from crpm.conformance import (
     load_log,
     filter_start_event,
-    filter_date_range,
     run_heuristics_miner,
     compute_alignments,
     compute_token_replay,
     summarize_metrics,
 )
+from crpm.pipeline import filter_date_range
 
 # 2) App configuration
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
