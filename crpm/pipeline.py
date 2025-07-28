@@ -6,11 +6,12 @@ called programmatically or from a Streamlit interface.
 
 from __future__ import annotations
 
+# ‑‑ standard library
 from datetime import datetime, date
 from pathlib import Path
 from typing import Optional, Tuple, Any, Dict
 
-import pandas as pd
+# ‑‑ third‑party
 from pm4py.objects.log.obj import EventLog
 from pm4py.objects.conversion.log import converter as log_converter
 from pm4py.objects.log.util import dataframe_utils
@@ -66,12 +67,21 @@ def csv_to_event_log(
 # ---------------------------------------------------------------------------
 
 
-def filter_date_range(log: EventLog, start: Optional[date], end: Optional[date]) -> EventLog:
+from datetime import datetime, timedelta  # já deve lá estar, só confirma
+
+def filter_date_range(log: EventLog,
+                      start: Optional[date],
+                      end:   Optional[date]) -> EventLog:
+    # 1) Se não há limite, devolve o log tal‑qual‑é
     if not start and not end:
         return log
-    start_dt = datetime.combine(start, datetime.min.time()) if start else None
-    end_dt = datetime.combine(end, datetime.max.time()) if end else None
-    return timestamp_filter.apply(log, start_dt, end_dt)
+
+    # 2) Constrói os datetimes limite
+    start_dt = datetime.combine(start, datetime.min.time()) if start else datetime.min
+    end_dt   = datetime.combine(end,   datetime.max.time()) if end   else datetime.max
+
+    # 3) Usa a função correcta da PM4Py para EventLog
+    return timestamp_filter.apply_events(log, start_dt, end_dt)
 
 
 def split_by_date(log: EventLog, cutoff: date) -> Tuple[EventLog, EventLog]:

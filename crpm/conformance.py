@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+# ‑‑ standard library
+from datetime import datetime, date
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
+# ‑‑ third‑party
 from pm4py.objects.log.obj import EventLog
 from pm4py.objects.log.importer.xes import importer as xes_importer
 from pm4py.algo.filtering.log.timestamp import timestamp_filter
@@ -14,6 +16,7 @@ from pm4py.algo.discovery.heuristics.algorithm import Variants
 from pm4py.algo.conformance.alignments.petri_net import algorithm as alignments
 from pm4py.algo.conformance.tokenreplay import algorithm as token_replay
 from pm4py.algo.evaluation.replay_fitness import algorithm as fitness_eval
+
 
 
 # ---------------------------------------------------------------------------
@@ -37,15 +40,21 @@ def filter_start_event(log: EventLog, event_name: str | None) -> EventLog:
     return filtered
 
 
-def filter_date_range(
-    log: EventLog, start: date | None, end: date | None
-) -> EventLog:
-    """Filter traces by their start and end timestamps."""
+from datetime import datetime, timedelta  # já deve lá estar, só confirma
+
+def filter_date_range(log: EventLog,
+                      start: Optional[date],
+                      end:   Optional[date]) -> EventLog:
+    # 1) Se não há limite, devolve o log tal‑qual‑é
     if not start and not end:
         return log
-    start_dt = datetime.combine(start, datetime.min.time()) if start else None
-    end_dt = datetime.combine(end, datetime.max.time()) if end else None
-    return timestamp_filter.apply(log, start_dt, end_dt)
+
+    # 2) Constrói os datetimes limite
+    start_dt = datetime.combine(start, datetime.min.time()) if start else datetime.min
+    end_dt   = datetime.combine(end,   datetime.max.time()) if end   else datetime.max
+
+    # 3) Usa a função correcta da PM4Py para EventLog
+    return timestamp_filter.apply_events(log, start_dt, end_dt)
 
 
 # ---------------------------------------------------------------------------
