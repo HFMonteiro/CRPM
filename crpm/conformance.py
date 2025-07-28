@@ -4,7 +4,7 @@ from __future__ import annotations
 
 # ‑‑ standard library
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Optional
 
 # ‑‑ third‑party
 from pm4py.objects.log.obj import EventLog
@@ -21,12 +21,15 @@ from pm4py.algo.evaluation.replay_fitness import algorithm as fitness_eval
 # ---------------------------------------------------------------------------
 
 
-def load_log(file_path: Path | str) -> EventLog:
+def load_log(file_path: Path | str) -> Optional[EventLog]:
     """Load a XES log from the given path."""
-    return xes_importer.apply(str(file_path))
+    try:
+        return xes_importer.apply(str(file_path))
+    except Exception:
+        return None
 
 
-def filter_start_event(log: EventLog, event_name: str | None) -> EventLog:
+def filter_start_event(log: EventLog, event_name: Optional[str]) -> EventLog:
     """Return a copy of the log containing only traces starting with `event_name`."""
     if not event_name:
         return log

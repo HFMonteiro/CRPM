@@ -4,16 +4,29 @@ This repository provides a Streamlit application for process mining using PM4PY.
 
 ## Setup
 
-1. Create and activate a Python virtual environment (optional but recommended):
+1. **Prerequisites**: Python 3.10 or higher and Git
+
+2. **Clone the repository**:
+   ```bash
+   git clone https://github.com/HFMonteiro/CRPM.git
+   cd CRPM
+   ```
+
+3. **Create and activate a Python virtual environment** (recommended):
    ```bash
    python3 -m venv .venv
-   source .venv/bin/activate
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
-2. Install requirements (for a reproducible setup you may also install from the
-   accompanying `requirements.lock` file):
+
+4. **Install the package and dependencies**:
    ```bash
+   # For end users
    pip install -r requirements.txt
-   # or for the exact versions used during development
+   
+   # For development (includes testing and linting tools)
+   pip install -e ".[dev]"
+   
+   # For exact reproducible setup
    pip install -r requirements.lock
    ```
 
@@ -130,6 +143,59 @@ fitness = alignment_fitness(test, net, im, fm)
 All functions accept `pathlib.Path` objects for paths making them
 cross‑platform and ready to be triggered from a Streamlit interface.
 
+
+## Development
+
+### Setting up the development environment
+
+1. **Install development dependencies**:
+   ```bash
+   pip install -e ".[dev]"
+   ```
+
+2. **Install pre-commit hooks** (optional but recommended):
+   ```bash
+   pip install pre-commit
+   pre-commit install
+   ```
+
+### Running tests
+
+```bash
+# Run all tests
+python -m unittest discover tests -v
+
+# Run tests with coverage (if you have coverage installed)
+python -m coverage run -m unittest discover tests
+python -m coverage report
+```
+
+### Code quality checks
+
+```bash
+# Lint the code
+flake8 .
+
+# Format the code (if you have black installed)
+black .
+
+# Type checking (if you have mypy installed)
+mypy crpm/
+```
+
+### Running the applications locally
+
+```bash
+# Basic heuristics miner app
+streamlit run app.py
+
+# Full pipeline interface
+streamlit run pipeline_app.py
+```
+
+## Testing
+
+The project includes unit tests for the core functionality. Tests are located in the `tests/` directory and can be run using Python's built-in unittest module or pytest.
 
 ## License
 

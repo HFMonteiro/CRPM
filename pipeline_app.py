@@ -79,5 +79,3 @@ if "model" in st.session_state and "test" in st.session_state:
             "token_replay_fitness": t_fitness,
             "precision": prec,
         })
-
-

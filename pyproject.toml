@@ -1,0 +1,99 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crpm"
+version = "0.1.0"
+description = "Process Mining with PM4PY and Streamlit"
+readme = "README.md"
+license = {text = "GPL-3.0"}
+authors = [
+    {name = "CRPM Contributors"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "streamlit>=1.47.0",
+    "pm4py>=2.7.0",
+    "pandas>=2.0.0",
+    "numpy>=2.0.0",
+    "matplotlib>=3.8.0",
+    "plotly>=6.0.0",
+    "lxml>=6.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "flake8>=7.0.0",
+    "black>=24.0.0",
+    "pytest>=8.0.0",
+    "mypy>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/HFMonteiro/CRPM"
+Repository = "https://github.com/HFMonteiro/CRPM"
+Issues = "https://github.com/HFMonteiro/CRPM/issues"
+
+[project.scripts]
+crpm-app = "app:main"
+crpm-pipeline = "pipeline_app:main"
+
+[tool.setuptools.packages.find]
+include = ["crpm*"]
+exclude = ["tests*"]
+
+[tool.flake8]
+max-line-length = 100
+ignore = ["E203", "W503"]
+exclude = [".git", "__pycache__", "build", "dist", ".venv", "venv"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "pm4py.*",
+    "plotly.*",
+    "streamlit.*",
+]
+ignore_missing_imports = true
