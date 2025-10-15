@@ -13,6 +13,7 @@ from typing import Optional, Tuple, Any, Dict
 
 # ‑‑ third‑party
 from pm4py.objects.log.obj import EventLog
+import pandas as pd
 from pm4py.objects.conversion.log import converter as log_converter
 from pm4py.objects.log.util import dataframe_utils
 from pm4py.algo.filtering.log.timestamp import timestamp_filter

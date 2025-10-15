@@ -37,6 +37,12 @@ streamlit run app.py
 streamlit run pipeline_app.py  # full pipeline interface
 ```
 
+If your shell cannot find the `streamlit` command (common when it’s installed with `--user`), you can run it via Python, which bypasses PATH issues:
+
+```bash
+python -m streamlit run app.py
+```
+
 The repository already contains `xes_logs/running-example.xes` so you can start
 right away. Launch the app and use the sidebar to:
 
@@ -78,6 +84,22 @@ conda install -c conda-forge lxml
 ```
 
 After installation restart the app.
+
+#### Graphviz executables not found
+
+If you see an error like:
+
+```
+pydotplus.graphviz.InvocationException: GraphViz's executables not found
+```
+
+install the Graphviz system package so PM4Py/pydotplus can find the `dot` executable:
+
+```bash
+sudo apt-get update -y && sudo apt-get install -y graphviz
+```
+
+Then restart the app and run the analysis again.
 
 ## Output Directory
 
