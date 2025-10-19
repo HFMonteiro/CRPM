@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import os
 import pandas as pd
+import base64
 
 # 1) Try PM4Py imports, but keep Streamlit available even if they fail
 try:
@@ -27,13 +28,18 @@ from crpm.conformance import (
     compute_token_replay,
     summarize_metrics,
 )
-from crpm.pipeline import csv_to_event_log
+from crpm.pipeline import csv_to_event_log, discover_petri_inductive
+from pm4py.objects.petri_net.importer.importer import apply as pnml_importer
 
 # 2) App configuration
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
 ENV_OUTPUT_DIR = Path(os.environ.get("CRPM_OUTPUT_DIR", DEFAULT_OUTPUT_DIR))
 
-st.set_page_config(page_title="Heuristics Miner")
+st.set_page_config(
+    page_title="Heuristics Miner",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 st.sidebar.title("CRPM – Process Mining App")
 st.title("Process Mining with Heuristics Miner")
 
@@ -51,6 +57,9 @@ try:
     output_dir_str = st.sidebar.text_input("Output directory", str(ENV_OUTPUT_DIR))
     OUTPUT_DIR = Path(output_dir_str)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Upload size guard (bytes) - keep aligned with your frontend limit
+    MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB
 
     log = None
     file_choice = None
@@ -73,8 +82,13 @@ try:
         uploaded_file = st.sidebar.file_uploader("Upload XES log", type="xes")
         uploaded_path = None
         if uploaded_file is not None:
+            # quick size check
+            b = uploaded_file.getvalue()
+            if len(b) > MAX_UPLOAD_BYTES:
+                st.sidebar.error(f"Upload too large ({len(b)/(1024*1024):.1f} MB). Max allowed: {MAX_UPLOAD_BYTES/(1024*1024):.0f} MB.")
+                st.stop()
             with tempfile.NamedTemporaryFile(delete=False, suffix=".xes") as tmp:
-                tmp.write(uploaded_file.getvalue())
+                tmp.write(b)
                 uploaded_path = Path(tmp.name)
             xes_files = [uploaded_path] + xes_files
 
@@ -91,11 +105,18 @@ try:
         log = load_log(file_choice)
         if log is None:
             st.stop()
+        input_name = file_choice.name
 
     else:
         csv_file = st.sidebar.file_uploader("Upload CSV log", type=["csv"])
         if csv_file is None:
             st.sidebar.info("Upload a CSV file to continue.")
+            st.stop()
+
+        # size check
+        csv_bytes = csv_file.getvalue()
+        if len(csv_bytes) > MAX_UPLOAD_BYTES:
+            st.sidebar.error(f"CSV upload too large ({len(csv_bytes)/(1024*1024):.1f} MB). Max allowed: {MAX_UPLOAD_BYTES/(1024*1024):.0f} MB.")
             st.stop()
 
         df = pd.read_csv(csv_file)
@@ -109,6 +130,7 @@ try:
         timestamp_col = st.selectbox("Timestamp column", cols, index=2 if len(cols) > 2 else 0)
 
         log = csv_to_event_log(df, case_col, activity_col, timestamp_col)
+        input_name = getattr(csv_file, "name", "uploaded.csv")
 
     # First‐event filter
     start_events = first_event_names(log)
@@ -156,6 +178,17 @@ try:
             st.caption("Could not build preview table.")
 
     # Run the mining
+    # Conformance model selector
+    model_choice = st.sidebar.selectbox("Conformance model", ["heuristics", "inductive", "uploaded PNML"])
+    pnml_file = None
+    if model_choice == "uploaded PNML":
+        pnml_file = st.sidebar.file_uploader("Upload PNML for conformance", type=["pnml", "xml"])
+        if pnml_file is not None:
+            pnml_bytes = pnml_file.getvalue()
+            if len(pnml_bytes) > MAX_UPLOAD_BYTES:
+                st.sidebar.error(f"PNML upload too large ({len(pnml_bytes)/(1024*1024):.1f} MB). Max allowed: {MAX_UPLOAD_BYTES/(1024*1024):.0f} MB.")
+                st.stop()
+
     if st.sidebar.button("Run analysis"):
         with st.spinner("Running Heuristics Miner..."):
             filtered = filter_start_event(
@@ -164,12 +197,38 @@ try:
             )
             filtered = filter_date_range(filtered, start_date, end_date)
 
-            heu_net, net, im, fm = run_heuristics_miner(
+            # Always compute heuristics net for visualization
+            heu_net, heur_net_net, heur_net_im, heur_net_fm = run_heuristics_miner(
                 filtered, variant=Variants.CLASSIC
             )
             gviz = hn_vis.apply(heu_net)
 
-            out_path = OUTPUT_DIR / f"{file_choice.stem}.png"
+            # Decide which Petri net to use for conformance
+            if model_choice == "heuristics":
+                net, im, fm = heur_net_net, heur_net_im, heur_net_fm
+            elif model_choice == "inductive":
+                try:
+                    net, im, fm = discover_petri_inductive(filtered)
+                except Exception as e:
+                    st.error(f"Inductive miner failed: {e}")
+                    st.stop()
+            else:  # uploaded PNML
+                if pnml_file is None:
+                    st.error("Please upload a PNML file for conformance.")
+                    st.stop()
+                try:
+                    # write to tmp and import
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pnml") as tpn:
+                        tpn.write(pnml_file.getvalue())
+                        tpn_path = Path(tpn.name)
+                    net, im, fm = pnml_importer(str(tpn_path))
+                except Exception as e:
+                    st.error(f"PNML import failed: {e}")
+                    st.stop()
+
+            # derive output base name from input_name (XES or CSV)
+            base_stem = Path(input_name).stem if 'input_name' in locals() and input_name else "heuristics_net"
+            out_path = OUTPUT_DIR / f"{base_stem}.png"
             hn_vis.save(gviz, str(out_path))
 
             align_res = compute_alignments(filtered, net, im, fm)
@@ -181,8 +240,7 @@ try:
         st.session_state["token_replay"] = token_res
         st.session_state["summary"] = summary
 
-        st.image(str(out_path), caption="Heuristics Net")
-        # Present conformance summary as a table (wide format: metrics x groups)
+        # Layout: graph boxed in the left/main area, conformance KPIs + table on the right
         try:
             def summary_to_df(summary_dict):
                 groups = list(summary_dict.keys())
@@ -193,46 +251,65 @@ try:
                 metrics = sorted(metrics)
                 data = {g: [summary_dict.get(g, {}).get(m) for m in metrics] for g in groups}
                 df = pd.DataFrame(data, index=metrics)
-                # Try converting numeric-like values to numbers for nicer display
+                # Convert numeric-like values to numbers for nicer display
                 for col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors="ignore")
+                    try:
+                        df[col] = pd.to_numeric(df[col])
+                    except (ValueError, TypeError):
+                        pass
                 return df
 
             df_summary = summary_to_df(summary)
-            st.subheader("Conformance summary")
 
-            # KPI cards for quick glance (pick some common metrics if present)
-            try:
-                kpi_cols = st.columns(3)
-                def safe_get(g, k):
-                    return summary.get(g, {}).get(k)
+            # Desktop-optimized layout: 2:1 ratio (graph : stats)
+            left_col, right_col = st.columns([2, 1])
 
-                with kpi_cols[0]:
-                    v = safe_get("alignment_fitness", "log_fitness")
-                    st.metric("Alignment log_fitness", f"{v:.6f}" if isinstance(v, (int, float)) else v)
-                with kpi_cols[1]:
-                    v = safe_get("token_fitness", "log_fitness")
-                    st.metric("Token log_fitness", f"{v:.6f}" if isinstance(v, (int, float)) else v)
-                with kpi_cols[2]:
-                    v = safe_get("alignment_fitness", "percentage_of_fitting_traces")
-                    st.metric("% fitting traces", f"{v}" if v is not None else "-")
-            except Exception:
-                pass
+            # Boxed graph in the left (larger for desktop)
+            with left_col:
+                try:
+                    img_bytes = open(out_path, "rb").read()
+                    b64 = base64.b64encode(img_bytes).decode()
+                    img_tag = f'<img src="data:image/png;base64,{b64}" style="width:100%; height:auto; display:block; margin-left:auto; margin-right:auto;" />'
+                    st.markdown(
+                        f'<div style="border:2px solid #555; padding:16px; border-radius:8px; background-color:#0a0a0a; min-height:600px; display:flex; align-items:center; justify-content:center;">{img_tag}</div>',
+                        unsafe_allow_html=True,
+                    )
+                except Exception:
+                    # fallback to st.image
+                    st.image(str(out_path), caption="Heuristics Net", use_column_width=True)
 
-            # Option to transpose the table
-            transpose = st.checkbox("Transpose table (groups x metrics)", value=False)
-            display_df = df_summary.T if transpose else df_summary
-            st.dataframe(display_df.round(6), use_container_width=True)
+            # KPIs and conformance table on the right
+            with right_col:
+                st.subheader("Conformance summary")
 
-            # CSV download
-            try:
-                csv_bytes = display_df.to_csv().encode()
-                st.download_button("Download conformance CSV", csv_bytes, file_name="conformance_summary.csv", mime="text/csv")
-            except Exception:
-                pass
+                # KPI cards for quick glance (pick some common metrics if present)
+                try:
+                    kpi_cols = st.columns(1)
+                    def safe_get(g, k):
+                        return summary.get(g, {}).get(k)
 
-            with st.expander("Raw JSON", expanded=False):
-                st.json(summary)
+                    v1 = safe_get("alignment_fitness", "log_fitness")
+                    v2 = safe_get("token_fitness", "log_fitness")
+                    v3 = safe_get("alignment_fitness", "percentage_of_fitting_traces")
+
+                    st.metric("Alignment log_fitness", f"{v1:.6f}" if isinstance(v1, (int, float)) else v1)
+                    st.metric("Token log_fitness", f"{v2:.6f}" if isinstance(v2, (int, float)) else v2)
+                    st.metric("% fitting traces", f"{v3}" if v3 is not None else "-")
+                except Exception:
+                    pass
+
+                transpose = st.checkbox("Transpose table (groups x metrics)", value=False)
+                display_df = df_summary.T if transpose else df_summary
+                st.dataframe(display_df.round(6), use_container_width=True)
+
+                try:
+                    csv_bytes = display_df.to_csv().encode()
+                    st.download_button("Download conformance CSV", csv_bytes, file_name="conformance_summary.csv", mime="text/csv")
+                except Exception:
+                    pass
+
+                with st.expander("Raw JSON", expanded=False):
+                    st.json(summary)
         except Exception:
             st.subheader("Conformance summary")
             st.json(summary)
