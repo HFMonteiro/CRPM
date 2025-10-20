@@ -5,7 +5,7 @@ from __future__ import annotations
 # ‑‑ standard library
 from datetime import datetime, date
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Optional
 
 # ‑‑ third‑party
 from pm4py.objects.log.obj import EventLog
