@@ -1,5 +1,20 @@
 # CRPM Streamlit App
 
+**Robust, Codespaces-friendly process mining app for desktop browsers.**
+
+**Key workflow:**
+- For large XES files, copy them to `xes_logs/` (or any folder), click Refresh, and select from the dropdown. This bypasses browser/proxy upload limits (413 errors).
+- For remote files, use the URL fetch option in the sidebar (downloads server-side, no proxy limit).
+- The 'Browse files' button is available for convenience, but may fail with 413 if your proxy is strict (e.g., Codespaces, nginx).
+
+**If you see '413 Request Entity Too Large':**
+- Use the folder or URL fetch options instead of browser upload.
+- This is a Codespaces/proxy limitation, not a bug in the app.
+
+All analytics, layout, and export features remain. Desktop 16:9 layout, analytics tabs, and conformance model selector are preserved.
+
+---
+
 This repository provides a Streamlit application for process mining using PM4PY. The app scans the `xes_logs` directory for available `.xes` logs and lets you mine a heuristics net from the selected file. A small example log (`running-example.xes`) is already included in this folder so you can try the app right away or replace it with your own logs.
 
 ## Setup
@@ -46,9 +61,7 @@ python -m streamlit run app.py
 The repository already contains `xes_logs/running-example.xes` so you can start
 right away. Launch the app and use the sidebar to:
 
-1. **Choose the log folder** – by default `xes_logs` is used. You can also
-   drag-and-drop a log via the **Upload XES log** button which temporarily adds
-   it to the list.
+1. **Choose the log folder** – by default `xes_logs` is used. For large files, copy them here using VS Code's file explorer or a terminal, then click Refresh files. You can also use the **Browse files** button (may hit 413) or the URL fetch option.
 2. **Set the output directory** – either via the `CRPM_OUTPUT_DIR` environment
    variable or directly in the "Output directory" text box. Images and metrics
    will be written there when you run the miner.
