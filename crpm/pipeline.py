@@ -91,6 +91,67 @@ def split_by_date(log: EventLog, cutoff: date) -> Tuple[EventLog, EventLog]:
     return before, after
 
 
+def split_log_random(
+    log: EventLog,
+    train_ratio: float = 0.8,
+    random_seed: int = 42
+) -> Tuple[EventLog, EventLog, Dict[str, Any]]:
+    """Split event log randomly into training and test sets by case.
+
+    Args:
+        log: Event log to split
+        train_ratio: Ratio of cases for training (default 0.8 for 80/20 split)
+        random_seed: Random seed for reproducibility
+
+    Returns:
+        Tuple of (train_log, test_log, split_info)
+        where split_info contains statistics about the split
+    """
+    import random
+    from pm4py.objects.log.obj import EventLog as PM4PyEventLog
+
+    # Set random seed for reproducibility
+    random.seed(random_seed)
+
+    # Get all case IDs
+    case_ids = list(set(trace.attributes.get("concept:name", str(i)) for i, trace in enumerate(log)))
+    total_cases = len(case_ids)
+
+    # Shuffle case IDs
+    shuffled_cases = case_ids.copy()
+    random.shuffle(shuffled_cases)
+
+    # Split into train and test
+    train_size = int(total_cases * train_ratio)
+    train_case_ids = set(shuffled_cases[:train_size])
+    test_case_ids = set(shuffled_cases[train_size:])
+
+    # Create train and test logs
+    train_log = PM4PyEventLog()
+    test_log = PM4PyEventLog()
+
+    for trace in log:
+        case_id = trace.attributes.get("concept:name", "unknown")
+        if case_id in train_case_ids:
+            train_log.append(trace)
+        else:
+            test_log.append(trace)
+
+    # Compute statistics
+    split_info = {
+        "total_cases": total_cases,
+        "train_cases": len(train_log),
+        "test_cases": len(test_log),
+        "train_ratio": len(train_log) / total_cases if total_cases > 0 else 0,
+        "test_ratio": len(test_log) / total_cases if total_cases > 0 else 0,
+        "train_events": sum(len(trace) for trace in train_log),
+        "test_events": sum(len(trace) for trace in test_log),
+        "random_seed": random_seed
+    }
+
+    return train_log, test_log, split_info
+
+
 # ---------------------------------------------------------------------------
 # Model discovery
 # ---------------------------------------------------------------------------

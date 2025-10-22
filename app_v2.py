@@ -46,8 +46,9 @@ from crpm.conformance import (
     compute_alignments,
     compute_token_replay,
     summarize_metrics,
+    load_petri_net_from_pnml,
 )
-from crpm.pipeline import csv_to_event_log
+from crpm.pipeline import csv_to_event_log, split_log_random
 from crpm.report_generator import generate_pdf_report
 from crpm.discovery import (
     discover_all_algorithms,
@@ -129,6 +130,18 @@ def init_session_caches() -> None:
         "dfg_cache",
     ):
         st.session_state.setdefault(key, {})
+
+    # Train/test split state
+    if "train_log" not in st.session_state:
+        st.session_state["train_log"] = None
+    if "test_log" not in st.session_state:
+        st.session_state["test_log"] = None
+    if "split_info" not in st.session_state:
+        st.session_state["split_info"] = {}
+    if "reference_model" not in st.session_state:
+        st.session_state["reference_model"] = None
+    if "analysis_complete" not in st.session_state:
+        st.session_state["analysis_complete"] = False
 
 
 # ---------------------------------------------------------------------------
@@ -413,6 +426,63 @@ try:
         start_date = end_date = None
 
     # =======================================================================
+    # Train/Test Split Configuration
+    # =======================================================================
+
+    st.sidebar.markdown("---")
+    enable_train_test = st.sidebar.checkbox(
+        "✅ Enable Train/Test Split (80/20)",
+        value=False,
+        help="Split the log randomly into training (80%) and test (20%) sets. Models will be discovered on training data and evaluated on test data for realistic conformance metrics."
+    )
+
+    random_seed = 42
+    if enable_train_test:
+        random_seed = st.sidebar.number_input(
+            "Random Seed",
+            min_value=1,
+            max_value=9999,
+            value=42,
+            help="Set random seed for reproducible splits"
+        )
+
+    # Optional: Load reference model
+    st.sidebar.markdown("**Load Reference Model (Optional):**")
+    reference_pnml = st.sidebar.file_uploader(
+        "Upload PNML file",
+        type=["pnml"],
+        help="Upload an idealized Petri net model to compare against discovered models"
+    )
+
+    # Handle reference model upload
+    if reference_pnml is not None:
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pnml") as tmp:
+                tmp.write(reference_pnml.getvalue())
+                ref_pnml_path = Path(tmp.name)
+
+            ref_net, ref_im, ref_fm = load_petri_net_from_pnml(ref_pnml_path)
+            st.session_state["reference_model"] = {
+                "name": reference_pnml.name,
+                "net": ref_net,
+                "im": ref_im,
+                "fm": ref_fm
+            }
+            st.sidebar.success(f"✅ Loaded: {reference_pnml.name}")
+
+            # Clean up temp file
+            try:
+                ref_pnml_path.unlink()
+            except:
+                pass
+        except Exception as e:
+            st.sidebar.error(f"Failed to load PNML: {e}")
+            st.session_state["reference_model"] = None
+    elif st.session_state.get("reference_model") is not None and reference_pnml is None:
+        # Clear reference model if file uploader is cleared
+        st.session_state["reference_model"] = None
+
+    # =======================================================================
     # Log Statistics
     # =======================================================================
 
@@ -581,15 +651,51 @@ try:
         st.session_state["current_filter_key"] = filter_key
         st.session_state["current_input_name"] = input_name
 
+        # Apply train/test split if enabled
+        if enable_train_test:
+            with st.spinner("Splitting log into train (80%) and test (20%) sets..."):
+                train_log, test_log, split_info = split_log_random(filtered_log, train_ratio=0.8, random_seed=random_seed)
+
+                # Store in session state
+                st.session_state["train_log"] = train_log
+                st.session_state["test_log"] = test_log
+                st.session_state["split_info"] = split_info
+                st.session_state["enable_train_test"] = True
+
+                # Show split statistics
+                st.info(f"📊 **Train/Test Split Complete:**\n"
+                        f"- Training: {split_info['train_cases']} cases ({split_info['train_ratio']*100:.1f}%), {split_info['train_events']} events\n"
+                        f"- Test: {split_info['test_cases']} cases ({split_info['test_ratio']*100:.1f}%), {split_info['test_events']} events\n"
+                        f"- Random seed: {split_info['random_seed']}")
+
+                # Warn if test set is too small
+                if split_info['test_cases'] < 20:
+                    st.warning(f"⚠️ Test set has only {split_info['test_cases']} cases - results may not be reliable. Consider using more data.")
+
+                discovery_log = train_log  # Use training log for discovery
+        else:
+            st.session_state["train_log"] = None
+            st.session_state["test_log"] = None
+            st.session_state["split_info"] = {}
+            st.session_state["enable_train_test"] = False
+            discovery_log = filtered_log  # Use full filtered log
+
+            # Show warning about inflated metrics
+            st.warning("⚠️ **Train/Test Split Disabled**: Models will be evaluated on the same data used for discovery. "
+                      "This may result in artificially inflated conformance metrics (overfitting bias). "
+                      "Enable train/test split for realistic evaluation.")
+
         # Run discovery for all selected algorithms
         with st.spinner("Running process discovery algorithms..."):
             discovery_cache = st.session_state["discovery_results_cache"]
-            cache_key = f"{filter_key}::{','.join(sorted(selected_algorithms))}"
+            # Include train/test mode in cache key
+            split_mode = "train_test" if enable_train_test else "full"
+            cache_key = f"{filter_key}::{','.join(sorted(selected_algorithms))}::{split_mode}::{random_seed}"
 
             if cache_key in discovery_cache:
                 discovery_results = discovery_cache[cache_key]
             else:
-                discovery_results = discover_all_algorithms(filtered_log, selected_algorithms)
+                discovery_results = discover_all_algorithms(discovery_log, selected_algorithms)
                 discovery_cache[cache_key] = discovery_results
 
         st.session_state["discovery_results"] = discovery_results
@@ -728,6 +834,27 @@ with tab2:
     if len(discovery_results) < 2:
         st.info("At least 2 models required for comparison. Please select more algorithms.")
     else:
+        # Determine which log to use for conformance checking
+        enable_train_test = st.session_state.get("enable_train_test", False)
+        test_log = st.session_state.get("test_log")
+        train_log = st.session_state.get("train_log")
+        split_info = st.session_state.get("split_info", {})
+
+        # Display info about evaluation mode
+        if enable_train_test and test_log is not None:
+            st.info(f"📊 **Evaluation Mode:** Train/Test Split Enabled\n"
+                   f"- Models discovered on: **Training set** ({split_info.get('train_cases', 0)} cases)\n"
+                   f"- Models evaluated on: **Test set** ({split_info.get('test_cases', 0)} cases, unseen data)\n"
+                   f"- This provides realistic conformance metrics without overfitting bias.")
+            evaluation_log = test_log
+            eval_mode = "test"
+        else:
+            st.warning("⚠️ **Evaluation Mode:** No Train/Test Split\n"
+                      "Models are evaluated on the same data used for discovery. "
+                      "Metrics may be artificially inflated (overfitting bias).")
+            evaluation_log = filtered_log
+            eval_mode = "full"
+
         st.markdown("Computing conformance metrics for all models...")
 
         # Compute conformance for all models
@@ -737,14 +864,14 @@ with tab2:
         for idx, (model_name, result) in enumerate(discovery_results.items()):
             progress_bar.progress((idx + 1) / len(discovery_results))
 
-            # Check cache
-            conf_cache_key = f"{filter_key}::{model_name}"
+            # Check cache - include eval mode in cache key
+            conf_cache_key = f"{filter_key}::{model_name}::{eval_mode}"
             if conf_cache_key in st.session_state["conformance_cache"]:
                 conformance_results[model_name] = st.session_state["conformance_cache"][conf_cache_key]
             else:
                 with st.spinner(f"Computing conformance for {model_name}..."):
                     conf_result = compute_full_conformance(
-                        filtered_log,
+                        evaluation_log,
                         result.net,
                         result.initial_marking,
                         result.final_marking,

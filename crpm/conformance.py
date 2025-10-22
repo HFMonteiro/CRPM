@@ -29,6 +29,27 @@ def load_log(file_path: Path | str) -> EventLog:
     return xes_importer.apply(str(file_path))
 
 
+def load_petri_net_from_pnml(pnml_path: Path | str) -> Tuple[Any, Any, Any]:
+    """Load a Petri net from a PNML file.
+
+    Args:
+        pnml_path: Path to the PNML file
+
+    Returns:
+        Tuple of (net, initial_marking, final_marking)
+
+    Raises:
+        Exception: If the file cannot be loaded or parsed
+    """
+    from pm4py.objects.petri_net.importer import importer as pnml_importer
+
+    try:
+        net, initial_marking, final_marking = pnml_importer.apply(str(pnml_path))
+        return net, initial_marking, final_marking
+    except Exception as e:
+        raise Exception(f"Failed to load PNML file from {pnml_path}: {e}")
+
+
 def filter_start_event(log: EventLog, event_name: str | None) -> EventLog:
     """Return a copy of the log containing only traces starting with `event_name`."""
     if not event_name:
