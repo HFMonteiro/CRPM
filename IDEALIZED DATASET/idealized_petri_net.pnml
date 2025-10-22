@@ -1,0 +1,137 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<pnml>
+  <net id="" type="http://www.pnml.org/version-2009/grammar/pnmlcoremodel">
+    <name>
+      <text></text>
+    </name>
+    <page id="n0">
+      <place id="intplace_Lab_return">
+        <name>
+          <text>intplace_Lab_return</text>
+        </name>
+      </place>
+      <place id="source0">
+        <name>
+          <text>source0</text>
+        </name>
+        <initialMarking>
+          <text>1</text>
+        </initialMarking>
+      </place>
+      <place id="sink0">
+        <name>
+          <text>sink0</text>
+        </name>
+      </place>
+      <place id="pre_Lab_return">
+        <name>
+          <text>pre_Lab_return</text>
+        </name>
+      </place>
+      <place id="pre_FIT_mail">
+        <name>
+          <text>pre_FIT_mail</text>
+        </name>
+      </place>
+      <place id="pre_PCC_fwd">
+        <name>
+          <text>pre_PCC_fwd</text>
+        </name>
+      </place>
+      <place id="pre_PCC_observation">
+        <name>
+          <text>pre_PCC_observation</text>
+        </name>
+      </place>
+      <place id="pre_Colonoscopy_center">
+        <name>
+          <text>pre_Colonoscopy_center</text>
+        </name>
+      </place>
+      <place id="intplace_FIT_mail">
+        <name>
+          <text>intplace_FIT_mail</text>
+        </name>
+      </place>
+      <transition id="Invitation_mail">
+        <name>
+          <text>Invitation_mail</text>
+        </name>
+      </transition>
+      <transition id="FIT_return">
+        <name>
+          <text>FIT_return</text>
+        </name>
+      </transition>
+      <transition id="Lab_return">
+        <name>
+          <text>Lab_return</text>
+        </name>
+      </transition>
+      <transition id="Lab_result">
+        <name>
+          <text>Lab_result</text>
+        </name>
+      </transition>
+      <transition id="FIT_mail">
+        <name>
+          <text>FIT_mail</text>
+        </name>
+      </transition>
+      <transition id="PCC_fwd">
+        <name>
+          <text>PCC_fwd</text>
+        </name>
+      </transition>
+      <transition id="PCC_observation">
+        <name>
+          <text>PCC_observation</text>
+        </name>
+      </transition>
+      <transition id="Colonoscopy_center">
+        <name>
+          <text>Colonoscopy_center</text>
+        </name>
+      </transition>
+      <transition id="hid_2">
+        <name>
+          <text>hid_2</text>
+        </name>
+        <toolspecific tool="ProM" version="6.4" activity="$invisible$" localNodeID="327f97f0-2d3d-4f89-aaef-d036b4a3433e"/>
+      </transition>
+      <transition id="hid_4">
+        <name>
+          <text>hid_4</text>
+        </name>
+        <toolspecific tool="ProM" version="6.4" activity="$invisible$" localNodeID="637fd20c-93e5-4552-abe9-126097c2f7b8"/>
+      </transition>
+      <arc id="2272212955088" source="PCC_fwd" target="pre_PCC_observation"/>
+      <arc id="2272212945936" source="Lab_return" target="intplace_Lab_return"/>
+      <arc id="2272212950928" source="FIT_return" target="pre_Lab_return"/>
+      <arc id="2265592399888" source="intplace_Lab_return" target="Lab_result"/>
+      <arc id="2272017284624" source="source0" target="Invitation_mail"/>
+      <arc id="2272212944272" source="pre_Lab_return" target="Lab_return"/>
+      <arc id="2272212948880" source="pre_PCC_fwd" target="PCC_fwd"/>
+      <arc id="2272212947600" source="pre_Colonoscopy_center" target="Colonoscopy_center"/>
+      <arc id="2272212951184" source="Invitation_mail" target="pre_FIT_mail"/>
+      <arc id="2272212955856" source="PCC_observation" target="pre_Colonoscopy_center"/>
+      <arc id="2272212954512" source="Lab_result" target="pre_PCC_fwd"/>
+      <arc id="2272024986704" source="pre_FIT_mail" target="FIT_mail"/>
+      <arc id="2272212958160" source="intplace_FIT_mail" target="FIT_return"/>
+      <arc id="2272212946768" source="pre_PCC_observation" target="PCC_observation"/>
+      <arc id="2272212952016" source="FIT_mail" target="intplace_FIT_mail"/>
+      <arc id="2272212950096" source="intplace_FIT_mail" target="hid_2"/>
+      <arc id="2272212950224" source="hid_2" target="sink0"/>
+      <arc id="2272212956496" source="intplace_Lab_return" target="hid_4"/>
+      <arc id="2272212956624" source="hid_4" target="sink0"/>
+      <arc id="2272212957264" source="Colonoscopy_center" target="sink0"/>
+    </page>
+    <finalmarkings>
+      <marking>
+        <place idref="sink0">
+          <text>1</text>
+        </place>
+      </marking>
+    </finalmarkings>
+  </net>
+</pnml>

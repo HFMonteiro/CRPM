@@ -303,14 +303,18 @@ def get_quality_badge_html(quality_level: str, color: str) -> str:
 
     bg_color = color_map.get(color, "#6c757d")
 
-    return f'''<span style="
+    return f'''<span class="quality-badge" style="
         background-color: {bg_color};
         color: white;
-        padding: 2px 8px;
-        border-radius: 4px;
+        padding: 4px 12px;
+        border-radius: 12px;
         font-size: 0.85em;
-        font-weight: bold;
-        margin-left: 5px;
+        font-weight: 700;
+        margin-left: 8px;
+        display: inline-block;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     ">{quality_level}</span>'''
 
 

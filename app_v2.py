@@ -56,6 +56,7 @@ from crpm.discovery import (
     compute_model_complexity,
     DiscoveryResult
 )
+from crpm.styles import apply_custom_styling
 from crpm.interpretations import (
     assess_fitness,
     assess_precision,
@@ -106,11 +107,17 @@ from crpm.dfg_utils import (
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
 ENV_OUTPUT_DIR = Path(os.environ.get("CRPM_OUTPUT_DIR", DEFAULT_OUTPUT_DIR))
 
+# UI Configuration
+DATAFRAME_HEIGHT = 400  # Standard height for dataframes in pixels
+
 st.set_page_config(
     page_title="CRPM - Process Mining Workbench",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# Apply custom CSS styling
+apply_custom_styling()
 
 # ---------------------------------------------------------------------------
 # Session State Initialization
@@ -189,9 +196,23 @@ def compute_filter_key(
 # Utility Functions
 # ---------------------------------------------------------------------------
 
-def render_petri_png(net, im, fm) -> bytes:
-    """Render Petri net to PNG bytes."""
-    gviz = pn_vis.apply(net, im, fm)
+def render_petri_png(net, im, fm, rankdir: str = "LR") -> bytes:
+    """Render Petri net to PNG bytes.
+
+    Args:
+        net: Petri net
+        im: Initial marking
+        fm: Final marking
+        rankdir: Graph direction - "LR" (left-right, default) or "TB" (top-bottom)
+
+    Returns:
+        PNG bytes
+    """
+    parameters = {
+        "format": "png",
+        "rankdir": rankdir
+    }
+    gviz = pn_vis.apply(net, im, fm, parameters=parameters)
     try:
         return gviz.pipe(format="png")
     except Exception:
@@ -563,7 +584,7 @@ try:
         elif export_format == "JSON (All Data)":
             st.sidebar.info("JSON export: Feature coming soon!")
         else:  # PDF Full Report
-            with st.sidebar.spinner("Generating PDF report..."):
+            with st.spinner("Generating PDF report..."):
                 try:
                     # Collect all analysis data from session state
                     discovery_results = st.session_state.get("discovery_results", [])
@@ -765,7 +786,9 @@ with tab1:
                 if result.heuristics_net:
                     img_bytes = render_heuristics_png(result.heuristics_net)
                 else:
-                    img_bytes = render_petri_png(result.net, result.initial_marking, result.final_marking)
+                    # Use top-down layout for Inductive Miner variants, left-right for others
+                    rankdir = "TB" if result.algorithm == "Inductive Miner" else "LR"
+                    img_bytes = render_petri_png(result.net, result.initial_marking, result.final_marking, rankdir=rankdir)
 
                 st.image(img_bytes, caption=f"{model_name} Visualization")
 
@@ -933,7 +956,7 @@ with tab2:
                      "discovery_time_s"]
         display_df = display_df[[c for c in col_order if c in display_df.columns]]
 
-        st.dataframe(display_df, use_container_width=True)
+        st.dataframe(display_df, use_container_width=True, height=DATAFRAME_HEIGHT)
 
         # Download button
         st.download_button(
@@ -1124,7 +1147,7 @@ with tab3:
             st.plotly_chart(fig, use_container_width=True)
 
             with st.expander("Bottleneck Details"):
-                st.dataframe(bottlenecks, use_container_width=True)
+                st.dataframe(bottlenecks, use_container_width=True, height=DATAFRAME_HEIGHT)
                 st.download_button(
                     "Download Bottleneck Data",
                     bottlenecks.to_csv(index=False).encode(),
@@ -1147,7 +1170,7 @@ with tab3:
                 display_stats[new_col] = (display_stats[col] / 86400).round(4)
                 display_stats.drop(col, axis=1, inplace=True)
 
-            st.dataframe(display_stats, use_container_width=True)
+            st.dataframe(display_stats, use_container_width=True, height=DATAFRAME_HEIGHT)
 
             st.download_button(
                 "Download Activity Statistics",
@@ -1306,7 +1329,7 @@ with tab4:
                     lambda x: x[:100] + "..." if len(str(x)) > 100 else x
                 )
 
-            st.dataframe(display_conf, use_container_width=True)
+            st.dataframe(display_conf, use_container_width=True, height=DATAFRAME_HEIGHT)
 
             st.download_button(
                 "Download Variant Conformance",
@@ -1320,7 +1343,7 @@ with tab4:
                 if "align_fitness" in variant_conformance.columns:
                     non_conforming = variant_conformance[variant_conformance["align_fitness"] < 0.8]
                     if not non_conforming.empty:
-                        st.dataframe(non_conforming, use_container_width=True)
+                        st.dataframe(non_conforming, use_container_width=True, height=DATAFRAME_HEIGHT)
                         st.caption(f"{len(non_conforming)} variants with fitness < 0.8")
                     else:
                         st.success("All variants have fitness >= 0.8")
@@ -1479,7 +1502,7 @@ with tab5:
 
             edge_df = pd.DataFrame(edge_data)
             edge_df = edge_df.sort_values("Value", ascending=False) if dfg_type == "Frequency-Based" else edge_df
-            st.dataframe(edge_df, use_container_width=True)
+            st.dataframe(edge_df, use_container_width=True, height=DATAFRAME_HEIGHT)
 
             # Download button
             st.download_button(

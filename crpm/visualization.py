@@ -13,6 +13,17 @@ from plotly.subplots import make_subplots
 
 
 # ---------------------------------------------------------------------------
+# Chart Configuration Constants
+# ---------------------------------------------------------------------------
+
+# Standardized chart heights for consistent UI
+CHART_HEIGHT_STANDARD = 450  # Standard charts (distributions, scatter plots)
+CHART_HEIGHT_LARGE = 550     # Large comparison charts (radar, heatmap)
+CHART_HEIGHT_DYNAMIC_MIN = 350  # Minimum height for dynamic charts
+CHART_HEIGHT_DYNAMIC_FACTOR = 40  # Pixels per row for dynamic charts
+
+
+# ---------------------------------------------------------------------------
 # Performance Charts
 # ---------------------------------------------------------------------------
 
@@ -70,7 +81,7 @@ def create_bottleneck_chart(bottleneck_df: pd.DataFrame, top_n: int = 10) -> go.
         xaxis_title="Duration (days)",
         yaxis_title="Transition",
         barmode="group",
-        height=max(400, len(df) * 40),
+        height=max(CHART_HEIGHT_DYNAMIC_MIN, len(df) * CHART_HEIGHT_DYNAMIC_FACTOR),
         showlegend=True,
         hovermode="closest"
     )
@@ -127,7 +138,7 @@ def create_activity_duration_chart(activity_stats: pd.DataFrame, top_n: int = 15
         title=f"Activity Duration Distribution (Top {len(df)} by frequency)",
         xaxis_title="Duration (hours)",
         yaxis_title="Activity",
-        height=max(400, len(df) * 40),
+        height=max(CHART_HEIGHT_DYNAMIC_MIN, len(df) * CHART_HEIGHT_DYNAMIC_FACTOR),
         showlegend=False
     )
 
@@ -228,7 +239,7 @@ def create_case_duration_histogram(case_durations: pd.DataFrame, bins: int = 50)
         xaxis_title=f"Duration ({unit_label})",
         yaxis_title="",
         showlegend=False,
-        height=400,
+        height=CHART_HEIGHT_STANDARD,
         yaxis=dict(showticklabels=False)
     )
 
@@ -257,29 +268,41 @@ def create_variant_frequency_chart(variant_stats: pd.DataFrame, top_n: int = 20)
 
     df = variant_stats.head(top_n).copy()
 
-    # Truncate long variant names
+    # Truncate long variant names for display
     df["variant_short"] = df["variant_str"].apply(
-        lambda x: x[:50] + "..." if len(str(x)) > 50 else x
+        lambda x: (x[:40] + "...") if len(str(x)) > 40 else x
     )
 
     fig = go.Figure()
 
+    # Use variant names as x-axis for better readability
     fig.add_trace(go.Bar(
-        x=df.index + 1,
+        x=df["variant_short"],
         y=df["percentage"],
-        text=df["percentage"].round(1).astype(str) + "%",
+        text=df["percentage"].round(2).astype(str) + "%",
         textposition="outside",
-        marker=dict(color="steelblue"),
-        hovertext=df["variant_short"],
-        hoverinfo="text+y"
+        marker=dict(
+            color=df["percentage"],
+            colorscale="Blues",
+            showscale=False,
+            line=dict(color="#1f77b4", width=1.5)
+        ),
+        hovertemplate="<b>%{x}</b><br>Frequency: %{y:.2f}%<br>Count: " +
+                     df["frequency"].astype(str) + "<extra></extra>"
     ))
 
+    # Auto-scale y-axis to show meaningful range
+    max_pct = df["percentage"].max()
+    y_max = max(max_pct * 1.15, 5)  # At least 5% range, or 115% of max
+
     fig.update_layout(
-        title=f"Top {len(df)} Variant Frequencies",
-        xaxis_title="Variant Rank",
-        yaxis_title="Percentage (%)",
-        height=400,
-        showlegend=False
+        title=f"Top {len(df)} Process Variant Frequencies",
+        xaxis_title="Process Variant",
+        yaxis_title="Frequency (%)",
+        height=CHART_HEIGHT_STANDARD,
+        showlegend=False,
+        yaxis=dict(range=[0, y_max]),
+        xaxis=dict(tickangle=-45, automargin=True)
     )
 
     return fig
@@ -301,25 +324,37 @@ def create_variant_coverage_chart(variant_coverage: pd.DataFrame) -> go.Figure:
 
     fig = go.Figure()
 
+    # Add area under curve
     fig.add_trace(go.Scatter(
         x=variant_coverage.index + 1,
         y=variant_coverage["cumulative_percentage"],
         mode="lines+markers",
-        marker=dict(color="green"),
-        line=dict(width=2),
-        fill="tozeroy"
+        marker=dict(size=8, color="#1f77b4", line=dict(width=2, color="white")),
+        line=dict(width=3, color="#1f77b4"),
+        fill="tozeroy",
+        fillcolor="rgba(31, 119, 180, 0.2)",
+        hovertemplate="<b>%{x} variants</b><br>Coverage: %{y:.2f}%<extra></extra>"
     ))
 
-    # Add 80% coverage line
-    fig.add_hline(y=80, line_dash="dash", line_color="red",
-                  annotation_text="80% Coverage")
+    # Add reference lines for coverage milestones
+    fig.add_hline(y=50, line_dash="dot", line_color="gray", opacity=0.5,
+                  annotation_text="50%", annotation_position="right")
+    fig.add_hline(y=80, line_dash="dash", line_color="orange", line_width=2,
+                  annotation_text="80% Coverage", annotation_position="right")
+    fig.add_hline(y=90, line_dash="dot", line_color="gray", opacity=0.5,
+                  annotation_text="90%", annotation_position="right")
+
+    # Auto-scale x-axis for better visibility
+    max_variants = len(variant_coverage)
 
     fig.update_layout(
         title="Cumulative Variant Coverage",
         xaxis_title="Number of Variants",
         yaxis_title="Cumulative Coverage (%)",
-        height=400,
-        showlegend=False
+        height=CHART_HEIGHT_STANDARD,
+        showlegend=False,
+        yaxis=dict(range=[0, 105]),
+        xaxis=dict(range=[0, max(max_variants * 1.1, 10)])
     )
 
     return fig
@@ -372,7 +407,7 @@ def create_model_comparison_radar(comparison_df: pd.DataFrame, metrics: List[str
     fig.update_layout(
         polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
         title="Model Comparison (Normalized Metrics)",
-        height=500,
+        height=CHART_HEIGHT_LARGE,
         showlegend=True
     )
 
@@ -418,7 +453,7 @@ def create_model_comparison_heatmap(comparison_df: pd.DataFrame, metrics: List[s
         title="Model Comparison Heatmap",
         xaxis_title="Model",
         yaxis_title="Metric",
-        height=max(400, len(metrics) * 50),
+        height=max(CHART_HEIGHT_DYNAMIC_MIN, len(metrics) * 50),
         width=max(600, len(model_names) * 100)
     )
 
@@ -520,7 +555,7 @@ def create_fitness_precision_scatter(comparison_df: pd.DataFrame) -> go.Figure:
         title="Fitness vs Precision (Pareto Frontier)",
         xaxis_title="Fitness",
         yaxis_title="Precision",
-        height=500,
+        height=CHART_HEIGHT_LARGE,
         width=600,
         showlegend=False,
         xaxis=dict(range=[0, 1.05]),
