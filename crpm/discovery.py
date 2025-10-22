@@ -348,8 +348,9 @@ AVAILABLE_ALGORITHMS = {
     "Inductive (IM)": discover_inductive_im,
     "Inductive (IMf)": discover_inductive_imf,
     "Inductive (IMd)": discover_inductive_imd,
-    "Alpha (Classic)": discover_alpha_classic,
-    "Alpha+": discover_alpha_plus,
+    # Alpha Miner removed - not suitable for noisy real-world logs
+    # "Alpha (Classic)": discover_alpha_classic,
+    # "Alpha+": discover_alpha_plus,
 }
 
 

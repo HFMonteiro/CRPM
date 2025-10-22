@@ -504,7 +504,6 @@ try:
     # Group algorithms by type
     heuristics_algos = [k for k in AVAILABLE_ALGORITHMS.keys() if "Heuristics" in k]
     inductive_algos = [k for k in AVAILABLE_ALGORITHMS.keys() if "Inductive" in k]
-    alpha_algos = [k for k in AVAILABLE_ALGORITHMS.keys() if "Alpha" in k]
 
     with st.sidebar.expander("Select Algorithms", expanded=True):
         select_all = st.checkbox("Select All", value=False)
@@ -522,11 +521,6 @@ try:
             st.caption("**Inductive Miner:**")
             for algo in inductive_algos:
                 if st.checkbox(algo, value=(algo == "Inductive (IMf)"), key=f"algo_{algo}"):
-                    selected_algorithms.append(algo)
-
-            st.caption("**Alpha Miner:**")
-            for algo in alpha_algos:
-                if st.checkbox(algo, value=False, key=f"algo_{algo}"):
                     selected_algorithms.append(algo)
 
     if not selected_algorithms:
