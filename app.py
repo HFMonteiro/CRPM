@@ -262,10 +262,32 @@ try:
         st.dataframe(df.head(50), use_container_width=True)
 
         cols = list(df.columns)
+        if not cols:
+            st.sidebar.error("Uploaded CSV has no columns.")
+            st.stop()
+
         st.markdown("Map CSV columns to event log fields:")
         case_col = st.selectbox("Case ID column", cols, index=0 if cols else None)
         activity_col = st.selectbox("Activity column", cols, index=1 if len(cols) > 1 else 0)
         timestamp_col = st.selectbox("Timestamp column", cols, index=2 if len(cols) > 2 else 0)
+
+        # Basic validation before conversion
+        selected_cols = {case_col, activity_col, timestamp_col}
+        if len(selected_cols) < 3:
+            st.sidebar.error("Please choose three distinct columns for case, activity, and timestamp.")
+            st.stop()
+
+        if df.empty:
+            st.sidebar.error("Uploaded CSV is empty.")
+            st.stop()
+
+        parsed_timestamps = pd.to_datetime(df[timestamp_col], errors="coerce")
+        invalid_ts = parsed_timestamps.isna().sum()
+        if invalid_ts:
+            st.sidebar.error(
+                f"Timestamp column '{timestamp_col}' contains {invalid_ts} unparsable value(s)."
+            )
+            st.stop()
 
         csv_log_signature = f"{csv_signature}::{case_col}:{activity_col}:{timestamp_col}"
         log_cache = st.session_state["log_cache"]

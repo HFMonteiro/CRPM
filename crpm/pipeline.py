@@ -7,7 +7,7 @@ called programmatically or from a Streamlit interface.
 from __future__ import annotations
 
 # ‑‑ standard library
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Optional, Tuple, Any, Dict
 
@@ -66,10 +66,6 @@ def csv_to_event_log(
 # ---------------------------------------------------------------------------
 # Log filtering and splitting
 # ---------------------------------------------------------------------------
-
-
-from datetime import datetime, timedelta  # já deve lá estar, só confirma
-
 def filter_date_range(log: EventLog,
                       start: Optional[date],
                       end:   Optional[date]) -> EventLog:
@@ -86,8 +82,11 @@ def filter_date_range(log: EventLog,
 
 
 def split_by_date(log: EventLog, cutoff: date) -> Tuple[EventLog, EventLog]:
-    before = filter_date_range(log, None, cutoff)
-    after = filter_date_range(log, cutoff, None)
+    """Split log into events strictly before the cutoff and on/after the cutoff."""
+    cutoff_start = datetime.combine(cutoff, datetime.min.time())
+    before_end = cutoff_start - timedelta(microseconds=1)
+    before = timestamp_filter.apply_events(log, datetime.min, before_end)
+    after = timestamp_filter.apply_events(log, cutoff_start, datetime.max)
     return before, after
 
 
@@ -212,4 +211,3 @@ __all__ = [
     "token_replay_fitness",
     "precision",
 ]
-
