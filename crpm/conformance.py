@@ -61,8 +61,6 @@ def filter_start_event(log: EventLog, event_name: str | None) -> EventLog:
     return filtered
 
 
-from datetime import datetime, timedelta  # já deve lá estar, só confirma
-
 def filter_date_range(log: EventLog,
                       start: Optional[date],
                       end:   Optional[date]) -> EventLog:
