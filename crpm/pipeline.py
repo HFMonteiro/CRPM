@@ -66,19 +66,10 @@ def csv_to_event_log(
 # ---------------------------------------------------------------------------
 # Log filtering and splitting
 # ---------------------------------------------------------------------------
-def filter_date_range(log: EventLog,
-                      start: Optional[date],
-                      end:   Optional[date]) -> EventLog:
-    # 1) Se não há limite, devolve o log tal‑qual‑é
-    if not start and not end:
-        return log
 
-    # 2) Constrói os datetimes limite
-    start_dt = datetime.combine(start, datetime.min.time()) if start else datetime.min
-    end_dt   = datetime.combine(end,   datetime.max.time()) if end   else datetime.max
 
-    # 3) Usa a função correcta da PM4Py para EventLog
-    return timestamp_filter.apply_events(log, start_dt, end_dt)
+# Re-export from conformance to avoid duplication
+from crpm.conformance import filter_date_range as filter_date_range  # noqa: E402
 
 
 def split_by_date(log: EventLog, cutoff: date) -> Tuple[EventLog, EventLog]:

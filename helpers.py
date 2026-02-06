@@ -1,33 +1,41 @@
-from datetime import datetime
-from pathlib import Path
-from pm4py.objects.log.obj import EventLog
-from pm4py.objects.log.importer.xes import importer as xes_importer
-from pm4py.algo.filtering.log.timestamp import timestamp_filter
+"""Convenience re-exports from crpm.conformance.
 
-def load_log(file_path: Path) -> EventLog | None:
+This module is **deprecated**.  Import directly from :mod:`crpm.conformance`
+instead.  It is kept only for backward compatibility.
+"""
+
+from crpm.conformance import load_log as _load_log
+from crpm.conformance import filter_start_event as filter_by_first_event
+from crpm.conformance import filter_date_range
+
+from pm4py.objects.log.obj import EventLog
+
+
+def load_log(file_path):
+    """Load a XES event log, returning ``None`` on failure.
+
+    .. deprecated::
+        Use :func:`crpm.conformance.load_log` instead.
+    """
     try:
-        return xes_importer.apply(str(file_path))
-    except Exception as exc:
+        return _load_log(file_path)
+    except Exception:
         return None
 
+
 def first_event_names(log: EventLog) -> list[str]:
+    """Return sorted unique first-event names.
+
+    .. deprecated::
+        Use the identically-named helper in ``app.py`` or
+        :func:`crpm.conformance.filter_start_event`.
+    """
     return sorted({trace[0]["concept:name"] for trace in log if trace})
 
-def filter_by_first_event(log: EventLog, event: str) -> EventLog:
-    if not event:
-        return log
-    filtered = EventLog()
-    for trace in log:
-        if trace and trace[0]["concept:name"] == event:
-            filtered.append(trace)
-    return filtered
 
-def filter_by_dates(log: EventLog, start: datetime | None, end: datetime | None) -> EventLog:
-    if not start and not end:
-        return log
-    params = {}
-    if start:
-        params["start_timestamp"] = datetime.combine(start, datetime.min.time())
-    if end:
-        params["end_timestamp"] = datetime.combine(end, datetime.max.time())
-    return timestamp_filter.apply(log, parameters=params)
+__all__ = [
+    "load_log",
+    "first_event_names",
+    "filter_by_first_event",
+    "filter_date_range",
+]

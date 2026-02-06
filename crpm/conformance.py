@@ -64,15 +64,25 @@ def filter_start_event(log: EventLog, event_name: str | None) -> EventLog:
 def filter_date_range(log: EventLog,
                       start: Optional[date],
                       end:   Optional[date]) -> EventLog:
-    # 1) Se não há limite, devolve o log tal‑qual‑é
+    """Filter an event log to events within the given date range.
+
+    Args:
+        log: Event log to filter.
+        start: Inclusive start date (``None`` means no lower bound).
+        end: Inclusive end date (``None`` means no upper bound).
+
+    Returns:
+        Filtered event log.
+    """
+    # 1) No bounds – return as-is
     if not start and not end:
         return log
 
-    # 2) Constrói os datetimes limite
+    # 2) Build boundary datetimes
     start_dt = datetime.combine(start, datetime.min.time()) if start else datetime.min
     end_dt   = datetime.combine(end,   datetime.max.time()) if end   else datetime.max
 
-    # 3) Usa a função correcta da PM4Py para EventLog
+    # 3) Apply PM4Py timestamp filter for EventLog objects
     return timestamp_filter.apply_events(log, start_dt, end_dt)
 
 

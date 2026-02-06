@@ -12,10 +12,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional, Any
 from pathlib import Path
+import logging
 
 import pandas as pd
 import numpy as np
 from pm4py.objects.log.obj import EventLog
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -343,7 +346,7 @@ def extract_model_transitions(net, im, fm) -> List[Tuple[str, str]]:
 
     except Exception:
         # If extraction fails, return empty list
-        pass
+        logger.warning("Failed to extract model transitions", exc_info=True)
 
     return transitions
 

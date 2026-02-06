@@ -78,7 +78,7 @@ def make_file_signature(path: Path) -> str:
 
 def make_uploaded_signature(raw: bytes, label: str) -> str:
     """Hash uploaded file content for caching."""
-    digest = hashlib.sha1(raw).hexdigest()
+    digest = hashlib.sha256(raw).hexdigest()
     return f"{label}::{digest}"
 
 

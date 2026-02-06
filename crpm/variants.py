@@ -7,9 +7,13 @@ per-variant conformance metrics.
 from __future__ import annotations
 
 from typing import Dict, List, Tuple, Any, Optional
+import logging
+
 import pandas as pd
 
 from pm4py.objects.log.obj import EventLog
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -61,6 +65,7 @@ def get_variant_statistics(log: EventLog, top_n: Optional[int] = None) -> pd.Dat
 
     except Exception as e:
         # Fallback: manual variant extraction
+        logger.debug("PM4Py variant statistics failed, using manual fallback: %s", e)
         return _manual_variant_statistics(log, top_n)
 
 
@@ -141,6 +146,7 @@ def compute_variant_conformance(
         from pm4py.algo.conformance.alignments.petri_net import algorithm as alignments
         from pm4py.objects.log.obj import EventLog as PM4PyEventLog
     except Exception:
+        logger.warning("Failed to import PM4Py conformance modules", exc_info=True)
         return pd.DataFrame()
 
     # Get variants
@@ -186,6 +192,7 @@ def compute_variant_conformance(
             else:
                 token_fitness = None
         except Exception:
+            logger.debug("Token replay failed for variant %d", idx, exc_info=True)
             token_fitness = None
 
         # Alignments
@@ -201,6 +208,7 @@ def compute_variant_conformance(
             else:
                 align_fitness = align_cost = moves_on_model = moves_on_log = perfect_pct = None
         except Exception:
+            logger.debug("Alignment computation failed for variant %d", idx, exc_info=True)
             align_fitness = align_cost = moves_on_model = moves_on_log = perfect_pct = None
 
         # Variant string
@@ -304,6 +312,7 @@ def filter_variants_by_frequency(
             return PM4PyEventLog()
 
     except Exception:
+        logger.warning("Variant frequency filtering failed, returning original log", exc_info=True)
         return log
 
 
@@ -359,7 +368,7 @@ def filter_variants_by_conformance(
                 if fitness >= min_fitness:
                     conforming_variants.append(variant)
             except Exception:
-                pass
+                logger.debug("Token replay failed for variant, skipping", exc_info=True)
 
         # Filter log manually
         if conforming_variants:
@@ -373,6 +382,7 @@ def filter_variants_by_conformance(
             return PM4PyEventLog()
 
     except Exception:
+        logger.warning("Variant conformance filtering failed, returning original log", exc_info=True)
         return log
 
 

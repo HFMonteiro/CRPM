@@ -11,10 +11,13 @@ from __future__ import annotations
 from typing import Dict, List, Tuple, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
+import logging
 import time
 
 from pm4py.objects.log.obj import EventLog
 from pm4py.objects.petri_net.obj import PetriNet, Marking
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +103,8 @@ def discover_heuristics_plus(log: EventLog) -> DiscoveryResult:
         net, im, fm = heuristics_miner.apply(log, variant=variant)
         variant_name = "PLUS" if hasattr(Variants, "PLUS") else "Classic"
     except Exception:
-        # Fallback to classic
+        # Fallback to classic variant
+        logger.debug("PLUS variant unavailable, falling back to Classic", exc_info=True)
         heu_net = heuristics_miner.apply_heu(log, variant=Variants.CLASSIC)
         net, im, fm = heuristics_miner.apply(log, variant=Variants.CLASSIC)
         variant_name = "Classic (fallback)"
@@ -146,6 +150,7 @@ def discover_inductive_im(log: EventLog) -> DiscoveryResult:
         from pm4py.algo.discovery.inductive.algorithm import Variants
         tree = inductive_miner.apply(log, variant=Variants.IM if hasattr(Variants, "IM") else None)
     except Exception:
+        logger.debug("IM variant unavailable, using default", exc_info=True)
         tree = inductive_miner.apply(log)
 
     # Convert to Petri net
@@ -190,6 +195,7 @@ def discover_inductive_imf(log: EventLog) -> DiscoveryResult:
         from pm4py.algo.discovery.inductive.algorithm import Variants
         tree = inductive_miner.apply(log, variant=Variants.IMf if hasattr(Variants, "IMf") else Variants.IMF)
     except Exception:
+        logger.debug("IMf variant unavailable, using default", exc_info=True)
         tree = inductive_miner.apply(log)
 
     # Convert to Petri net
@@ -234,6 +240,7 @@ def discover_inductive_imd(log: EventLog) -> DiscoveryResult:
         from pm4py.algo.discovery.inductive.algorithm import Variants
         tree = inductive_miner.apply(log, variant=Variants.IMd if hasattr(Variants, "IMd") else Variants.IMD)
     except Exception:
+        logger.debug("IMd variant unavailable, using default", exc_info=True)
         tree = inductive_miner.apply(log)
 
     # Convert to Petri net
@@ -319,6 +326,7 @@ def discover_alpha_plus(log: EventLog) -> DiscoveryResult:
             variant_name = "Classic"
     except Exception:
         # Fallback to classic
+        logger.debug("Alpha+ variant unavailable, falling back to Classic", exc_info=True)
         net, im, fm = alpha_miner.apply(log)
         variant_name = "Classic (fallback)"
 
@@ -373,7 +381,7 @@ def discover_with_algorithm(log: EventLog, algorithm_name: str) -> Optional[Disc
         return result
     except Exception as e:
         # Log error but don't crash
-        print(f"Error discovering with {algorithm_name}: {e}")
+        logger.warning("Error discovering with %s: %s", algorithm_name, e, exc_info=True)
         return None
 
 
