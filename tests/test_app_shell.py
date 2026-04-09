@@ -1,0 +1,229 @@
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+from types import SimpleNamespace
+
+import pandas as pd
+
+from crpm.app_runtime import LoadedLog, compute_analysis_signature
+from crpm.app_shell import _render_analysis_controls
+from crpm.app_state import get_crpm_state
+
+
+class _DummySidebar:
+    def __init__(self, *, button_result: bool = False) -> None:
+        self.button_result = button_result
+        self.info_messages = []
+
+    def markdown(self, *args, **kwargs):
+        return None
+
+    def success(self, *args, **kwargs):
+        return None
+
+    def info(self, *args, **kwargs):
+        self.info_messages.append(args[0] if args else "")
+        return None
+
+    def error(self, *args, **kwargs):
+        return None
+
+    def warning(self, *args, **kwargs):
+        return None
+
+    def caption(self, *args, **kwargs):
+        return None
+
+    def radio(self, label, options, index=0, key=None, **kwargs):
+        return options[index]
+
+    def text_input(self, label, value="", key=None, **kwargs):
+        return value
+
+    def file_uploader(self, *args, **kwargs):
+        return None
+
+    def selectbox(self, label, options, index=0, key=None, format_func=None, **kwargs):
+        return options[index]
+
+    def checkbox(self, label, value=False, key=None, **kwargs):
+        return value
+
+    def date_input(self, label, value=None, key=None, **kwargs):
+        return value
+
+    def multiselect(self, label, options, default=None, key=None, **kwargs):
+        return list(default or [])
+
+    def number_input(self, label, min_value=None, max_value=None, value=0, step=1, key=None, **kwargs):
+        return value
+
+    def button(self, label, type="secondary", use_container_width=False, key=None, **kwargs):
+        return self.button_result
+
+    def expander(self, *args, **kwargs):
+        return _DummyContext()
+
+
+class _DummyContext:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def caption(self, *args, **kwargs):
+        return None
+
+
+def _loaded_log() -> LoadedLog:
+    return LoadedLog(
+        log=[[{"concept:name": "Start", "time:timestamp": datetime(2024, 1, 1)}]],
+        input_name="running-example.xes",
+        log_signature="xes::sample",
+    )
+
+
+def test_render_analysis_controls_invalidates_stale_results(monkeypatch) -> None:
+    import crpm.app_shell as app_shell
+
+    session_state = {}
+    state = get_crpm_state(session_state)
+    state.config.selected_log_path = str(Path("examples") / "running-example.xes")
+    state.results.analysis_complete = True
+    state.results.filtered_log = [[{"concept:name": "A"}]]
+    state.results.discovery_results = {"Model": object()}
+    state.results.comparison_df = pd.DataFrame([{"model_name": "Model"}])
+    state.results.last_analysis_signature = "stale-signature"
+
+    monkeypatch.setattr(app_shell, "st", SimpleNamespace(sidebar=_DummySidebar(button_result=False), session_state=session_state, caption=lambda *args, **kwargs: None))
+    monkeypatch.setattr(app_shell, "resolve_xes_log", lambda *args, **kwargs: _loaded_log())
+    monkeypatch.setattr(
+        app_shell,
+        "compute_log_stats",
+        lambda *_args, **_kwargs: {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+    )
+    monkeypatch.setattr(app_shell, "first_event_names", lambda *_args, **_kwargs: ["Start"])
+
+    _render_analysis_controls(state)
+
+    assert state.results.analysis_complete is False
+    assert state.results.filtered_log is None
+    assert state.results.discovery_results == {}
+    assert "changed" in (state.results.config_change_message or "").lower()
+    assert "click run analysis" in (state.results.config_change_message or "").lower()
+
+
+def test_render_analysis_controls_failure_clears_previous_results(monkeypatch) -> None:
+    import crpm.app_shell as app_shell
+
+    session_state = {}
+    state = get_crpm_state(session_state)
+    state.config.selected_log_path = str(Path("examples") / "running-example.xes")
+    state.results.analysis_complete = True
+    state.results.filtered_log = [[{"concept:name": "A"}]]
+    state.results.discovery_results = {"Model": object()}
+    state.results.comparison_df = pd.DataFrame([{"model_name": "Model"}])
+    state.results.last_analysis_signature = compute_analysis_signature(
+        log_signature="xes::sample",
+        start_filter="All",
+        date_filter_mode="case",
+        start_date=None,
+        end_date=None,
+        selected_algorithms=state.config.selected_algorithms,
+        enable_train_test=False,
+        random_seed=42,
+        followup_days=None,
+    )
+
+    monkeypatch.setattr(app_shell, "st", SimpleNamespace(sidebar=_DummySidebar(button_result=True), session_state=session_state, caption=lambda *args, **kwargs: None))
+    monkeypatch.setattr(app_shell, "resolve_xes_log", lambda *args, **kwargs: _loaded_log())
+    monkeypatch.setattr(
+        app_shell,
+        "compute_log_stats",
+        lambda *_args, **_kwargs: {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+    )
+    monkeypatch.setattr(app_shell, "first_event_names", lambda *_args, **_kwargs: ["Start"])
+    monkeypatch.setattr(app_shell, "run_discovery_comparison_pipeline", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    _render_analysis_controls(state)
+
+    assert state.results.analysis_complete is False
+    assert state.results.filtered_log is None
+    assert state.results.discovery_results == {}
+    assert state.results.comparison_df.empty
+    assert "could not be completed" in (state.results.filter_error_message or "").lower()
+
+
+def test_render_analysis_controls_shows_sidebar_messages(monkeypatch) -> None:
+    import crpm.app_shell as app_shell
+
+    session_state = {}
+    state = get_crpm_state(session_state)
+    state.config.selected_log_path = str(Path("examples") / "running-example.xes")
+    state.results.config_change_message = "Needs rerun"
+    state.results.filter_error_message = "Run failed"
+    sidebar = _DummySidebar(button_result=False)
+    calls = {"warning": [], "error": []}
+    sidebar.warning = lambda message, *args, **kwargs: calls["warning"].append(message)
+    sidebar.error = lambda message, *args, **kwargs: calls["error"].append(message)
+
+    monkeypatch.setattr(app_shell, "st", SimpleNamespace(sidebar=sidebar, session_state=session_state, caption=lambda *args, **kwargs: None))
+    monkeypatch.setattr(app_shell, "resolve_xes_log", lambda *args, **kwargs: _loaded_log())
+    monkeypatch.setattr(
+        app_shell,
+        "compute_log_stats",
+        lambda *_args, **_kwargs: {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+    )
+    monkeypatch.setattr(app_shell, "first_event_names", lambda *_args, **_kwargs: ["Start"])
+
+    _render_analysis_controls(state)
+
+    assert "Needs rerun" in calls["warning"]
+    assert "Run failed" in calls["error"]
+
+
+def test_render_header_prompts_rerun_with_note_and_toast(monkeypatch) -> None:
+    import crpm.app_shell as app_shell
+
+    snapshot = SimpleNamespace(
+        case_count=1,
+        event_count=2,
+        model_count=3,
+        comparison_df=pd.DataFrame([{"model_name": "Model"}]),
+        input_name="running-example.xes",
+        active_followup_label=None,
+        config_change_message="Settings changed",
+        filter_error_message=None,
+    )
+    calls = {"notes": [], "toast": [], "captions": []}
+    monkeypatch.setattr(app_shell, "st", SimpleNamespace(
+        markdown=lambda *args, **kwargs: None,
+        columns=lambda n: [SimpleNamespace(metric=lambda *args, **kwargs: None) for _ in range(n)],
+        caption=lambda text, **kwargs: calls["captions"].append(text),
+        error=lambda *args, **kwargs: None,
+        toast=lambda text, **kwargs: calls["toast"].append(text),
+    ))
+    monkeypatch.setattr(app_shell, "render_quiet_note", lambda text: calls["notes"].append(text))
+
+    app_shell._render_header(snapshot)
+
+    assert calls["notes"]
+    assert calls["toast"]
+    assert any("current input" in text.lower() for text in calls["captions"])
+
+
+def test_render_header_brand_includes_author_site_badge(monkeypatch) -> None:
+    import crpm.app_shell as app_shell
+
+    calls = {"markdown": []}
+    monkeypatch.setattr(app_shell, "st", SimpleNamespace(markdown=lambda text, **kwargs: calls["markdown"].append(text)))
+
+    app_shell._render_header_brand()
+
+    rendered = " ".join(calls["markdown"])
+    assert "crpm-header-badges" in rendered
+    assert "crpm-author-badge" in rendered
+    assert "crpm-fmup-badge" in rendered
+    assert "hfmonteiro.com" in rendered

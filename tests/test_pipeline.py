@@ -1,0 +1,116 @@
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+from datetime import datetime, date
+from pathlib import Path
+
+import pytest
+
+pm4py = pytest.importorskip("pm4py")
+from pm4py.objects.log.obj import EventLog, Trace
+
+from crpm import pipeline
+
+
+def make_trace(case_id: str, events: list[tuple[str, datetime]]) -> Trace:
+    trace = Trace(attributes={"concept:name": case_id})
+    for activity, timestamp in events:
+        trace.append({"concept:name": activity, "time:timestamp": timestamp})
+    return trace
+
+
+def test_split_by_date_is_non_overlapping() -> None:
+    log = EventLog(
+        [
+            make_trace("before", [("A", datetime(2023, 12, 31, 10, 0)), ("B", datetime(2023, 12, 31, 12, 0))]),
+            make_trace("after", [("A", datetime(2024, 1, 1, 10, 0)), ("B", datetime(2024, 1, 2, 12, 0))]),
+        ]
+    )
+
+    before, after = pipeline.split_by_date(log, date(2024, 1, 1))
+
+    assert len(before) == 1
+    assert len(after) == 1
+    assert before[0].attributes["concept:name"] == "before"
+    assert after[0].attributes["concept:name"] == "after"
+
+
+def test_token_replay_fitness_uses_trace_fitness(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        pipeline.token_replay,
+        "apply",
+        lambda *_args, **_kwargs: [
+            {"trace_fitness": 0.25},
+            {"trace_fitness": 0.75},
+        ],
+    )
+
+    result = pipeline.token_replay_fitness(EventLog(), object(), object(), object())
+
+    assert result == pytest.approx(0.5)
+
+
+def test_filter_date_range_keeps_whole_trace_in_case_mode() -> None:
+    log = EventLog(
+        [
+            make_trace("case-1", [("A", datetime(2024, 1, 1, 10, 0)), ("B", datetime(2024, 2, 1, 12, 0))]),
+            make_trace("case-2", [("A", datetime(2024, 3, 1, 10, 0)), ("B", datetime(2024, 3, 2, 12, 0))]),
+        ]
+    )
+
+    filtered = pipeline.filter_date_range(log, date(2024, 1, 1), date(2024, 1, 31))
+
+    assert len(filtered) == 1
+    assert len(filtered[0]) == 2
+    assert filtered[0].attributes["concept:name"] == "case-1"
+
+
+def test_filter_date_range_can_clip_events_in_event_mode() -> None:
+    log = EventLog(
+        [
+            make_trace("case-1", [("A", datetime(2024, 1, 1, 10, 0)), ("B", datetime(2024, 2, 1, 12, 0))]),
+        ]
+    )
+
+    filtered = pipeline.filter_date_range(log, date(2024, 1, 1), date(2024, 1, 31), mode="event")
+
+    assert len(filtered) == 1
+    assert len(filtered[0]) == 1
+    assert filtered[0][0]["concept:name"] == "A"
+
+
+def test_split_log_random_is_reproducible_across_python_hash_seeds() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    script = """
+from datetime import datetime
+from pm4py.objects.log.obj import EventLog, Trace
+from crpm.pipeline import split_log_random
+
+log = EventLog()
+for case_id in ["c", "a", "d", "b", "e"]:
+    trace = Trace(attributes={"concept:name": case_id})
+    trace.append({"concept:name": "A", "time:timestamp": datetime(2024, 1, 1)})
+    log.append(trace)
+
+train_log, test_log, _ = split_log_random(log, train_ratio=0.6, random_seed=7)
+print(",".join(trace.attributes["concept:name"] for trace in train_log))
+print(",".join(trace.attributes["concept:name"] for trace in test_log))
+""".strip()
+
+    outputs = []
+    for hash_seed in ("0", "1"):
+        env = os.environ.copy()
+        env["PYTHONHASHSEED"] = hash_seed
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=repo_root,
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        outputs.append(result.stdout.strip())
+
+    assert outputs[0] == outputs[1]

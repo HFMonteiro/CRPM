@@ -1,0 +1,35 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual environment directories
+.venv/
+venv/
+
+# Build and distribution
+dist/
+build/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+.pytest_cache/
+pytest-cache-files-*/
+
+# Local output and cache directories
+output/
+outputs/
+logs/
+tmp/
+temp/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+nul
+
+# Claude settings
+.claude/
+
+# Local operator notes
+AGENTS.md
