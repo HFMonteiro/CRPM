@@ -14,19 +14,19 @@ logger = logging.getLogger(__name__)
 
 
 def render_empty_state(message: str) -> None:
-    st.markdown(f'<div class="crpm-empty-state">{message}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="crpm-empty-state">{html.escape(str(message))}</div>', unsafe_allow_html=True)
 
 
 def render_quiet_note(message: str) -> None:
-    st.markdown(f'<div class="crpm-note">{message}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="crpm-note">{html.escape(str(message))}</div>', unsafe_allow_html=True)
 
 
 def render_legend_note(message: str) -> None:
-    st.markdown(f'<div class="crpm-legend-note">{message}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="crpm-legend-note">{html.escape(str(message))}</div>', unsafe_allow_html=True)
 
 
 def render_inline_empty(message: str) -> None:
-    st.markdown(f'<div class="crpm-inline-empty">{message}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="crpm-inline-empty">{html.escape(str(message))}</div>', unsafe_allow_html=True)
 
 
 def short_label(value: str, *, max_chars: int = 32) -> str:

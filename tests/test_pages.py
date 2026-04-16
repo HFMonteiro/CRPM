@@ -5,6 +5,7 @@ import pandas as pd
 from crpm.app_state import AnalysisSnapshot
 from crpm.pages import conformance as conformance_page
 from crpm.pages import comparison as comparison_page
+from crpm.pages import common as common_page
 from crpm.pages.common import render_plotly_chart
 from crpm.pages import discovery as discovery_page
 from crpm.pages import overview as overview_page
@@ -829,6 +830,22 @@ def test_render_plotly_chart_shows_user_warning_on_failure(monkeypatch) -> None:
     render_plotly_chart(object(), key="demo-chart")
 
     assert calls["warnings"] == ["This chart could not be displayed. Please rerun the analysis or use the table below."]
+
+
+def test_note_helpers_escape_html_content(monkeypatch) -> None:
+    calls = []
+
+    monkeypatch.setattr(common_page.st, "markdown", lambda text, **kwargs: calls.append(text))
+
+    payload = '<script>alert("x")</script>'
+    common_page.render_empty_state(payload)
+    common_page.render_quiet_note(payload)
+    common_page.render_legend_note(payload)
+    common_page.render_inline_empty(payload)
+
+    assert len(calls) == 4
+    assert all("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;" in text for text in calls)
+    assert all('<script>alert("x")</script>' not in text for text in calls)
 
 
 def test_render_performance_page_reuses_timing_buckets(monkeypatch) -> None:
