@@ -1035,14 +1035,13 @@ def render_workflow_conformance_svg(
         "center": center_x,
         "right": center_x + 285,
     }
-    mainline_width = 432.0
-    branch_width = 220.0
-    mainline_height = 104.0
-    branch_height = 68.0
-    top_margin = 88
-    step_gap = 182
-    branch_gap = 88
-    legend_height = 202
+    mainline_width = 448.0
+    branch_width = 208.0
+    mainline_height = 110.0
+    branch_height = 64.0
+    top_margin = 44
+    step_gap = 168
+    branch_gap = 82
 
     step_groups: dict[int, list[pd.Series]] = defaultdict(list)
     for _, row in ordered_nodes.iterrows():
@@ -1092,7 +1091,7 @@ def render_workflow_conformance_svg(
                 }
             )
 
-    board_height = int(max((item["y"] + item["height"] for item in nodes_layout), default=top_margin + 120) + legend_height + 64)
+    board_height = int(max((item["y"] + item["height"] for item in nodes_layout), default=top_margin + 120) + 72)
 
     node_positions = {str(item["activity"]): item for item in nodes_layout}
     edge_groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -1129,11 +1128,9 @@ def render_workflow_conformance_svg(
         "</marker>",
         "</defs>",
         '<rect x="0" y="0" width="100%" height="100%" fill="url(#workflow-bg)"/>',
-        f'<text x="{board_width / 2:.1f}" y="34" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="700" fill="#21342b">Workflow pathway board</text>',
-        f'<text x="{board_width / 2:.1f}" y="56" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#59645f">Editorial board view: mainline first, side branches subordinate, exact detail in the inspector</text>',
-        f'<line x1="{lane_x["center"]:.1f}" y1="{top_margin - 10}" x2="{lane_x["center"]:.1f}" y2="{board_height - legend_height - 24}" stroke="#c4bacf" stroke-width="3.2" stroke-dasharray="6 7"/>',
-        f'<line x1="{lane_x["left"]:.1f}" y1="{top_margin + 20}" x2="{lane_x["left"]:.1f}" y2="{board_height - legend_height - 48}" stroke="#d7cfdf" stroke-width="1.2" stroke-dasharray="4 10"/>',
-        f'<line x1="{lane_x["right"]:.1f}" y1="{top_margin + 20}" x2="{lane_x["right"]:.1f}" y2="{board_height - legend_height - 48}" stroke="#d7cfdf" stroke-width="1.2" stroke-dasharray="4 10"/>',
+        f'<line x1="{lane_x["center"]:.1f}" y1="{top_margin - 6}" x2="{lane_x["center"]:.1f}" y2="{board_height - 30}" stroke="#c4bacf" stroke-width="3.2" stroke-dasharray="6 7"/>',
+        f'<line x1="{lane_x["left"]:.1f}" y1="{top_margin + 12}" x2="{lane_x["left"]:.1f}" y2="{board_height - 42}" stroke="#d7cfdf" stroke-width="1.1" stroke-dasharray="4 10"/>',
+        f'<line x1="{lane_x["right"]:.1f}" y1="{top_margin + 12}" x2="{lane_x["right"]:.1f}" y2="{board_height - 42}" stroke="#d7cfdf" stroke-width="1.1" stroke-dasharray="4 10"/>',
     ]
 
     max_frequency = max((_safe_int(row.get("frequency", 0)) for _, row in normalized_edges.iterrows()), default=0)
@@ -1187,7 +1184,7 @@ def render_workflow_conformance_svg(
         stroke_width = (3.0 if is_mainline_edge else 1.7) + min(freq / 25000.0, 4.2 if is_mainline_edge else 1.8)
         conf_bucket = str(row.get("conformance_bucket", "Conformant"))
         conf_theme = _WORKFLOW_CONFORMANCE_THEME.get(conf_bucket, _WORKFLOW_CONFORMANCE_THEME["Conformant"])
-        show_label = is_mainline_edge and freq >= max(120, int(max_frequency * 0.45))
+        show_label = is_mainline_edge and freq >= max(220, int(max_frequency * 0.6))
 
         edge_id = str(row.get("edge_id", f'{item["source"]} -> {item["target"]}'))
         svg_parts.append(
@@ -1263,23 +1260,6 @@ def render_workflow_conformance_svg(
             )
         svg_parts.append("</g>")
 
-    legend_top = board_height - legend_height + 8
-    legend_left = 38
-    legend_width = board_width - 76
-    svg_parts.append(
-        f'<g>'
-        f'<rect x="{legend_left}" y="{legend_top}" width="{legend_width}" height="{legend_height - 24}" rx="18" ry="18" fill="#ffffff" stroke="#d8d2e0" stroke-width="1.2" filter="url(#workflow-shadow)"/>'
-        f'<text x="{board_width / 2:.1f}" y="{legend_top + 28:.1f}" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#21342b">Deviation &amp; Timing Legend</text>'
-        f'<text x="{board_width / 2:.1f}" y="{legend_top + 44:.1f}" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5d6a63">Mainline cards stay centered; side branches are offset left and right so the pathway reads as a process, not a generic graph.</text>'
-    )
-
-    conformance_rows = _legend_rows_from_payload(legend_df, group="Conformance")
-    timing_rows = _WORKFLOW_TIMING_THEME
-    left_x = legend_left + 22
-    right_x = board_width / 2 + 20
-    svg_parts.append(_legend_column(left_x, legend_top + 48, "Conformance", conformance_rows))
-    svg_parts.append(_legend_column(right_x, legend_top + 48, "Performance", timing_rows))
-    svg_parts.append("</g>")
     svg_parts.append("</svg>")
     return f'<div class="crpm-workflow-board">{"".join(svg_parts)}</div>'
 
@@ -1314,7 +1294,7 @@ def filter_workflow_payload(
 
     if not normalized_edges.empty:
         normalized_edges = normalized_edges[
-            normalized_edges.get("coverage_group", pd.Series(["mixed"] * len(normalized_edges))).astype(str).str.lower().isin(allowed_groups)
+            normalized_edges.get("coverage_group", pd.Series(["dominant"] * len(normalized_edges))).astype(str).str.lower().isin(allowed_groups)
         ]
         normalized_edges = normalized_edges[
             normalized_edges.get("conformance_bucket", pd.Series(["Conformant"] * len(normalized_edges))).astype(str).isin(allowed_buckets)
@@ -1326,7 +1306,7 @@ def filter_workflow_payload(
         active_nodes.update(normalized_edges["target"].astype(str).tolist())
 
     if not ordered_nodes.empty:
-        node_groups = ordered_nodes.get("coverage_group", pd.Series(["mixed"] * len(ordered_nodes))).astype(str).str.lower()
+        node_groups = ordered_nodes.get("coverage_group", pd.Series(["dominant"] * len(ordered_nodes))).astype(str).str.lower()
         node_buckets = ordered_nodes.get("conformance_bucket", pd.Series(["Conformant"] * len(ordered_nodes))).astype(str)
         ordered_nodes = ordered_nodes[node_groups.isin(allowed_groups) & node_buckets.isin(allowed_buckets)].copy()
         if active_nodes:
@@ -1353,6 +1333,22 @@ def filter_workflow_payload(
             active_nodes = set(normalized_edges["source"].astype(str).tolist()) | set(normalized_edges["target"].astype(str).tolist())
             ordered_nodes = ordered_nodes[ordered_nodes["activity"].astype(str).isin(active_nodes)].copy()
 
+    if ordered_nodes.empty and not normalized_edges.empty:
+        ordered_nodes = _derive_nodes_from_edges(normalized_edges)
+
+    if coverage_key != "all" and ordered_nodes.empty and normalized_edges.empty:
+        fallback = filter_workflow_payload(
+            payload,
+            coverage_view="all",
+            deviation_view=deviation_view,
+            detail_level=detail_level,
+        )
+        if isinstance(fallback, dict):
+            fallback = dict(fallback)
+            fallback["requested_coverage_view"] = coverage_key
+            fallback["applied_coverage_view"] = "all"
+        return fallback
+
     visible_node_ids = set(ordered_nodes.get("activity", pd.Series(dtype=str)).astype(str).tolist())
     visible_edge_ids = set(normalized_edges.get("edge_id", pd.Series(dtype=str)).astype(str).tolist())
     filtered_trace_profiles = _filter_workflow_trace_profiles(
@@ -1376,6 +1372,8 @@ def filter_workflow_payload(
         "summary": filtered_summary,
         "renderer_capabilities": dict(payload.get("renderer_capabilities", {})) if isinstance(payload, Mapping) else {},
         "detail_level": detail_key,
+        "requested_coverage_view": coverage_key,
+        "applied_coverage_view": coverage_key,
     }
 
 
@@ -1449,7 +1447,7 @@ def create_workflow_interactive_payload(
     selected_node_id: Optional[str] = None,
     selected_edge_id: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Build a process-layout explorer payload from the canonical workflow payload."""
+    """Build a process-map explorer payload from the canonical workflow payload."""
     detail_level = str(detail_level or "analyst").lower()
     nodes_df, edges_df, legend_df, overall_median = _coerce_workflow_payload(payload, None)
     ordered_nodes = _order_workflow_nodes(nodes_df)
@@ -1460,7 +1458,6 @@ def create_workflow_interactive_payload(
     if ordered_nodes.empty and not normalized_edges.empty:
         ordered_nodes = _derive_nodes_from_edges(normalized_edges)
 
-    x_positions = {"left": 220.0, "center": 540.0, "right": 860.0}
     selected_node = str(selected_node_id) if selected_node_id else None
     selected_edge = str(selected_edge_id) if selected_edge_id else None
     node_neighbors: dict[str, set[str]] = {
@@ -1468,36 +1465,114 @@ def create_workflow_interactive_payload(
         for _, row in ordered_nodes.iterrows()
     }
 
-    step_groups: dict[int, dict[str, list[pd.Series]]] = defaultdict(lambda: defaultdict(list))
+    step_groups: dict[int, list[pd.Series]] = defaultdict(list)
     for _, row in ordered_nodes.iterrows():
-        step_rank = int(row.get("step_rank", 999) or 999)
-        lane = str(row.get("lane", "center") or "center")
-        step_groups[step_rank][lane].append(row)
+        step_groups[int(row.get("step_rank", 999) or 999)].append(row)
+
+    sorted_steps = sorted(step_groups)
+    step_gap = 248.0
+    left_margin = 96.0
+    mainline_width = 188.0 if detail_level == "executive" else 198.0
+    branch_width = 156.0 if detail_level == "executive" else 166.0
+    mainline_height = 76.0 if detail_level == "executive" else 88.0
+    branch_height = 56.0 if detail_level == "executive" else 64.0
+    vertical_gap = 20.0
+
+    max_top_branches = 1
+    max_bottom_branches = 1
+    for rows in step_groups.values():
+        top_count = 0
+        bottom_count = 0
+        for row in rows:
+            lane = str(row.get("lane", "center") or "center").lower()
+            branch_role = str(row.get("branch_role", "mainline"))
+            if branch_role == "mainline":
+                continue
+            if lane == "right":
+                bottom_count += 1
+            else:
+                top_count += 1
+        max_top_branches = max(max_top_branches, top_count)
+        max_bottom_branches = max(max_bottom_branches, bottom_count)
+
+    top_block_height = max(84.0, max_top_branches * (branch_height + vertical_gap))
+    mainline_y = top_block_height + 72.0
+    bottom_y = mainline_y + mainline_height + 96.0
+    canvas_height = int(bottom_y + max_bottom_branches * (branch_height + vertical_gap) + 104.0)
+    canvas_width = int(max(1160.0, left_margin * 2 + max(1, len(sorted_steps) - 1) * step_gap + mainline_width + 80.0))
 
     node_items: list[dict[str, Any]] = []
     node_map: dict[str, dict[str, Any]] = {}
-    sorted_steps = sorted(step_groups)
     for step_index, step_rank in enumerate(sorted_steps):
-        base_y = 120.0 + step_index * 176.0
-        for lane, rows in step_groups[step_rank].items():
-            ordered_rows = sorted(
-                rows,
-                key=lambda row: (
-                    0 if str(row.get("branch_role", "mainline")) == "mainline" else 1,
-                    -_safe_int(row.get("cases", 0)),
-                    str(row.get("display_name", row.get("activity", ""))),
-                ),
-            )
-            for lane_index, row in enumerate(ordered_rows):
-                activity = str(row.get("activity", f"node-{step_rank}-{lane_index}"))
-                is_mainline = str(row.get("branch_role", "mainline")) == "mainline"
-                card_width = 312.0 if is_mainline else 236.0
-                card_height = 98.0 if is_mainline else 78.0
-                y = base_y + (lane_index * (card_height + 26.0))
-                x = x_positions.get(lane, x_positions["center"]) - card_width / 2
+        x_center = left_margin + step_index * step_gap + mainline_width / 2
+        rows = sorted(
+            step_groups[step_rank],
+            key=lambda row: (
+                0 if str(row.get("branch_role", "mainline")) == "mainline" else 1,
+                -_safe_int(row.get("cases", 0)),
+                str(row.get("display_name", row.get("activity", ""))),
+            ),
+        )
+        mainline_rows = [row for row in rows if str(row.get("branch_role", "mainline")) == "mainline"]
+        top_rows = [
+            row
+            for row in rows
+            if str(row.get("branch_role", "mainline")) != "mainline"
+            and str(row.get("lane", "left") or "left").lower() != "right"
+        ]
+        bottom_rows = [
+            row
+            for row in rows
+            if str(row.get("branch_role", "mainline")) != "mainline"
+            and str(row.get("lane", "left") or "left").lower() == "right"
+        ]
+
+        for main_index, row in enumerate(mainline_rows):
+            activity = str(row.get("activity", f"node-{step_rank}-{main_index}"))
+            palette = _workflow_metric_palette(row, metric_coloring, item_kind="node")
+            is_neighbor = bool(selected_node and activity in node_neighbors.get(selected_node, set()))
+            is_selected = activity == selected_node
+            y = mainline_y + main_index * 10.0
+            node_item = {
+                "id": activity,
+                "business_label": _workflow_business_label(row),
+                "display_name": _workflow_display_name(row),
+                "cases": _safe_int(row.get("cases", 0)),
+                "occurrences": _safe_int(row.get("occurrences", 0)),
+                "median_days": _safe_float(row.get("median_next_delay_days")),
+                "p90_days": _safe_float(row.get("p90_next_delay_days")),
+                "severity": str(row.get("severity", "Low")),
+                "conformance_bucket": str(row.get("conformance_bucket", "Conformant")),
+                "branch_role": "mainline",
+                "lane_position": "mainline",
+                "step_rank": step_rank,
+                "x": x_center - mainline_width / 2,
+                "y": y,
+                "width": mainline_width,
+                "height": mainline_height,
+                "center_x": x_center,
+                "center_y": y + mainline_height / 2,
+                "stroke": palette["stroke"],
+                "ink": palette["ink"],
+                "accent": palette["accent"],
+                "accent_fill": palette["fill"],
+                "selected": is_selected,
+                "neighbor": is_neighbor,
+            }
+            node_items.append(node_item)
+            node_map[activity] = node_item
+
+        for lane_rows, lane_position in ((top_rows, "top"), (bottom_rows, "bottom")):
+            row_count = len(lane_rows)
+            for lane_index, row in enumerate(lane_rows):
+                activity = str(row.get("activity", f"branch-{step_rank}-{lane_position}-{lane_index}"))
                 palette = _workflow_metric_palette(row, metric_coloring, item_kind="node")
                 is_neighbor = bool(selected_node and activity in node_neighbors.get(selected_node, set()))
                 is_selected = activity == selected_node
+                if lane_position == "top":
+                    y = mainline_y - 94.0 - (row_count - 1 - lane_index) * (branch_height + vertical_gap)
+                else:
+                    y = bottom_y + lane_index * (branch_height + vertical_gap)
                 node_item = {
                     "id": activity,
                     "business_label": _workflow_business_label(row),
@@ -1508,14 +1583,15 @@ def create_workflow_interactive_payload(
                     "p90_days": _safe_float(row.get("p90_next_delay_days")),
                     "severity": str(row.get("severity", "Low")),
                     "conformance_bucket": str(row.get("conformance_bucket", "Conformant")),
-                    "branch_role": str(row.get("branch_role", "mainline")),
-                    "lane": lane,
+                    "branch_role": str(row.get("branch_role", "branch")),
+                    "lane_position": lane_position,
                     "step_rank": step_rank,
-                    "x": x,
+                    "x": x_center - branch_width / 2,
                     "y": y,
-                    "width": card_width,
-                    "height": card_height,
-                    "fill": "#ffffff" if is_mainline else "#fbf9fd",
+                    "width": branch_width,
+                    "height": branch_height,
+                    "center_x": x_center,
+                    "center_y": y + branch_height / 2,
                     "stroke": palette["stroke"],
                     "ink": palette["ink"],
                     "accent": palette["accent"],
@@ -1538,6 +1614,7 @@ def create_workflow_interactive_payload(
                 }
             )
 
+    max_frequency = max((_safe_int(row.get("frequency", 0)) for _, row in normalized_edges.iterrows()), default=0)
     for _, row in normalized_edges.iterrows():
         source = str(row.get("source", ""))
         target = str(row.get("target", ""))
@@ -1549,26 +1626,40 @@ def create_workflow_interactive_payload(
         palette = _workflow_metric_palette(row, metric_coloring, item_kind="edge")
         is_mainline = str(row.get("branch_role", "mainline")) == "mainline"
         is_selected = edge_id == selected_edge
-        is_neighbor = bool(selected_node and (source == selected_node or target == selected_node)) or bool(selected_edge_neighbors and (source in selected_edge_neighbors or target in selected_edge_neighbors))
-        start_x = source_item["x"] + source_item["width"] / 2
-        start_y = source_item["y"] + source_item["height"]
-        end_x = target_item["x"] + target_item["width"] / 2
-        end_y = target_item["y"]
-        bend_x = (start_x + end_x) / 2
-        control_offset = 54.0 if is_mainline else 88.0
-        path = (
-            f"M {start_x:.1f} {start_y:.1f} "
-            f"C {start_x:.1f} {start_y + control_offset:.1f}, {end_x:.1f} {end_y - control_offset:.1f}, {end_x:.1f} {end_y:.1f}"
-            if abs(start_x - end_x) < 40
-            else f"M {start_x:.1f} {start_y:.1f} "
-            f"C {bend_x:.1f} {start_y + control_offset:.1f}, {bend_x:.1f} {end_y - control_offset:.1f}, {end_x:.1f} {end_y:.1f}"
+        is_neighbor = bool(selected_node and (source == selected_node or target == selected_node)) or bool(
+            selected_edge_neighbors and (source in selected_edge_neighbors or target in selected_edge_neighbors)
         )
+
+        forward = target_item["center_x"] >= source_item["center_x"]
+        source_y = source_item["center_y"]
+        target_y = target_item["center_y"]
+        if forward:
+            start_x = source_item["x"] + source_item["width"]
+            end_x = target_item["x"]
+            distance = max(50.0, end_x - start_x)
+            control = min(84.0, distance * 0.42)
+            path = (
+                f"M {start_x:.1f} {source_y:.1f} "
+                f"C {start_x + control:.1f} {source_y:.1f}, {end_x - control:.1f} {target_y:.1f}, {end_x:.1f} {target_y:.1f}"
+            )
+            label_x = (start_x + end_x) / 2
+            label_y = min(source_y, target_y) - (20.0 if is_mainline else 10.0)
+        else:
+            start_x = source_item["center_x"]
+            end_x = target_item["center_x"]
+            arc_y = min(source_y, target_y) - 88.0 if source_item["lane_position"] != "bottom" else max(source_y, target_y) + 88.0
+            path = (
+                f"M {start_x:.1f} {source_y:.1f} "
+                f"C {start_x + 44:.1f} {arc_y:.1f}, {end_x - 44:.1f} {arc_y:.1f}, {end_x:.1f} {target_y:.1f}"
+            )
+            label_x = (start_x + end_x) / 2
+            label_y = arc_y - 12.0 if arc_y < source_y else arc_y + 16.0
+
         edge_items.append(
             {
                 "id": edge_id,
                 "source": source,
                 "target": target,
-                "business_label": _workflow_business_label(row),
                 "caption": _workflow_business_label(row),
                 "frequency": _safe_int(row.get("frequency", 0)),
                 "median_days": _safe_float(row.get("median_days")),
@@ -1578,29 +1669,34 @@ def create_workflow_interactive_payload(
                 "conformance_bucket": str(row.get("conformance_bucket", "Conformant")),
                 "branch_role": str(row.get("branch_role", "mainline")),
                 "stroke_style": str(row.get("stroke_style", "solid")),
-                "stroke_width": max(2.0, min(8.0, _safe_float(row.get("stroke_weight")) or 2.8)),
+                "stroke_width": max(2.0, min(8.2, _safe_float(row.get("stroke_weight")) or (3.2 if is_mainline else 2.3))),
                 "stroke": palette["stroke"],
                 "accent": palette["accent"],
                 "path": path,
-                "label_x": (start_x + end_x) / 2,
-                "label_y": ((start_y + end_y) / 2) - (18.0 if is_mainline else 6.0),
+                "label_x": label_x,
+                "label_y": label_y,
                 "selected": is_selected,
                 "neighbor": is_neighbor,
-                "show_label": is_mainline,
+                "show_label": is_mainline and _safe_int(row.get("frequency", 0)) >= max(220, int(max_frequency * 0.55)),
             }
         )
 
-    canvas_height = int(max((item["y"] + item["height"] for item in node_items), default=340.0) + 80.0)
     return {
         "nodes": node_items,
         "edges": edge_items,
         "legend": legend_df,
-        "height": max(520, canvas_height),
+        "height": max(600, canvas_height),
+        "width": canvas_width,
         "overall_median_delay_days": overall_median,
         "selected_node_id": selected_node,
         "selected_edge_id": selected_edge,
         "metric_coloring": metric_coloring,
         "detail_level": detail_level,
+        "lane_bands": {
+            "top_y": max(56.0, mainline_y - 132.0),
+            "mainline_y": mainline_y - 22.0,
+            "bottom_y": bottom_y - 22.0,
+        },
     }
 
 
@@ -1612,8 +1708,15 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
     detail_level = str(explorer_payload.get("detail_level", "analyst")).lower()
     selected_node_id = str(explorer_payload.get("selected_node_id") or "").strip()
     selected_edge_id = str(explorer_payload.get("selected_edge_id") or "").strip()
-    canvas_width = 1080
+    canvas_width = int(explorer_payload.get("width", 1080))
     canvas_height = int(explorer_payload.get("height", 520))
+    lane_bands = explorer_payload.get("lane_bands", {}) if isinstance(explorer_payload.get("lane_bands"), Mapping) else {}
+    top_band_y = float(lane_bands.get("top_y", 56.0))
+    mainline_band_y = float(lane_bands.get("mainline_y", max(144.0, canvas_height * 0.44)))
+    bottom_band_y = float(lane_bands.get("bottom_y", min(canvas_height - 120.0, mainline_band_y + 150.0)))
+    top_band_height = max(72.0, mainline_band_y - top_band_y - 34.0)
+    mainline_band_height = max(92.0, bottom_band_y - mainline_band_y - 26.0)
+    bottom_band_height = max(72.0, canvas_height - bottom_band_y - 56.0)
     if not node_items and not edge_items:
         return (
             '<div class="crpm-workflow-explorer">'
@@ -1628,36 +1731,56 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
         selection_state = "Focused edge"
     else:
         selection_state = "Overview mode"
+    coloring_hint = _workflow_metric_coloring_hint(metric_coloring)
+    density_hint = _workflow_density_hint(detail_level)
 
     parts = [
         '<div class="crpm-workflow-explorer" style="font-family:Segoe UI, Arial, sans-serif;">',
         "<style>"
-        ".crpm-explorer-node,.crpm-explorer-edge{transition:opacity .16s ease;}"
-        ".crpm-explorer-node.is-muted,.crpm-explorer-edge.is-muted{opacity:.18;}"
-        ".crpm-explorer-node.is-neighbor{opacity:.94;}"
-        ".crpm-explorer-node.is-focus,.crpm-explorer-edge.is-focus{opacity:1;}"
+        ".crpm-workflow-explorer{color:#1f2c25;}"
+        ".crpm-explorer-shell{display:grid;gap:8px;}"
+        ".crpm-explorer-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:0;padding:10px 12px;border:1px solid #d8d2e0;border-radius:18px;background:linear-gradient(180deg,#ffffff 0%,#f6f4fa 100%);box-shadow:0 10px 24px rgba(55,43,74,.06);}"
+        ".crpm-explorer-toolbar__copy{min-width:0;display:grid;gap:5px;}"
+        ".crpm-explorer-toolbar__title-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;}"
+        ".crpm-explorer-toolbar__title{font-size:13px;font-weight:800;letter-spacing:.01em;color:#21342b;}"
+        ".crpm-explorer-toolbar__sub{font-size:11px;line-height:1.4;color:#5d6a63;}"
+        ".crpm-explorer-badge{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;background:#eef2f8;border:1px solid #d5dae6;font-size:10px;font-weight:700;color:#30435f;}"
+        "#crpm-explorer-selection-chip{background:linear-gradient(135deg,#e8eef8 0%,#eef4ff 100%);border-color:#c6d3ea;color:#2f4466;}"
+        ".crpm-explorer-toolbar__actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;}"
+        ".crpm-explorer-action{border:1px solid #d6d2df;background:#ffffff;border-radius:11px;padding:7px 11px;font-size:11px;font-weight:700;color:#22352d;cursor:pointer;box-shadow:0 6px 14px rgba(60,46,83,.05);transition:transform .14s ease,box-shadow .14s ease,border-color .14s ease;}"
+        ".crpm-explorer-action:hover{transform:translateY(-1px);box-shadow:0 10px 18px rgba(60,46,83,.09);border-color:#bcc6d7;}"
+        ".crpm-explorer-action--reset{background:linear-gradient(135deg,#f6f8fc 0%,#edf3fb 100%);color:#29425e;}"
+        ".crpm-explorer-status-line{display:flex;align-items:center;gap:8px;min-width:0;}"
+        ".crpm-explorer-live-title{font-size:11px;font-weight:800;color:#22352d;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}"
+        ".crpm-explorer-live-meta{font-size:11px;color:#5d6a63;line-height:1.38;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}"
+        ".crpm-explorer-canvas{border:1px solid #d8d2e0;border-radius:20px;background:linear-gradient(180deg,#f8f6fb 0%,#ffffff 100%);overflow:hidden;box-shadow:0 10px 26px rgba(55,43,74,.05);}"
+        ".crpm-explorer-node,.crpm-explorer-edge{transition:opacity .16s ease,filter .16s ease;}"
+        ".crpm-explorer-node.is-muted,.crpm-explorer-edge.is-muted{opacity:.14;}"
+        ".crpm-explorer-node.is-neighbor{opacity:.96;}"
+        ".crpm-explorer-edge.is-neighbor{opacity:.78;}"
+        ".crpm-explorer-node.is-focus,.crpm-explorer-edge.is-focus{opacity:1;filter:drop-shadow(0 0 10px rgba(82,113,170,.18));}"
         "</style>",
-        '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;padding:8px 10px;border:1px solid #d9d1e3;border-radius:16px;background:linear-gradient(180deg,#ffffff 0%,#f7f4fa 100%);">',
-        "<div>",
-        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">'
-        '<div style="font-size:12px;font-weight:700;color:#21342b;">Interactive workflow explorer</div>'
-        f'<span style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:#eef2f8;border:1px solid #d4d8e4;font-size:10px;font-weight:700;color:#30435f;">{escape(selection_state)}</span>'
+        '<div class="crpm-explorer-shell">',
+        '<div class="crpm-explorer-toolbar" id="crpm-explorer-toolbar">',
+        '<div class="crpm-explorer-toolbar__copy">',
+        '<div class="crpm-explorer-toolbar__title-row">'
+        '<div class="crpm-explorer-toolbar__title">Interactive workflow explorer</div>'
+        f'<span id="crpm-explorer-selection-chip" class="crpm-explorer-badge">{escape(selection_state)}</span>'
         "</div>",
-        f'<div style="font-size:10.5px;color:#5d6a63;">Analytical view · metric coloring: {escape(metric_coloring)} · detail: {escape(detail_level.title())} · exact metrics stay in the inspector.</div>',
+        f'<div class="crpm-explorer-toolbar__sub">{escape(coloring_hint)} · {escape(density_hint)} · layout stays left to right.</div>',
+        '<div class="crpm-explorer-status-line">'
+        '<div id="crpm-explorer-live-title" class="crpm-explorer-live-title">Overview mode</div>'
+        '<div id="crpm-explorer-live-meta" class="crpm-explorer-live-meta">Click a node or edge in the canvas for quick local context. Exact ranked metrics remain in the inspector.</div>'
         "</div>",
-        '<div style="display:flex;gap:8px;">',
-        '<button type="button" onclick="window.crpmZoom && window.crpmZoom(1.15)" style="border:1px solid #d8d2e0;background:#fbf9fd;border-radius:10px;padding:6px 10px;cursor:pointer;">Zoom in</button>',
-        '<button type="button" onclick="window.crpmZoom && window.crpmZoom(0.87)" style="border:1px solid #d8d2e0;background:#fbf9fd;border-radius:10px;padding:6px 10px;cursor:pointer;">Zoom out</button>',
-        '<button type="button" onclick="window.crpmClearFocus && window.crpmClearFocus()" style="border:1px solid #d8d2e0;background:#fbf9fd;border-radius:10px;padding:6px 10px;cursor:pointer;">Clear focus</button>',
-        '<button type="button" onclick="window.crpmReset && window.crpmReset()" style="border:1px solid #d8d2e0;background:#fbf9fd;border-radius:10px;padding:6px 10px;cursor:pointer;">Reset</button>',
+        "</div>",
+        '<div class="crpm-explorer-toolbar__actions">',
+        '<button id="crpm-explorer-zoom-in" class="crpm-explorer-action" type="button">Zoom in</button>',
+        '<button id="crpm-explorer-zoom-out" class="crpm-explorer-action" type="button">Zoom out</button>',
+        '<button id="crpm-explorer-clear-focus" class="crpm-explorer-action" type="button">Clear focus</button>',
+        '<button id="crpm-explorer-reset-view" class="crpm-explorer-action crpm-explorer-action--reset" type="button">Reset view</button>',
         "</div></div>",
-        '<div id="crpm-explorer-live-panel" style="margin:0 0 8px 0;padding:8px 10px;border:1px solid #d9d1e3;border-radius:14px;background:linear-gradient(180deg,#ffffff 0%,#f6f3fa 100%);">',
-        '<div style="font-size:10px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;color:#66757a;margin-bottom:2px;">Live focus</div>',
-        '<div id="crpm-explorer-live-title" style="font-size:13px;font-weight:700;color:#22352d;line-height:1.25;">Overview mode</div>',
-        '<div id="crpm-explorer-live-meta" style="font-size:11px;color:#5d6a63;line-height:1.32;margin-top:2px;">Click a node or edge in the canvas for quick context. Exact tables remain in the right inspector.</div>',
-        '</div>',
-        f'<div style="border:1px solid #d8d2e0;border-radius:20px;background:linear-gradient(180deg,#f8f6fb 0%,#ffffff 100%);overflow:hidden;">'
-        f'<svg id="crpm-workflow-explorer-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {canvas_width} {canvas_height}" width="100%" height="{canvas_height}" style="display:block;width:100%;height:{canvas_height}px;">',
+        '<div class="crpm-explorer-canvas">'
+        f'<svg id="crpm-workflow-explorer-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {canvas_width} {canvas_height}" width="100%" height="{canvas_height}" aria-label="Workflow process explorer" style="display:block;width:100%;height:{canvas_height}px;">',
         "<defs>",
         '<filter id="workflow-explorer-shadow" x="-20%" y="-20%" width="160%" height="160%">',
         '<feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#433655" flood-opacity="0.10"/>',
@@ -1670,15 +1793,15 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
         "</marker>",
         "</defs>",
         '<g id="crpm-workflow-viewport">',
-        f'<rect x="130" y="48" width="180" height="{canvas_height - 86}" rx="20" ry="20" fill="#f3f0f8" fill-opacity="0.55"/>',
-        f'<rect x="450" y="34" width="180" height="{canvas_height - 58}" rx="22" ry="22" fill="#eef4ff" fill-opacity="0.66"/>',
-        f'<rect x="770" y="48" width="180" height="{canvas_height - 86}" rx="20" ry="20" fill="#f3f0f8" fill-opacity="0.55"/>',
-        '<line x1="220" y1="70" x2="220" y2="{0}" stroke="#ddd6e8" stroke-width="1" stroke-dasharray="4 10"/>'.format(canvas_height - 30),
-        '<line x1="540" y1="48" x2="540" y2="{0}" stroke="#9fb5dc" stroke-width="2.6" stroke-dasharray="8 8"/>'.format(canvas_height - 18),
-        '<line x1="860" y1="70" x2="860" y2="{0}" stroke="#ddd6e8" stroke-width="1" stroke-dasharray="4 10"/>'.format(canvas_height - 30),
-        '<text x="220" y="54" text-anchor="middle" font-size="10.5" font-weight="700" fill="#7c748a">Branch lane</text>',
-        '<text x="540" y="34" text-anchor="middle" font-size="11" font-weight="700" fill="#3a557c">Mainline</text>',
-        '<text x="860" y="54" text-anchor="middle" font-size="10.5" font-weight="700" fill="#7c748a">Branch lane</text>',
+        f'<rect x="24" y="{top_band_y:.1f}" width="{canvas_width - 48:.1f}" height="{top_band_height:.1f}" rx="22" ry="22" fill="#f3f0f8" fill-opacity="0.62"/>',
+        f'<rect x="24" y="{mainline_band_y:.1f}" width="{canvas_width - 48:.1f}" height="{mainline_band_height:.1f}" rx="24" ry="24" fill="#eef4ff" fill-opacity="0.82"/>',
+        f'<rect x="24" y="{bottom_band_y:.1f}" width="{canvas_width - 48:.1f}" height="{bottom_band_height:.1f}" rx="22" ry="22" fill="#f3f0f8" fill-opacity="0.62"/>',
+        f'<line x1="40" y1="{top_band_y + top_band_height:.1f}" x2="{canvas_width - 40:.1f}" y2="{top_band_y + top_band_height:.1f}" stroke="#d8d3e3" stroke-width="1" stroke-dasharray="6 8"/>',
+        f'<line x1="40" y1="{mainline_band_y + (mainline_band_height / 2):.1f}" x2="{canvas_width - 40:.1f}" y2="{mainline_band_y + (mainline_band_height / 2):.1f}" stroke="#a7b9d8" stroke-width="2" stroke-dasharray="9 8"/>',
+        f'<line x1="40" y1="{bottom_band_y:.1f}" x2="{canvas_width - 40:.1f}" y2="{bottom_band_y:.1f}" stroke="#d8d3e3" stroke-width="1" stroke-dasharray="6 8"/>',
+        f'<text x="44" y="{top_band_y - 8:.1f}" font-size="10.5" font-weight="700" fill="#7c748a">Upper branches</text>',
+        f'<text x="44" y="{mainline_band_y - 8:.1f}" font-size="11" font-weight="800" fill="#35527c">Mainline backbone</text>',
+        f'<text x="44" y="{bottom_band_y - 8:.1f}" font-size="10.5" font-weight="700" fill="#7c748a">Lower branches</text>',
     ]
 
     for edge in edge_items:
@@ -1799,17 +1922,22 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             "const selectionChip = document.getElementById('crpm-explorer-selection-chip');",
             "const liveTitle = document.getElementById('crpm-explorer-live-title');",
             "const liveMeta = document.getElementById('crpm-explorer-live-meta');",
-            "if (!svg || !viewport || !selectionChip || !liveTitle || !liveMeta) return;",
+            "const zoomInButton = document.getElementById('crpm-explorer-zoom-in');",
+            "const zoomOutButton = document.getElementById('crpm-explorer-zoom-out');",
+            "const clearFocusButton = document.getElementById('crpm-explorer-clear-focus');",
+            "const resetViewButton = document.getElementById('crpm-explorer-reset-view');",
+            "if (!svg || !viewport || !liveTitle || !liveMeta) return;",
             "const nodeEls = Array.from(svg.querySelectorAll('.crpm-explorer-node'));",
             "const edgeEls = Array.from(svg.querySelectorAll('.crpm-explorer-edge'));",
             "let scale = 1;",
             "let tx = 0;",
             "let ty = 0;",
             "const apply = () => { viewport.setAttribute('transform', `translate(${tx} ${ty}) scale(${scale})`); };",
+            "const setChip = (value) => { if (selectionChip) selectionChip.textContent = value; };",
             "const setOverview = () => {",
-            "  selectionChip.textContent = 'Overview mode';",
+            "  setChip('Overview mode');",
             "  liveTitle.textContent = 'Overview mode';",
-            "  liveMeta.textContent = 'Click a node or edge in the canvas for quick context. Exact tables remain in the right inspector.';",
+            "  liveMeta.textContent = 'Click a node or edge in the canvas for quick local context. Use the inspector for pinned detail.';",
             "};",
             "const resetFocusClasses = () => {",
             "  nodeEls.forEach((el) => el.classList.remove('is-focus', 'is-neighbor', 'is-muted'));",
@@ -1852,9 +1980,10 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             "  const cases = nodeEl.getAttribute('data-cases') || '0';",
             "  const bucket = nodeEl.getAttribute('data-bucket') || 'Conformant';",
             "  const median = fmtDays(nodeEl.getAttribute('data-median'));",
-            "  selectionChip.textContent = 'Focused node';",
+            "  const neighborCount = Math.max(0, relatedNodes.size - 1);",
+            "  setChip('Focused node');",
             "  liveTitle.textContent = label;",
-            "  liveMeta.textContent = `${cases} cases · ${bucket} · median ${median}`;",
+            "  liveMeta.textContent = `${cases} cases · ${bucket} · median ${median} · ${neighborCount} neighboring step${neighborCount === 1 ? '' : 's'}`;",
             "};",
             "const focusEdge = (edgeEl) => {",
             "  const source = edgeEl.getAttribute('data-source') || '';",
@@ -1887,9 +2016,9 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             "  const freq = edgeEl.getAttribute('data-frequency') || '0';",
             "  const bucket = edgeEl.getAttribute('data-bucket') || 'Conformant';",
             "  const median = fmtDays(edgeEl.getAttribute('data-median'));",
-            "  selectionChip.textContent = 'Focused edge';",
+            "  setChip('Focused edge');",
             "  liveTitle.textContent = caption;",
-            "  liveMeta.textContent = `${freq} events · ${bucket} · median ${median}`;",
+            "  liveMeta.textContent = `${freq} events · ${bucket} · median ${median} · endpoints ${source || 'n/a'} / ${target || 'n/a'}`;",
             "};",
             "nodeEls.forEach((nodeEl) => {",
             "  nodeEl.addEventListener('click', (event) => { event.stopPropagation(); focusNode(nodeEl); });",
@@ -1898,9 +2027,16 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             "  edgeEl.addEventListener('click', (event) => { event.stopPropagation(); focusEdge(edgeEl); });",
             "});",
             "svg.addEventListener('click', () => { resetFocusClasses(); setOverview(); });",
-            "window.crpmZoom = (factor) => { scale = Math.max(0.65, Math.min(1.85, scale * factor)); apply(); };",
-            "window.crpmClearFocus = () => { resetFocusClasses(); setOverview(); };",
-            "window.crpmReset = () => { scale = 1; tx = 0; ty = 0; apply(); window.crpmClearFocus(); };",
+            "const zoomBy = (factor) => { scale = Math.max(0.65, Math.min(1.85, scale * factor)); apply(); };",
+            "const clearFocus = () => { resetFocusClasses(); setOverview(); };",
+            "const resetView = () => { scale = 1; tx = 0; ty = 0; apply(); clearFocus(); };",
+            "if (zoomInButton) zoomInButton.addEventListener('click', (event) => { event.stopPropagation(); zoomBy(1.15); });",
+            "if (zoomOutButton) zoomOutButton.addEventListener('click', (event) => { event.stopPropagation(); zoomBy(0.87); });",
+            "if (clearFocusButton) clearFocusButton.addEventListener('click', (event) => { event.stopPropagation(); clearFocus(); });",
+            "if (resetViewButton) resetViewButton.addEventListener('click', (event) => { event.stopPropagation(); resetView(); });",
+            "window.crpmZoom = zoomBy;",
+            "window.crpmClearFocus = clearFocus;",
+            "window.crpmReset = resetView;",
             "apply();",
             "const initialNode = nodeEls.find((el) => (el.getAttribute('data-node-id') || '') === "
             + repr(selected_node_id)
@@ -1913,10 +2049,29 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             "else { setOverview(); }",
             "})();",
             "</script>",
-            "</div>",
+            "</div></div>",
         ]
     )
     return "".join(parts)
+
+
+def _workflow_metric_coloring_hint(metric_coloring: str) -> str:
+    hints = {
+        "Conformance bucket": "Coloring emphasizes conformance buckets so deviations surface immediately.",
+        "Frequency": "Coloring emphasizes traffic density so dominant branches stand out from rare paths.",
+        "Median delay": "Coloring emphasizes median delay so queue-heavy steps read hotter than fast transitions.",
+        "P90 delay": "Coloring emphasizes tail delay so volatile or long-wait branches stand out.",
+    }
+    return hints.get(metric_coloring, "Coloring follows the selected analytical metric.")
+
+
+def _workflow_density_hint(detail_level: str) -> str:
+    hints = {
+        "executive": "Executive density keeps cards quiet and count-first for presentation.",
+        "analyst": "Analyst density balances counts and timing for investigation.",
+        "research": "Research density keeps richer delay labels visible on cards and links.",
+    }
+    return hints.get(str(detail_level).lower(), "Density follows the selected inspection level.")
 
 
 def create_workflow_cytoscape_payload(payload: Mapping[str, Any] | pd.DataFrame) -> dict[str, Any]:
@@ -2131,6 +2286,21 @@ def _order_workflow_nodes(nodes_df: pd.DataFrame) -> pd.DataFrame:
         working["activity"] = working.get("display_name", working.index.astype(str))
     if "display_name" not in working.columns:
         working["display_name"] = working["activity"]
+    _ensure_workflow_string_column(working, "conformance_bucket", "Conformant")
+    _ensure_workflow_string_column(working, "severity", "Low")
+    _ensure_workflow_string_column(working, "branch_role", "mainline")
+    _ensure_workflow_string_column(working, "coverage_group", "dominant")
+    if "lane" not in working.columns:
+        working["lane"] = working["branch_role"].map(
+            lambda value: "center" if str(value).strip().lower() == "mainline" else "left"
+        )
+    else:
+        working["lane"] = working["lane"].where(working["lane"].notna(), "")
+        missing_lane_mask = working["lane"].astype(str).str.strip().eq("")
+        if missing_lane_mask.any():
+            working.loc[missing_lane_mask, "lane"] = working.loc[missing_lane_mask, "branch_role"].map(
+                lambda value: "center" if str(value).strip().lower() == "mainline" else "left"
+            )
 
     from crpm.screening import STEP_ORDER
 
@@ -2168,8 +2338,15 @@ def _normalize_workflow_edges(edges_df: pd.DataFrame, nodes_df: pd.DataFrame) ->
         return working
     if "frequency" not in working.columns:
         working["frequency"] = 0
-    if "severity" not in working.columns:
-        working["severity"] = "Low"
+    if "edge_id" not in working.columns:
+        working["edge_id"] = working.apply(
+            lambda row: f"{row.get('source', '')} -> {row.get('target', '')}",
+            axis=1,
+        )
+    _ensure_workflow_string_column(working, "severity", "Low")
+    _ensure_workflow_string_column(working, "conformance_bucket", "Conformant")
+    _ensure_workflow_string_column(working, "coverage_group", "dominant")
+    _ensure_workflow_string_column(working, "branch_role", "mainline")
     if "share_pct" not in working.columns:
         total_edges = float(working["frequency"].sum() or 1.0)
         working["share_pct"] = working["frequency"].fillna(0).astype(float) / total_edges * 100.0
@@ -2206,9 +2383,25 @@ def _derive_nodes_from_edges(edges_df: pd.DataFrame) -> pd.DataFrame:
                 "median_next_delay_days": None,
                 "p90_next_delay_days": None,
                 "severity": "Low",
+                "conformance_bucket": "Conformant",
+                "branch_role": "mainline",
+                "coverage_group": "dominant",
+                "lane": "center",
             }
         )
     return pd.DataFrame(rows)
+
+
+def _ensure_workflow_string_column(df: pd.DataFrame, column: str, default: str) -> None:
+    if column not in df.columns:
+        df[column] = default
+        return
+    if not (pd.api.types.is_object_dtype(df[column]) or pd.api.types.is_string_dtype(df[column])):
+        df[column] = df[column].astype("object")
+    series = df[column]
+    missing_mask = series.isna() | series.astype(str).str.strip().eq("")
+    if missing_mask.any():
+        df.loc[missing_mask, column] = default
 
 
 def _workflow_svg_empty(message: str) -> str:

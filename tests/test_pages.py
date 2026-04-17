@@ -444,9 +444,20 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
     monkeypatch.setattr(conformance_page.st, "container", lambda *args, **kwargs: _DummyContext())
     monkeypatch.setattr(conformance_page.st, "expander", lambda *args, **kwargs: _DummyContext())
     monkeypatch.setattr(conformance_page.st, "tabs", lambda labels: calls["tabs"].append(tuple(labels)) or [_DummyContext() for _ in labels])
+    monkeypatch.setattr(
+        conformance_page.st,
+        "segmented_control",
+        lambda label, options, **kwargs: calls.setdefault("segmented", []).append((label, tuple(options)))
+        or {
+            "Mode": "Board mode",
+            "Coverage": "Dominant",
+            "Deviation": "All",
+            "Density": "Executive",
+        }[label],
+    )
     monkeypatch.setattr(conformance_page.st, "radio", lambda *args, **kwargs: "Board mode")
     monkeypatch.setattr(conformance_page.st, "selectbox", lambda label, options, index=0, **kwargs: calls["selectbox"].append((label, tuple(options))) or options[index])
-    monkeypatch.setattr(conformance_page.st, "button", lambda *args, **kwargs: False)
+    monkeypatch.setattr(conformance_page.st, "button", lambda label, *args, **kwargs: calls.setdefault("buttons", []).append(label) or False)
     monkeypatch.setattr(conformance_page, "render_quiet_note", lambda message: calls["notes"].append(message))
     monkeypatch.setattr(conformance_page, "render_legend_note", lambda message: calls["notes"].append(message))
     monkeypatch.setattr(conformance_page, "render_inline_empty", lambda message: calls["inline_empty"].append(message))
@@ -478,20 +489,25 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
     conformance_page.render_conformance_page(snapshot)
 
     assert calls["subheader"] == "Conformance Analytics"
-    assert calls["metrics"]
-    assert "<svg>mock</svg>" in calls["markdown"]
+    assert calls["html"] == []
     assert calls["workflow"]
     assert calls["notes"]
     assert ("Activities", "Transitions", "Models") in calls["tabs"]
     explanatory_text = " ".join(str(text).lower() for text in [*calls["captions"], *calls["markdown"], *calls["notes"]])
     assert "workflow pathway board" in explanatory_text
-    assert any(label == "Coverage" for label, _ in calls["selectbox"])
-    assert any(label == "Detail level" for label, _ in calls["selectbox"])
+    assert any(label == "Mode" for label, _ in calls["segmented"])
+    assert any(label == "Coverage" for label, _ in calls["segmented"])
+    assert any(label == "Deviation" for label, _ in calls["segmented"])
+    assert any(label == "Density" for label, _ in calls["segmented"])
+    assert any(label == "Color" for label, _ in calls["selectbox"])
     assert any(label == "Selected node" for label, _ in calls["selectbox"])
+    assert "Clear selection" in calls["buttons"]
+    assert "Reset view" in calls["buttons"]
     assert any("crpm-selection-card" in text for text in calls["markdown"])
     assert any("crpm-model-card-grid" in text for text in calls["markdown"])
     assert any("crpm-ranked-table" in text for text in calls["markdown"])
-    assert any("crpm-mode-banner" in text for text in calls["markdown"])
+    assert not any("crpm-mode-banner" in text for text in calls["markdown"])
+    assert any("overview mode is active" in note.lower() for note in calls["notes"])
 
 
 def test_conformance_label_helpers_humanize_raw_workflow_labels() -> None:
@@ -543,6 +559,16 @@ def test_render_conformance_page_falls_back_to_comparison_dataframe(monkeypatch)
     monkeypatch.setattr(conformance_page.st, "container", lambda *args, **kwargs: _DummyContext())
     monkeypatch.setattr(conformance_page.st, "expander", lambda *args, **kwargs: _DummyContext())
     monkeypatch.setattr(conformance_page.st, "tabs", lambda labels: calls["tabs"].append(tuple(labels)) or [_DummyContext() for _ in labels])
+    monkeypatch.setattr(
+        conformance_page.st,
+        "segmented_control",
+        lambda label, options, **kwargs: {
+            "Mode": "Board mode",
+            "Coverage": "Dominant",
+            "Deviation": "All",
+            "Density": "Executive",
+        }[label],
+    )
     monkeypatch.setattr(conformance_page.st, "radio", lambda *args, **kwargs: "Board mode")
     monkeypatch.setattr(conformance_page.st, "selectbox", lambda label, options, index=0, **kwargs: options[index])
     monkeypatch.setattr(conformance_page.st, "button", lambda *args, **kwargs: False)
@@ -574,14 +600,13 @@ def test_render_conformance_page_falls_back_to_comparison_dataframe(monkeypatch)
     conformance_page.render_conformance_page(snapshot)
 
     assert calls["subheader"] == "Conformance Analytics"
-    assert calls["metrics"]
     assert not calls["workflow"]
     assert calls["inline_empty"]
     assert ("Activities", "Transitions", "Models") in calls["tabs"]
 
 
 def test_render_conformance_page_interactive_mode_degrades_gracefully(monkeypatch) -> None:
-    calls = {"dataframes": [], "notes": [], "warnings": [], "workflow": [], "markdown": []}
+    calls = {"dataframes": [], "notes": [], "warnings": [], "workflow": [], "markdown": [], "html": []}
 
     workspace = {
         "model_summary_df": pd.DataFrame(
@@ -643,12 +668,23 @@ def test_render_conformance_page_interactive_mode_degrades_gracefully(monkeypatc
     monkeypatch.setattr(conformance_page.st, "container", lambda *args, **kwargs: _DummyContext())
     monkeypatch.setattr(conformance_page.st, "expander", lambda *args, **kwargs: _DummyContext())
     monkeypatch.setattr(conformance_page.st, "tabs", lambda labels: [_DummyContext() for _ in labels])
+    monkeypatch.setattr(
+        conformance_page.st,
+        "segmented_control",
+        lambda label, options, **kwargs: {
+            "Mode": "Interactive mode",
+            "Coverage": "All",
+            "Deviation": "All",
+            "Density": "Analyst",
+        }[label],
+    )
     monkeypatch.setattr(conformance_page.st, "radio", lambda *args, **kwargs: "Interactive mode")
     monkeypatch.setattr(conformance_page.st, "selectbox", lambda label, options, index=0, **kwargs: options[index])
     monkeypatch.setattr(conformance_page.st, "button", lambda *args, **kwargs: False)
     monkeypatch.setattr(conformance_page, "render_quiet_note", lambda message: calls["notes"].append(message))
     monkeypatch.setattr(conformance_page, "render_legend_note", lambda message: calls["notes"].append(message))
     monkeypatch.setattr(conformance_page, "render_inline_empty", lambda *args, **kwargs: None)
+    monkeypatch.setattr(conformance_page.components, "html", lambda html, **kwargs: calls["html"].append(html))
     monkeypatch.setattr(conformance_page, "create_workflow_interactive_payload", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
     monkeypatch.setattr(conformance_page, "render_workflow_conformance_svg", lambda workflow: calls["workflow"].append(workflow) or "<svg>mock</svg>")
 
@@ -678,12 +714,13 @@ def test_render_conformance_page_interactive_mode_degrades_gracefully(monkeypatc
     assert calls["subheader"] == "Conformance Analytics"
     assert calls["notes"]
     assert calls["warnings"]
+    assert calls["html"] == []
     assert calls["workflow"]
     assert any("interactive workflow mode could not be rendered" in text.lower() for text in calls["warnings"])
 
 
 def test_render_conformance_page_renders_html_explorer_without_selection(monkeypatch) -> None:
-    calls = {"workflow": [], "html": [], "warnings": []}
+    calls = {"workflow": [], "html": [], "warnings": [], "fallback_svg": []}
 
     workspace = {
         "model_summary_df": pd.DataFrame(
@@ -745,6 +782,16 @@ def test_render_conformance_page_renders_html_explorer_without_selection(monkeyp
     monkeypatch.setattr(conformance_page.st, "container", lambda *args, **kwargs: _DummyContext())
     monkeypatch.setattr(conformance_page.st, "expander", lambda *args, **kwargs: _DummyContext())
     monkeypatch.setattr(conformance_page.st, "tabs", lambda labels: [_DummyContext() for _ in labels])
+    monkeypatch.setattr(
+        conformance_page.st,
+        "segmented_control",
+        lambda label, options, **kwargs: {
+            "Mode": "Interactive mode",
+            "Coverage": "All",
+            "Deviation": "All",
+            "Density": "Analyst",
+        }[label],
+    )
     monkeypatch.setattr(conformance_page.st, "radio", lambda *args, **kwargs: "Interactive mode")
     monkeypatch.setattr(conformance_page.st, "selectbox", lambda label, options, index=0, **kwargs: options[index])
     monkeypatch.setattr(conformance_page.st, "button", lambda *args, **kwargs: False)
@@ -754,7 +801,11 @@ def test_render_conformance_page_renders_html_explorer_without_selection(monkeyp
     monkeypatch.setattr(conformance_page.components, "html", lambda html, **kwargs: calls["html"].append(html))
     monkeypatch.setattr(conformance_page, "create_workflow_interactive_payload", lambda *args, **kwargs: {"nodes": [], "edges": [], "height": 520, "metric_coloring": "Conformance bucket"})
     monkeypatch.setattr(conformance_page, "render_workflow_explorer_html", lambda payload: "<div>interactive explorer</div>")
-    monkeypatch.setattr(conformance_page, "render_workflow_conformance_svg", lambda workflow: "<svg>fallback</svg>")
+    monkeypatch.setattr(
+        conformance_page,
+        "render_workflow_conformance_svg",
+        lambda workflow: calls["fallback_svg"].append(workflow) or "<svg>fallback</svg>",
+    )
 
     snapshot = AnalysisSnapshot(
         analysis_complete=True,
@@ -781,8 +832,127 @@ def test_render_conformance_page_renders_html_explorer_without_selection(monkeyp
     conformance_page.render_conformance_page(snapshot)
 
     assert calls["html"] == ["<div>interactive explorer</div>"]
+    assert calls["fallback_svg"] == []
     assert not any("fallback" in text for text in calls["workflow"])
     assert calls["warnings"] == []
+
+
+def test_render_workflow_controls_sanitizes_invalid_metric_coloring(monkeypatch) -> None:
+    snapshot = SimpleNamespace(filter_key="filter", input_name="sample.xes", workflow_view_mode="interactive")
+    metric_key = conformance_page._widget_key(snapshot, "workflow_metric_coloring")
+    session_state = {metric_key: "Not a real metric"}
+    selectbox_calls: list[tuple[str, tuple[str, ...], int]] = []
+
+    monkeypatch.setattr(conformance_page.st, "session_state", session_state)
+    monkeypatch.setattr(conformance_page.st, "columns", lambda n, **kwargs: [_DummyContext() for _ in range(n if isinstance(n, int) else len(n))])
+    monkeypatch.setattr(
+        conformance_page,
+        "_render_choice_control",
+        lambda label, options, **kwargs: kwargs["default"] if kwargs["default"] in options else options[0],
+    )
+    monkeypatch.setattr(
+        conformance_page.st,
+        "selectbox",
+        lambda label, options, index=0, **kwargs: selectbox_calls.append((label, tuple(options), index)) or options[index],
+    )
+    monkeypatch.setattr(conformance_page.st, "button", lambda *args, **kwargs: False)
+
+    controls = conformance_page._render_workflow_controls(snapshot)
+
+    assert controls["metric_coloring"] == "Conformance bucket"
+    assert ("Color", ("Conformance bucket", "Frequency", "Median delay", "P90 delay"), 0) in selectbox_calls
+    assert controls["reset_view"] is False
+
+
+def test_reset_workflow_view_clears_selection_and_view_defaults(monkeypatch) -> None:
+    snapshot = SimpleNamespace(filter_key="filter", input_name="sample.xes")
+    session_state = {
+        conformance_page._widget_key(snapshot, "selected_node"): "FIT_mail",
+        conformance_page._widget_key(snapshot, "selected_edge"): "invitation -> fit_mail",
+        conformance_page._widget_key(snapshot, "workflow_coverage"): "All",
+        conformance_page._widget_key(snapshot, "workflow_deviation"): "Log deviations",
+        conformance_page._widget_key(snapshot, "workflow_metric_coloring"): "Median delay",
+        conformance_page._widget_key(snapshot, "workflow_detail_level"): "Research",
+    }
+
+    monkeypatch.setattr(conformance_page.st, "session_state", session_state)
+
+    conformance_page._reset_workflow_view(snapshot, workflow_mode="interactive")
+
+    assert session_state[conformance_page._widget_key(snapshot, "selected_node")] == ""
+    assert session_state[conformance_page._widget_key(snapshot, "selected_edge")] == ""
+    assert session_state[conformance_page._widget_key(snapshot, "workflow_coverage")] == "All"
+    assert session_state[conformance_page._widget_key(snapshot, "workflow_deviation")] == "All"
+    assert session_state[conformance_page._widget_key(snapshot, "workflow_metric_coloring")] == "Conformance bucket"
+    assert session_state[conformance_page._widget_key(snapshot, "workflow_detail_level")] == "Analyst"
+
+
+def test_workflow_mode_banner_text_differs_by_mode(monkeypatch) -> None:
+    calls: list[str] = []
+
+    monkeypatch.setattr(conformance_page.st, "markdown", lambda text, **kwargs: calls.append(text))
+
+    conformance_page._render_workflow_mode_banner("board")
+    conformance_page._render_workflow_mode_banner("interactive")
+
+    assert len(calls) == 1
+    assert "local focus" in calls[0].lower()
+
+
+def test_render_event_process_details_limits_rows_for_analyst(monkeypatch) -> None:
+    calls = {"notes": [], "markdown": [], "tabs": []}
+    nodes_df = pd.DataFrame(
+        [
+            {
+                "activity": f"step_{idx}",
+                "display_name": f"Step {idx}",
+                "cases": 100 - idx,
+                "occurrences": 110 - idx,
+                "median_next_delay_days": float(20 - idx),
+                "p90_next_delay_days": float(25 - idx),
+                "conformance_bucket": "Conformant" if idx % 2 == 0 else "Model deviation",
+            }
+            for idx in range(1, 10)
+        ]
+    )
+    edges_df = pd.DataFrame(
+        [
+            {
+                "edge_id": f"step_{idx} -> step_{idx+1}",
+                "source": f"step_{idx}",
+                "target": f"step_{idx+1}",
+                "business_label": f"Step {idx} → Step {idx+1}",
+                "frequency": 90 - idx,
+                "share_pct": float(10 - idx * 0.5),
+                "median_days": float(15 - idx),
+                "p90_days": float(18 - idx),
+                "conformance_bucket": "Conformant",
+            }
+            for idx in range(1, 10)
+        ]
+    )
+
+    monkeypatch.setattr(conformance_page, "render_legend_note", lambda message: calls["notes"].append(message))
+    monkeypatch.setattr(conformance_page, "render_inline_empty", lambda *args, **kwargs: None)
+    monkeypatch.setattr(conformance_page.st, "tabs", lambda labels: calls["tabs"].append(tuple(labels)) or [_DummyContext() for _ in labels])
+    monkeypatch.setattr(conformance_page.st, "markdown", lambda text, **kwargs: calls["markdown"].append(text))
+    monkeypatch.setattr(conformance_page.st, "expander", lambda *args, **kwargs: _DummyContext())
+
+    conformance_page._render_event_process_details(
+        model_summary_df=pd.DataFrame(),
+        nodes_df=nodes_df,
+        edges_df=edges_df,
+        metric_coloring="Median delay",
+        detail_level="analyst",
+        selected_node_id=None,
+        selected_edge_id=None,
+    )
+
+    assert ("Activities", "Transitions", "Models") in calls["tabs"]
+    activity_html = next(text for text in calls["markdown"] if "Top activities" in text)
+    assert "<span class='crpm-rank-pill'>6</span>" in activity_html
+    assert "<span class='crpm-rank-pill'>7</span>" not in activity_html
+    assert any("analyst density" in note.lower() for note in calls["notes"])
 
 
 def test_render_variant_page_renders_guidance_and_charts(monkeypatch) -> None:

@@ -259,14 +259,14 @@ def test_workflow_board_svg_returns_markup():
     svg = render_workflow_conformance_svg(payload)
     assert '<div class="crpm-workflow-board">' in svg
     assert "<svg" in svg
-    assert "Workflow pathway board" in svg
-    assert "Editorial board view" in svg
     assert "Invitation" in svg
     assert "FIT mail" in svg
-    assert "Deviation &amp; Timing Legend" in svg
     assert "stroke-dasharray" in svg
     assert 'data-branch-role="mainline"' in svg
     assert 'data-branch-role="side"' in svg
+    assert 'aria-label="Workflow conformance board"' in svg
+    assert "Deviation &amp; Timing Legend" not in svg
+    assert "Editorial board view" not in svg
     assert "Mainline backbone</text>" not in svg
     assert "Conformance: Log deviation" not in svg
 
@@ -464,14 +464,116 @@ def test_workflow_interactive_payload_and_html_use_business_labels_only():
     assert explorer["edges"]
     assert explorer["detail_level"] == "research"
     assert "Interactive workflow explorer" in html
-    assert "detail: Research" in html
-    assert "Analytical view" in html
-    assert "Live focus" in html
+    assert 'id="crpm-explorer-selection-chip"' in html
+    assert "Research density keeps richer delay labels visible" in html
     assert "Clear focus" in html
+    assert "Reset view" in html
+    assert 'id="crpm-explorer-live-title"' in html
+    assert 'id="crpm-explorer-reset-view"' in html
+    assert "layout stays left to right" in html
+    assert "Mainline backbone" in html
     assert "Invitation" in html
     assert "FIT mail" in html
     assert "neighbor_ids" not in html
     assert "node::" not in html
+
+
+def test_workflow_interactive_payload_keeps_mainline_nodes_spaced_apart():
+    payload = {
+        "nodes": pd.DataFrame(
+            [
+                {
+                    "activity": "Invitation_mail",
+                    "display_name": "Invitation",
+                    "cases": 1000,
+                    "occurrences": 1000,
+                    "median_next_delay_days": 35.0,
+                    "p90_next_delay_days": 40.0,
+                    "severity": "High",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                    "lane": "center",
+                    "step_rank": 1,
+                },
+                {
+                    "activity": "FIT_mail",
+                    "display_name": "FIT mail",
+                    "cases": 1000,
+                    "occurrences": 1000,
+                    "median_next_delay_days": 15.0,
+                    "p90_next_delay_days": 15.0,
+                    "severity": "Low",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                    "lane": "center",
+                    "step_rank": 2,
+                },
+                {
+                    "activity": "FIT_return",
+                    "display_name": "FIT return",
+                    "cases": 662,
+                    "occurrences": 662,
+                    "median_next_delay_days": 7.0,
+                    "p90_next_delay_days": 7.0,
+                    "severity": "Low",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                    "lane": "center",
+                    "step_rank": 3,
+                },
+            ]
+        ),
+        "edges": pd.DataFrame(
+            [
+                {
+                    "edge_id": "Invitation_mail -> FIT_mail",
+                    "source": "Invitation_mail",
+                    "target": "FIT_mail",
+                    "source_label": "Invitation",
+                    "target_label": "FIT mail",
+                    "business_label": "Invitation → FIT mail",
+                    "frequency": 662,
+                    "median_days": 15.0,
+                    "p90_days": 15.0,
+                    "severity": "Low",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                    "stroke_style": "solid",
+                    "stroke_weight": 4.0,
+                },
+                {
+                    "edge_id": "FIT_mail -> FIT_return",
+                    "source": "FIT_mail",
+                    "target": "FIT_return",
+                    "source_label": "FIT mail",
+                    "target_label": "FIT return",
+                    "business_label": "FIT mail → FIT return",
+                    "frequency": 662,
+                    "median_days": 7.0,
+                    "p90_days": 7.0,
+                    "severity": "Low",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                    "stroke_style": "solid",
+                    "stroke_weight": 4.0,
+                },
+            ]
+        ),
+        "legend": pd.DataFrame(),
+    }
+
+    explorer = create_workflow_interactive_payload(payload, metric_coloring="Conformance bucket", detail_level="Analyst")
+    mainline_nodes = [node for node in explorer["nodes"] if node.get("branch_role") == "mainline"]
+    ordered = sorted(mainline_nodes, key=lambda node: node["x"])
+
+    assert len(ordered) >= 3
+    for left, right in zip(ordered, ordered[1:]):
+        assert left["x"] + left["width"] <= right["x"]
 
 
 def test_filter_workflow_payload_summary_matches_visible_subset():
@@ -510,3 +612,112 @@ def test_filter_workflow_payload_summary_matches_visible_subset():
     assert filtered["summary"]["events_covered"] == 6
     assert filtered["summary"]["deviation_share"] == 100.0
     assert filtered["summary"]["median_throughput_days"] == 42.0
+
+
+def test_filter_workflow_payload_derives_nodes_when_edges_survive_filtering():
+    payload = {
+        "nodes": pd.DataFrame(
+            [
+                {"activity": "invitation", "display_name": "Invitation", "cases": 1000, "coverage_group": "legacy", "conformance_bucket": "Conformant"},
+                {"activity": "fit_mail", "display_name": "FIT mail", "cases": 900, "coverage_group": "legacy", "conformance_bucket": "Conformant"},
+            ]
+        ),
+        "edges": pd.DataFrame(
+            [
+                {
+                    "edge_id": "invitation -> fit_mail",
+                    "source": "invitation",
+                    "target": "fit_mail",
+                    "frequency": 900,
+                    "severity": "Low",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                }
+            ]
+        ),
+        "legend": pd.DataFrame(),
+    }
+
+    filtered = filter_workflow_payload(payload, coverage_view="dominant", deviation_view="all", detail_level="analyst")
+
+    assert list(filtered["nodes"]["activity"]) == ["invitation", "fit_mail"]
+    assert list(filtered["edges"]["edge_id"]) == ["invitation -> fit_mail"]
+
+
+def test_filter_workflow_payload_falls_back_to_all_when_requested_slice_is_empty():
+    payload = {
+        "nodes": pd.DataFrame(
+            [
+                {"activity": "invitation", "display_name": "Invitation", "cases": 1000, "coverage_group": "rare", "conformance_bucket": "Conformant"},
+                {"activity": "fit_mail", "display_name": "FIT mail", "cases": 900, "coverage_group": "rare", "conformance_bucket": "Conformant"},
+            ]
+        ),
+        "edges": pd.DataFrame(
+            [
+                {
+                    "edge_id": "invitation -> fit_mail",
+                    "source": "invitation",
+                    "target": "fit_mail",
+                    "frequency": 900,
+                    "severity": "Low",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "rare",
+                    "branch_role": "mainline",
+                }
+            ]
+        ),
+        "legend": pd.DataFrame(),
+    }
+
+    filtered = filter_workflow_payload(payload, coverage_view="dominant", deviation_view="all", detail_level="analyst")
+
+    assert filtered["requested_coverage_view"] == "dominant"
+    assert filtered["applied_coverage_view"] == "all"
+    assert not filtered["nodes"].empty
+    assert not filtered["edges"].empty
+
+
+def test_filter_workflow_payload_fills_missing_defaults_for_nodes_and_edges():
+    payload = {
+        "nodes": pd.DataFrame(
+            [
+                {
+                    "activity": "invitation",
+                    "display_name": "Invitation",
+                    "cases": 1000,
+                    "occurrences": 1000,
+                },
+                {
+                    "activity": "fit_mail",
+                    "display_name": "FIT mail",
+                    "cases": 900,
+                    "occurrences": 900,
+                    "conformance_bucket": "",
+                    "severity": None,
+                },
+            ]
+        ),
+        "edges": pd.DataFrame(
+            [
+                {
+                    "source": "invitation",
+                    "target": "fit_mail",
+                    "frequency": 900,
+                    "conformance_bucket": "",
+                    "severity": None,
+                }
+            ]
+        ),
+        "legend": pd.DataFrame(),
+    }
+
+    filtered = filter_workflow_payload(payload, coverage_view="all", deviation_view="all", detail_level="research")
+
+    assert set(filtered["nodes"]["conformance_bucket"]) == {"Conformant"}
+    assert set(filtered["nodes"]["severity"]) == {"Low"}
+    assert set(filtered["nodes"]["branch_role"]) == {"mainline"}
+    assert set(filtered["nodes"]["coverage_group"]) == {"dominant"}
+    assert set(filtered["edges"]["conformance_bucket"]) == {"Conformant"}
+    assert set(filtered["edges"]["severity"]) == {"Low"}
+    assert set(filtered["edges"]["coverage_group"]) == {"dominant"}

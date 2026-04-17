@@ -147,6 +147,51 @@ def get_custom_css() -> str:
         background: linear-gradient(135deg, #496f86 0%, #5f79a5 100%) !important;
     }
 
+    div[role="radiogroup"][aria-label="button group"] {
+        gap: 0.32rem !important;
+        padding: 0.24rem !important;
+        border-radius: 16px !important;
+        border: 1px solid rgba(71, 88, 79, 0.12) !important;
+        background: linear-gradient(180deg, rgba(250, 249, 252, 0.98) 0%, rgba(243, 240, 248, 0.98) 100%) !important;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85) !important;
+    }
+
+    div[role="radiogroup"][aria-label="button group"] > button {
+        min-height: 2.25rem !important;
+        padding: 0.38rem 0.82rem !important;
+        border-radius: 12px !important;
+        border: 1px solid transparent !important;
+        background: transparent !important;
+        color: var(--crpm-text-soft) !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.01em !important;
+        box-shadow: none !important;
+        transition: transform 0.16s ease, background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease !important;
+    }
+
+    div[role="radiogroup"][aria-label="button group"] > button:hover {
+        transform: translateY(-1px) !important;
+        border-color: rgba(92, 121, 165, 0.18) !important;
+        background: rgba(234, 239, 248, 0.92) !important;
+        color: var(--crpm-forest-strong) !important;
+    }
+
+    div[role="radiogroup"][aria-label="button group"] > button[aria-checked="true"],
+    div[role="radiogroup"][aria-label="button group"] > button[aria-pressed="true"],
+    div[role="radiogroup"][aria-label="button group"] > button[data-selected="true"] {
+        background: linear-gradient(135deg, #31586d 0%, #5f79a5 100%) !important;
+        border-color: rgba(63, 83, 129, 0.32) !important;
+        color: #ffffff !important;
+        box-shadow: 0 9px 20px rgba(50, 41, 66, 0.14) !important;
+    }
+
+    div[role="radiogroup"][aria-label="button group"] > button[aria-checked="true"] *,
+    div[role="radiogroup"][aria-label="button group"] > button[aria-pressed="true"] *,
+    div[role="radiogroup"][aria-label="button group"] > button[data-selected="true"] * {
+        color: #ffffff !important;
+        fill: #ffffff !important;
+    }
+
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, var(--crpm-sidebar) 0%, #f6f2f8 100%) !important;
         border-right: 1px solid rgba(71, 88, 79, 0.14) !important;
@@ -323,11 +368,11 @@ def get_custom_css() -> str:
     .crpm-workflow-board {
         background: rgba(252, 251, 253, 0.78);
         border: 1px solid rgba(71, 88, 79, 0.12);
-        border-radius: 24px;
+        border-radius: 26px;
         box-shadow: var(--crpm-shadow-soft);
-        margin: 0.35rem 0 1rem 0;
+        margin: 0.25rem 0 0.9rem 0;
         overflow: hidden;
-        padding: 0.45rem;
+        padding: 0.18rem;
     }
 
     .crpm-workflow-board svg {
@@ -473,12 +518,12 @@ def get_custom_css() -> str:
     }
 
     .crpm-mode-banner {
-        margin: 0.2rem 0 0.7rem 0;
-        padding: 0.7rem 0.86rem;
+        margin: 0.16rem 0 0.65rem 0;
+        padding: 0.66rem 0.82rem;
         border-radius: 14px;
         border: 1px solid rgba(71, 88, 79, 0.14);
         background: rgba(252, 251, 253, 0.96);
-        box-shadow: var(--crpm-shadow-soft);
+        box-shadow: 0 8px 18px rgba(50, 41, 66, 0.05);
     }
 
     .crpm-mode-banner--board {
@@ -506,11 +551,27 @@ def get_custom_css() -> str:
 
     .crpm-selection-card {
         margin: 0.35rem 0 0.8rem 0;
-        padding: 0.9rem 1rem;
+        padding: 0.82rem 0.92rem;
         border-radius: 16px;
         border: 1px solid rgba(71, 88, 79, 0.12);
         background: rgba(252, 251, 253, 0.96);
         box-shadow: var(--crpm-shadow-soft);
+    }
+
+    .crpm-selection-card--overview {
+        border-left: 4px solid #8d95a8;
+    }
+
+    .crpm-selection-card--conformant {
+        border-left: 4px solid #4d8f65;
+    }
+
+    .crpm-selection-card--log-deviation {
+        border-left: 4px solid #b17b34;
+    }
+
+    .crpm-selection-card--model-deviation {
+        border-left: 4px solid #b56576;
     }
 
     .crpm-selection-card__eyebrow {
@@ -540,12 +601,20 @@ def get_custom_css() -> str:
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 0.55rem;
-        margin: 0.25rem 0 0.8rem 0;
+        margin: 0.2rem 0 0.75rem 0;
         padding: 0.8rem;
         border-radius: 16px;
         border: 1px solid rgba(71, 88, 79, 0.1);
         background: rgba(252, 251, 253, 0.98);
         box-shadow: var(--crpm-shadow-soft);
+    }
+
+    .crpm-detail-card--node {
+        border-left: 4px solid #4d8f65;
+    }
+
+    .crpm-detail-card--edge {
+        border-left: 4px solid #b17b34;
     }
 
     .crpm-detail-card__item {
@@ -575,16 +644,17 @@ def get_custom_css() -> str:
 
     .crpm-model-card-grid {
         display: grid;
-        gap: 0.7rem;
+        gap: 0.6rem;
     }
 
     .crpm-model-card {
         position: relative;
-        padding: 0.9rem 0.95rem;
+        padding: 0.82rem 0.9rem;
         border-radius: 16px;
         border: 1px solid rgba(71, 88, 79, 0.12);
         background: rgba(252, 251, 253, 0.98);
         box-shadow: var(--crpm-shadow-soft);
+        border-left: 4px solid rgba(54, 83, 72, 0.42);
     }
 
     .crpm-model-card__rank {
@@ -595,10 +665,10 @@ def get_custom_css() -> str:
     }
 
     .crpm-model-card__title {
-        font-size: 1rem;
+        font-size: 0.96rem;
         font-weight: 700;
         color: var(--crpm-forest-strong);
-        margin-bottom: 0.65rem;
+        margin-bottom: 0.55rem;
         line-height: 1.25;
     }
 
@@ -610,7 +680,7 @@ def get_custom_css() -> str:
 
     .crpm-model-card__grid div {
         min-width: 0;
-        padding: 0.5rem 0.55rem;
+        padding: 0.46rem 0.52rem;
         border-radius: 12px;
         background: rgba(245, 243, 248, 0.82);
         border: 1px solid rgba(71, 88, 79, 0.08);
@@ -628,7 +698,7 @@ def get_custom_css() -> str:
 
     .crpm-model-card__grid strong {
         display: block;
-        font-size: 0.9rem;
+        font-size: 0.84rem;
         color: var(--crpm-forest-strong);
         line-height: 1.3;
         word-break: break-word;
@@ -636,12 +706,12 @@ def get_custom_css() -> str:
 
     .crpm-mini-note {
         margin-bottom: 0.55rem;
-        padding: 0.7rem 0.8rem;
+        padding: 0.65rem 0.78rem;
         border-radius: 12px;
         border: 1px solid rgba(71, 88, 79, 0.1);
         background: rgba(252, 251, 253, 0.96);
         line-height: 1.45;
-        font-size: 0.88rem;
+        font-size: 0.84rem;
     }
 
     .crpm-ranked-table {
@@ -653,14 +723,14 @@ def get_custom_css() -> str:
     }
 
     .crpm-ranked-table__title {
-        padding: 0.75rem 0.85rem 0.55rem 0.85rem;
-        font-size: 0.88rem;
+        padding: 0.62rem 0.78rem 0.44rem 0.78rem;
+        font-size: 0.84rem;
         font-weight: 700;
         color: var(--crpm-forest-strong);
     }
 
     .crpm-ranked-table__scroller {
-        max-height: 336px;
+        max-height: 292px;
         overflow: auto;
         border-top: 1px solid rgba(71, 88, 79, 0.08);
     }
@@ -669,18 +739,18 @@ def get_custom_css() -> str:
         width: 100%;
         border-collapse: separate;
         border-spacing: 0;
-        font-size: 0.82rem;
+        font-size: 0.79rem;
     }
 
     .crpm-ranked-table thead th {
         position: sticky;
         top: 0;
         z-index: 1;
-        padding: 0.56rem 0.55rem;
+        padding: 0.52rem 0.52rem;
         background: #f4eff8;
         color: var(--crpm-forest-strong);
         text-align: left;
-        font-size: 0.74rem;
+        font-size: 0.72rem;
         font-weight: 700;
         letter-spacing: 0.02em;
         border-bottom: 1px solid rgba(71, 88, 79, 0.12);
@@ -696,7 +766,7 @@ def get_custom_css() -> str:
     }
 
     .crpm-table__cell {
-        padding: 0.48rem 0.55rem;
+        padding: 0.44rem 0.52rem;
         color: var(--crpm-text);
         border-bottom: 1px solid rgba(71, 88, 79, 0.08);
         vertical-align: middle;
@@ -717,6 +787,11 @@ def get_custom_css() -> str:
         max-width: 0;
         min-width: 0;
         line-height: 1.35;
+        font-weight: 600;
+    }
+
+    .crpm-table__cell--chip {
+        white-space: nowrap;
     }
 
     .crpm-rank-pill {
@@ -766,10 +841,10 @@ def get_custom_css() -> str:
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 6.7rem;
-        padding: 0.28rem 0.58rem;
+        min-width: 6.2rem;
+        padding: 0.24rem 0.5rem;
         border-radius: 999px;
-        font-size: 0.74rem;
+        font-size: 0.72rem;
         font-weight: 700;
         line-height: 1;
         white-space: nowrap;
