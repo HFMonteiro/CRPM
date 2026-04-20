@@ -17,14 +17,19 @@ from crpm.dfg_utils import (
     render_dfg_to_svg,
     render_dfg_to_png,
 )
-from crpm.pages.common import render_empty_state, render_inline_empty, render_quiet_note, store_cache_entry
+from crpm.pages.common import (
+    format_metric_value,
+    render_empty_state,
+    render_html_ranked_table,
+    render_inline_empty,
+    render_metric_card_grid,
+    render_quiet_note,
+    store_cache_entry,
+)
 
 
 def render_dfg_page(snapshot: AnalysisSnapshot) -> None:
     st.subheader("DFG Visualizations")
-    st.caption(
-        "Use the coverage slider to focus on dominant paths, rare paths, or an intermediate band of directly-follows edges. The map renders as SVG first for crisp labels, with a PNG fallback only if Graphviz cannot produce vector output."
-    )
 
     if not snapshot.analysis_complete or snapshot.filtered_log is None:
         render_empty_state("No DFG results yet. Run the analysis from the sidebar to populate this page.")
@@ -36,7 +41,7 @@ def render_dfg_page(snapshot: AnalysisSnapshot) -> None:
     ctrl_cols = st.columns([1.0, 1.6])
     dfg_mode = ctrl_cols[0].selectbox("DFG type", ["Frequency", "Performance"], key="dfg_type_sel")
     coverage_range = ctrl_cols[1].slider(
-        "Edge frequency coverage (%)",
+        "Edge coverage band (%)",
         min_value=0,
         max_value=100,
         value=(0, 100),
@@ -44,11 +49,7 @@ def render_dfg_page(snapshot: AnalysisSnapshot) -> None:
         key="dfg_coverage_range",
         help="100 keeps the most frequent edges and 0 keeps the least frequent edges. Narrow windows isolate a band of ranked edges.",
     )
-    st.caption("Coverage is computed over the ranked DFG edges. Higher lower bounds emphasize dominant behavior; lower upper bounds expose rare paths.")
-    render_quiet_note(
-        "Use Frequency to inspect how often transitions appear and Performance to inspect how long they take. "
-        "The coverage slider keeps a ranked band of edges rather than a raw absolute threshold."
-    )
+    st.caption("Coverage keeps a ranked band of directly-follows edges: raise the lower bound for dominant behavior and lower the upper bound for rare paths.")
     if coverage_range != (0, 100):
         render_quiet_note(
             f"DFG filtered to ranked edge coverage {coverage_range[0]}%–{coverage_range[1]}%. "
@@ -88,16 +89,13 @@ def render_dfg_page(snapshot: AnalysisSnapshot) -> None:
 
     stats = get_dfg_statistics(dfg, starts, ends)
     max_edge_label = "Most frequent edge" if dfg_mode == "Frequency" else "Slowest edge"
+    max_edge_value_label = (
+        format_metric_value(stats.get("max_edge_value", 0), kind="count")
+        if dfg_mode == "Frequency"
+        else _format_dfg_duration(stats.get("max_edge_value"))
+    )
 
-    stat_cols = st.columns(5)
-    stat_cols[0].metric("Activities", stats.get("num_activities", 0))
-    stat_cols[1].metric("Edges", stats.get("num_edges", 0))
-    stat_cols[2].metric("Start activities", stats.get("num_start_activities", 0))
-    stat_cols[3].metric("End activities", stats.get("num_end_activities", 0))
-    stat_cols[4].metric(max_edge_label, stats.get("max_edge", "N/A"))
-    st.caption(f"Retained {len(dfg)} directly-follows edges in the current coverage band.")
-
-    # --- Process map ---
+    st.markdown("#### Directly-follows map")
     if dfg:
         with st.spinner("Rendering process map…"):
             try:
@@ -114,23 +112,98 @@ def render_dfg_page(snapshot: AnalysisSnapshot) -> None:
                 except Exception:
                     st.warning("Could not render the DFG. Check the runtime preflight and confirm Graphviz is installed.")
     else:
-        render_inline_empty("The DFG is empty after applying the current coverage band. Widen the slider to bring more edges back into view.")
+        st.markdown(
+            "<div class='crpm-inline-empty'>The DFG is empty after applying the current coverage band. Widen the slider to bring more edges back into view.</div>",
+            unsafe_allow_html=True,
+        )
 
-    # --- Edge table ---
+    render_metric_card_grid(
+        [
+            {
+                "eyebrow": "Map",
+                "title": "Activities",
+                "value": stats.get("num_activities", 0),
+                "body": "Distinct nodes in the current DFG.",
+                "tone": "neutral",
+            },
+            {
+                "eyebrow": "Map",
+                "title": "Edges",
+                "value": stats.get("num_edges", 0),
+                "body": "Directly-follows relations retained.",
+                "tone": "accent",
+            },
+            {
+                "eyebrow": "Entry",
+                "title": "Start activities",
+                "value": stats.get("num_start_activities", 0),
+                "body": "Observed cohort entry points.",
+                "tone": "success",
+            },
+            {
+                "eyebrow": "Exit",
+                "title": "End activities",
+                "value": stats.get("num_end_activities", 0),
+                "body": "Observed cohort exit points.",
+                "tone": "neutral",
+            },
+            {
+                "eyebrow": "Focus",
+                "title": max_edge_label,
+                "value": stats.get("max_edge", "N/A"),
+                "body": (
+                    f"Peak value in the current band: {max_edge_value_label}."
+                    if stats.get("max_edge") != "N/A"
+                    else "Most pronounced edge in the current band."
+                ),
+                "tone": "neutral",
+            },
+        ]
+    )
     if dfg:
-        st.markdown("#### Leading edges")
+        st.markdown("#### Ranked edge detail")
         ranked_rows = rank_dfg_edges(dfg)
-        value_label = "Frequency" if dfg_mode == "Frequency" else "Median delay (days)"
+        value_label = "Events" if dfg_mode == "Frequency" else "Median delay"
         table_rows = pd.DataFrame(
             [
                 {
                     "Rank": row["rank"],
                     "Coverage (%)": row["coverage_pct"],
-                    "Source": row["source"],
-                    "Target": row["target"],
-                    value_label: row["value"],
+                    "From": row["source"],
+                    "To": row["target"],
+                    value_label: (
+                        format_metric_value(row["value"], kind="count")
+                        if dfg_mode == "Frequency"
+                        else _format_dfg_duration(row["value"])
+                    ),
                 }
                 for row in ranked_rows[:25]
             ]
         )
-        st.dataframe(table_rows, use_container_width=True, hide_index=True)
+        render_html_ranked_table(
+            table_rows,
+            title="Leading edges",
+            label_column="From",
+        )
+    else:
+        st.markdown(
+            "<div class='crpm-inline-empty'>No leading edges are available for the current coverage band.</div>",
+            unsafe_allow_html=True,
+        )
+
+
+def _format_dfg_duration(value: object) -> str:
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return "N/A"
+
+    if seconds < 0:
+        return "N/A"
+    if seconds >= 172800:
+        return f"{seconds / 86400:,.1f} d"
+    if seconds >= 3600:
+        return f"{seconds / 3600:,.1f} h"
+    if seconds >= 60:
+        return f"{seconds / 60:,.0f} min"
+    return f"{seconds:,.0f} s"

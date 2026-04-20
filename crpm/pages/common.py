@@ -76,14 +76,20 @@ def render_html_card_grid(cards: list[Mapping[str, Any]], *, grid_class: str = "
         chunks.append(
             (
                 f"<div class='crpm-bi-card crpm-bi-card--{tone}'>"
+                "<div class='crpm-bi-card__header'>"
                 f"<div class='crpm-bi-card__eyebrow'>{eyebrow}</div>"
                 f"<div class='crpm-bi-card__title' title='{title_attr}'>{title}</div>"
+                "</div>"
                 f"<div class='crpm-bi-card__value'>{value}</div>"
                 f"<div class='crpm-bi-card__body'>{body}</div>"
                 "</div>"
             )
         )
     st.markdown(f"<div class='{grid_class}'>{''.join(chunks)}</div>", unsafe_allow_html=True)
+
+
+def render_metric_card_grid(cards: list[Mapping[str, Any]]) -> None:
+    render_html_card_grid(cards, grid_class="crpm-kpi-grid")
 
 
 def render_html_ranked_table(

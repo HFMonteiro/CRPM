@@ -14,7 +14,7 @@ from crpm.pages.common import (
     render_html_card_grid,
     render_html_ranked_table,
     render_inline_empty,
-    render_legend_note,
+    render_metric_card_grid,
     render_plotly_chart,
     store_cache_entry,
 )
@@ -67,12 +67,32 @@ def render_variant_page(snapshot: AnalysisSnapshot) -> None:
 
     coverage = cached_payload["coverage"]
 
-    stat_cols = st.columns(3)
-    stat_cols[0].metric("Unique variants", f"{len(variant_stats):,}")
-    stat_cols[1].metric("Total cases", f"{int(variant_stats['frequency'].sum()):,}" if "frequency" in variant_stats.columns else "0")
     top_pct = f"{variant_stats['percentage'].iloc[0]:.1f}%" if "percentage" in variant_stats.columns and len(variant_stats) > 0 else "—"
-    stat_cols[2].metric("Top variant share", top_pct)
-    render_legend_note("Variant coverage is cumulative. The conformance table below uses the first discovered model only.")
+    render_metric_card_grid(
+        [
+            {
+                "eyebrow": "Coverage",
+                "title": "Unique variants",
+                "value": f"{len(variant_stats):,}",
+                "body": "Distinct observed traces.",
+                "tone": "neutral",
+            },
+            {
+                "eyebrow": "Scope",
+                "title": "Total cases",
+                "value": f"{int(variant_stats['frequency'].sum()):,}" if "frequency" in variant_stats.columns else "0",
+                "body": "Cases represented by variants.",
+                "tone": "accent",
+            },
+            {
+                "eyebrow": "Dominance",
+                "title": "Top variant share",
+                "value": top_pct,
+                "body": "Concentration of the leading trace.",
+                "tone": "success",
+            },
+        ]
+    )
 
     conformance_df = cached_payload["conformance_df"]
     dominant_col, insight_col = st.columns([1.4, 1.0], gap="large")

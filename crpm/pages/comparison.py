@@ -7,7 +7,7 @@ import streamlit as st
 
 from crpm.app_state import AnalysisSnapshot
 from crpm.interpretations import assess_balanced_quality, assess_fitness, assess_precision
-from crpm.pages.common import render_empty_state, render_plotly_chart, render_quiet_note
+from crpm.pages.common import render_empty_state, render_html_ranked_table, render_metric_card_grid, render_plotly_chart, render_quiet_note
 from crpm.visualization import create_fitness_precision_scatter, create_model_comparison_heatmap
 
 
@@ -33,24 +33,32 @@ def render_comparison_page(snapshot: AnalysisSnapshot) -> None:
         balanced_index = (comparison_df["alignment_fitness"].fillna(0) + comparison_df["precision"].fillna(0)).idxmax()
         best_balanced = comparison_df.loc[balanced_index]
 
-    st.markdown("#### Recommendation strip")
-    metric_cols = st.columns(3)
-    with metric_cols[0]:
-        if best_fitness is not None:
-            fitness_assessment = assess_fitness(best_fitness["alignment_fitness"])
-            st.metric("Best fitness", best_fitness["model_name"], f"{best_fitness['alignment_fitness']:.4f}")
-            st.caption(fitness_assessment[2])
-    with metric_cols[1]:
-        if best_precision is not None:
-            precision_assessment = assess_precision(best_precision["precision"])
-            st.metric("Best precision", best_precision["model_name"], f"{best_precision['precision']:.4f}")
-            st.caption(precision_assessment[2])
-    with metric_cols[2]:
-        if best_balanced is not None:
-            balanced_score = (best_balanced.get("alignment_fitness", 0) + best_balanced.get("precision", 0)) / 2
-            balanced_assessment = assess_balanced_quality(best_balanced.get("alignment_fitness", 0), best_balanced.get("precision", 0))
-            st.metric("Best balance", best_balanced["model_name"], f"{balanced_score:.4f}")
-            st.caption(balanced_assessment[2])
+    if best_fitness is not None and best_precision is not None and best_balanced is not None:
+        render_metric_card_grid(
+            [
+                {
+                    "eyebrow": "Fitness",
+                    "title": str(best_fitness["model_name"]),
+                    "value": f"{best_fitness['alignment_fitness']:.4f}",
+                    "body": assess_fitness(best_fitness["alignment_fitness"])[2],
+                    "tone": "accent",
+                },
+                {
+                    "eyebrow": "Precision",
+                    "title": str(best_precision["model_name"]),
+                    "value": f"{best_precision['precision']:.4f}",
+                    "body": assess_precision(best_precision["precision"])[2],
+                    "tone": "neutral",
+                },
+                {
+                    "eyebrow": "Balance",
+                    "title": str(best_balanced["model_name"]),
+                    "value": f"{((best_balanced.get('alignment_fitness', 0) + best_balanced.get('precision', 0)) / 2):.4f}",
+                    "body": assess_balanced_quality(best_balanced.get("alignment_fitness", 0), best_balanced.get("precision", 0))[2],
+                    "tone": "success",
+                },
+            ]
+        )
 
     if best_balanced is not None:
         render_quiet_note(
@@ -69,5 +77,17 @@ def render_comparison_page(snapshot: AnalysisSnapshot) -> None:
                 key="shell_comparison_heatmap",
             )
 
+    comparison_table = display_df.rename(
+        columns={
+            "model_name": "Model",
+            "alignment_fitness": "Alignment fitness",
+            "token_fitness": "Token fitness",
+            "precision": "Precision",
+            "discovery_time_s": "Discovery time",
+            "num_places": "Places",
+            "num_transitions": "Transitions",
+            "num_arcs": "Arcs",
+        }
+    )
     st.markdown("#### Comparison table")
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    render_html_ranked_table(comparison_table, title="Model comparison", label_column="Model")

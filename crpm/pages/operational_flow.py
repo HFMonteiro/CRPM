@@ -8,7 +8,14 @@ import pandas as pd
 import streamlit as st
 
 from crpm.app_state import AnalysisSnapshot
-from crpm.pages.common import render_empty_state, render_inline_empty, render_plotly_chart, render_quiet_note
+from crpm.pages.common import (
+    render_empty_state,
+    render_html_ranked_table,
+    render_inline_empty,
+    render_metric_card_grid,
+    render_plotly_chart,
+    render_quiet_note,
+)
 from crpm.queue_flow import build_operational_view, derive_operational_periods, split_operational_periods
 from crpm.screening import PeriodDefinition, STEP_ORDER, infer_step_mapping
 from crpm.visualization import create_operational_flow_chart, create_queue_stock_chart, create_stage_aging_chart
@@ -68,7 +75,7 @@ def render_operational_flow_page(snapshot: AnalysisSnapshot) -> None:
         mapping_rows = pd.DataFrame(
             [{"Canonical step": step, "Mapped activity": step_map.get(step) or "Not mapped"} for step in STEP_ORDER]
         )
-        st.dataframe(mapping_rows, use_container_width=True, hide_index=True)
+        render_html_ranked_table(mapping_rows, title="Mapped pathway steps", label_column="Mapped activity")
 
     smooth_window = smoothing_window if smoothing_enabled else None
 
@@ -108,12 +115,38 @@ def render_operational_flow_page(snapshot: AnalysisSnapshot) -> None:
 
 def _render_single_view(section_title: str, view: dict[str, Any]) -> None:
     kpis = view["kpis"]
-
-    stat_cols = st.columns(4)
-    stat_cols[0].metric("Cases", f"{int(kpis.get('total_cases', 0)):,}")
-    stat_cols[1].metric("FIT return rate", _format_rate(kpis.get("fit_return_rate")))
-    stat_cols[2].metric("Colonoscopy completion", _format_rate(kpis.get("colonoscopy_completion_rate")))
-    stat_cols[3].metric("Awaiting colonoscopy", f"{int(round(kpis.get('current_awaiting_colonoscopy', 0))):,}")
+    render_metric_card_grid(
+        [
+            {
+                "eyebrow": "Cohort",
+                "title": "Cases",
+                "value": f"{int(kpis.get('total_cases', 0)):,}",
+                "body": "Current filtered cohort.",
+                "tone": "neutral",
+            },
+            {
+                "eyebrow": "Return",
+                "title": "FIT return rate",
+                "value": _format_rate(kpis.get("fit_return_rate")),
+                "body": "Observed return conversion.",
+                "tone": "accent",
+            },
+            {
+                "eyebrow": "Completion",
+                "title": "Colonoscopy completion",
+                "value": _format_rate(kpis.get("colonoscopy_completion_rate")),
+                "body": "Observed pathway completion.",
+                "tone": "success",
+            },
+            {
+                "eyebrow": "Queue",
+                "title": "Awaiting colonoscopy",
+                "value": f"{int(round(kpis.get('current_awaiting_colonoscopy', 0))):,}",
+                "body": "Current outstanding load.",
+                "tone": "neutral",
+            },
+        ]
+    )
 
     lens = _render_lens_control(
         "Operational lens",
@@ -146,10 +179,42 @@ def _render_single_view(section_title: str, view: dict[str, Any]) -> None:
             if view["aging_metrics"].empty:
                 render_inline_empty("No stage-aging transitions were observed in this selection.")
             else:
-                st.dataframe(view["aging_metrics"], use_container_width=True, hide_index=True)
+                render_html_ranked_table(view["aging_metrics"], title="Stage aging exact values", label_column=view["aging_metrics"].columns[0])
 
 
 def _render_comparison_view(pre_view: dict[str, Any], post_view: dict[str, Any]) -> None:
+    render_metric_card_grid(
+        [
+            {
+                "eyebrow": "PRE",
+                "title": "Cases",
+                "value": _format_count(pre_view["kpis"].get("total_cases", 0)),
+                "body": "Pre-incident cohort size.",
+                "tone": "neutral",
+            },
+            {
+                "eyebrow": "POST",
+                "title": "Cases",
+                "value": _format_count(post_view["kpis"].get("total_cases", 0)),
+                "body": "Post-incident cohort size.",
+                "tone": "accent",
+            },
+            {
+                "eyebrow": "PRE",
+                "title": "FIT return rate",
+                "value": _format_rate(pre_view["kpis"].get("fit_return_rate")),
+                "body": "Baseline flow conversion.",
+                "tone": "success",
+            },
+            {
+                "eyebrow": "POST",
+                "title": "FIT return rate",
+                "value": _format_rate(post_view["kpis"].get("fit_return_rate")),
+                "body": "Incident-period flow conversion.",
+                "tone": "neutral",
+            },
+        ]
+    )
     comparison_rows = pd.DataFrame(
         [
             {
@@ -174,7 +239,7 @@ def _render_comparison_view(pre_view: dict[str, Any], post_view: dict[str, Any])
             },
         ]
     )
-    st.dataframe(comparison_rows, use_container_width=True, hide_index=True)
+    render_html_ranked_table(comparison_rows, title="PRE versus POST summary", label_column="Metric")
 
     lens = _render_lens_control(
         "Comparison lens",
@@ -185,31 +250,22 @@ def _render_comparison_view(pre_view: dict[str, Any], post_view: dict[str, Any])
 
     if lens == "Stage flow":
         st.caption("Weekly stage throughput comparison between the PRE and POST incident cohorts.")
-        flow_cols = st.columns(2, gap="large")
-        with flow_cols[0]:
-            render_plotly_chart(create_operational_flow_chart(pre_view["weekly_counts"], title="PRE weekly flow"), key="operational_pre_flow")
-        with flow_cols[1]:
-            render_plotly_chart(create_operational_flow_chart(post_view["weekly_counts"], title="POST weekly flow"), key="operational_post_flow")
+        render_plotly_chart(create_operational_flow_chart(pre_view["weekly_counts"], title="PRE weekly flow"), key="operational_pre_flow")
+        render_plotly_chart(create_operational_flow_chart(post_view["weekly_counts"], title="POST weekly flow"), key="operational_post_flow")
     elif lens == "Queue stock":
         st.caption("Estimated queue accumulation comparison between the PRE and POST cohorts.")
-        stock_cols = st.columns(2, gap="large")
-        with stock_cols[0]:
-            render_plotly_chart(create_queue_stock_chart(pre_view["stock_levels"], title="PRE queue stock"), key="operational_pre_stock")
-        with stock_cols[1]:
-            render_plotly_chart(create_queue_stock_chart(post_view["stock_levels"], title="POST queue stock"), key="operational_post_stock")
+        render_plotly_chart(create_queue_stock_chart(pre_view["stock_levels"], title="PRE queue stock"), key="operational_pre_stock")
+        render_plotly_chart(create_queue_stock_chart(post_view["stock_levels"], title="POST queue stock"), key="operational_post_stock")
     else:
         st.caption("Median and P90 delay comparison (days) between the PRE and POST cohorts.")
-        aging_cols = st.columns(2, gap="large")
-        with aging_cols[0]:
-            render_plotly_chart(create_stage_aging_chart(pre_view["aging_metrics"], title="PRE stage aging"), key="operational_pre_aging")
-            if not pre_view["aging_metrics"].empty:
-                with st.expander("PRE exact values", expanded=False):
-                    st.dataframe(pre_view["aging_metrics"], use_container_width=True, hide_index=True)
-        with aging_cols[1]:
-            render_plotly_chart(create_stage_aging_chart(post_view["aging_metrics"], title="POST stage aging"), key="operational_post_aging")
-            if not post_view["aging_metrics"].empty:
-                with st.expander("POST exact values", expanded=False):
-                    st.dataframe(post_view["aging_metrics"], use_container_width=True, hide_index=True)
+        render_plotly_chart(create_stage_aging_chart(pre_view["aging_metrics"], title="PRE stage aging"), key="operational_pre_aging")
+        if not pre_view["aging_metrics"].empty:
+            with st.expander("PRE exact values", expanded=False):
+                render_html_ranked_table(pre_view["aging_metrics"], title="PRE stage aging exact values", label_column=pre_view["aging_metrics"].columns[0])
+        render_plotly_chart(create_stage_aging_chart(post_view["aging_metrics"], title="POST stage aging"), key="operational_post_aging")
+        if not post_view["aging_metrics"].empty:
+            with st.expander("POST exact values", expanded=False):
+                render_html_ranked_table(post_view["aging_metrics"], title="POST stage aging exact values", label_column=post_view["aging_metrics"].columns[0])
 
 
 def _format_rate(value: Any) -> str:

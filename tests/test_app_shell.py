@@ -207,11 +207,81 @@ def test_render_header_prompts_rerun_with_note_and_toast(monkeypatch) -> None:
     ))
     monkeypatch.setattr(app_shell, "render_quiet_note", lambda text: calls["notes"].append(text))
 
-    app_shell._render_header(snapshot)
+    app_shell._render_header(snapshot, page="Overview")
 
     assert calls["notes"]
     assert calls["toast"]
-    assert any("current input" in text.lower() for text in calls["captions"])
+
+
+def test_render_header_renders_compact_shell_intro_for_non_conformance_pages(monkeypatch) -> None:
+    import crpm.app_shell as app_shell
+
+    snapshot = SimpleNamespace(
+        case_count=11,
+        event_count=22,
+        model_count=3,
+        comparison_df=pd.DataFrame([{"model_name": "Model"}]),
+        input_name="running-example.xes",
+        active_followup_label="Full available follow-up",
+        config_change_message=None,
+        filter_error_message=None,
+    )
+    calls = {"markdown": [], "metrics": []}
+    monkeypatch.setattr(
+        app_shell,
+        "st",
+        SimpleNamespace(
+            markdown=lambda text, **kwargs: calls["markdown"].append(text),
+            columns=lambda n: [SimpleNamespace(metric=lambda *args, **kwargs: calls["metrics"].append(args)) for _ in range(n)],
+            caption=lambda *args, **kwargs: None,
+            error=lambda *args, **kwargs: None,
+            toast=lambda *args, **kwargs: None,
+        ),
+    )
+    monkeypatch.setattr(app_shell, "render_quiet_note", lambda text: None)
+
+    app_shell._render_header(snapshot, page="Discovery")
+
+    rendered = " ".join(calls["markdown"])
+    assert "crpm-shell-hero--compact" in rendered
+    assert "Current run context" in rendered
+    assert "Screening Program Process Mining Workbench" not in rendered
+    assert "running-example.xes" in rendered
+    assert len(calls["metrics"]) == 2
+
+
+def test_render_header_skips_shell_hero_on_conformance_page(monkeypatch) -> None:
+    import crpm.app_shell as app_shell
+
+    snapshot = SimpleNamespace(
+        case_count=1,
+        event_count=2,
+        model_count=3,
+        comparison_df=pd.DataFrame([{"model_name": "Model"}]),
+        input_name="running-example.xes",
+        active_followup_label=None,
+        config_change_message=None,
+        filter_error_message=None,
+    )
+    calls = {"markdown": [], "notes": [], "toast": []}
+    monkeypatch.setattr(
+        app_shell,
+        "st",
+        SimpleNamespace(
+            markdown=lambda text, **kwargs: calls["markdown"].append(text),
+            columns=lambda n: [SimpleNamespace(metric=lambda *args, **kwargs: None) for _ in range(n)],
+            caption=lambda *args, **kwargs: None,
+            error=lambda *args, **kwargs: None,
+            toast=lambda text, **kwargs: calls["toast"].append(text),
+        ),
+    )
+    monkeypatch.setattr(app_shell, "render_quiet_note", lambda text: calls["notes"].append(text))
+
+    app_shell._render_header(snapshot, page="Conformance Analytics")
+
+    assert calls["markdown"] == []
+    assert calls["notes"] == []
+    assert calls["toast"] == []
 
 
 def test_render_header_brand_includes_author_site_badge(monkeypatch) -> None:
@@ -227,3 +297,6 @@ def test_render_header_brand_includes_author_site_badge(monkeypatch) -> None:
     assert "crpm-author-badge" in rendered
     assert "crpm-fmup-badge" in rendered
     assert "hfmonteiro.com" in rendered
+    assert app_shell.FMUP_HOME_URL in rendered
+    assert app_shell.UP_HOME_URL in rendered
+    assert "data:image/svg+xml;base64" in rendered

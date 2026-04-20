@@ -86,6 +86,8 @@ class AnalysisResults:
     stage_timings: dict[str, float] = field(default_factory=dict)
     workflow_view_mode: str = "board"
     workflow_detail_level: str = "analyst"
+    workflow_selection_kind: str = "none"
+    workflow_selection_id: Optional[str] = None
     selected_workflow_node_id: Optional[str] = None
     selected_workflow_edge_id: Optional[str] = None
 
@@ -120,6 +122,8 @@ class AnalysisResults:
         self.stage_timings = {}
         self.workflow_view_mode = "board"
         self.workflow_detail_level = "analyst"
+        self.workflow_selection_kind = "none"
+        self.workflow_selection_id = None
         self.selected_workflow_node_id = None
         self.selected_workflow_edge_id = None
 
@@ -158,6 +162,8 @@ class AnalysisSnapshot:
     stage_timings: Mapping[str, float]
     workflow_view_mode: str = "board"
     workflow_detail_level: str = "analyst"
+    workflow_selection_kind: str = "none"
+    workflow_selection_id: Optional[str] = None
     selected_workflow_node_id: Optional[str] = None
     selected_workflow_edge_id: Optional[str] = None
 
@@ -234,6 +240,21 @@ def build_analysis_snapshot(session_state: Mapping[str, Any]) -> AnalysisSnapsho
     discovery_results = results.discovery_results if isinstance(results.discovery_results, Mapping) else {}
     split_info = results.split_info if isinstance(results.split_info, Mapping) else {}
 
+    legacy_node_id = str(getattr(results, "selected_workflow_node_id", None)) if getattr(results, "selected_workflow_node_id", None) is not None else None
+    legacy_edge_id = str(getattr(results, "selected_workflow_edge_id", None)) if getattr(results, "selected_workflow_edge_id", None) is not None else None
+    selection_kind = str(getattr(results, "workflow_selection_kind", "none") or "none")
+    selection_id = str(getattr(results, "workflow_selection_id", None)) if getattr(results, "workflow_selection_id", None) is not None else None
+    if selection_kind not in {"node", "edge", "none"}:
+        selection_kind = "none"
+        selection_id = None
+    if selection_kind == "none":
+        if legacy_edge_id:
+            selection_kind = "edge"
+            selection_id = legacy_edge_id
+        elif legacy_node_id:
+            selection_kind = "node"
+            selection_id = legacy_node_id
+
     return AnalysisSnapshot(
         analysis_complete=bool(results.analysis_complete),
         input_name=results.input_name,
@@ -255,8 +276,10 @@ def build_analysis_snapshot(session_state: Mapping[str, Any]) -> AnalysisSnapsho
         stage_timings=results.stage_timings if isinstance(results.stage_timings, Mapping) else {},
         workflow_view_mode=str(getattr(results, "workflow_view_mode", "board") or "board"),
         workflow_detail_level=str(getattr(results, "workflow_detail_level", "analyst") or "analyst"),
-        selected_workflow_node_id=str(getattr(results, "selected_workflow_node_id", None)) if getattr(results, "selected_workflow_node_id", None) is not None else None,
-        selected_workflow_edge_id=str(getattr(results, "selected_workflow_edge_id", None)) if getattr(results, "selected_workflow_edge_id", None) is not None else None,
+        workflow_selection_kind=selection_kind,
+        workflow_selection_id=selection_id,
+        selected_workflow_node_id=legacy_node_id,
+        selected_workflow_edge_id=legacy_edge_id,
     )
 
 
@@ -300,6 +323,8 @@ def _migrate_or_create_state(session_state: Mapping[str, Any]) -> CRPMState:
         conformance_workspace=dict(session_state.get("conformance_workspace", {})) if isinstance(session_state.get("conformance_workspace"), Mapping) else {},
         workflow_view_mode=str(session_state.get("workflow_view_mode", "board") or "board"),
         workflow_detail_level=str(session_state.get("workflow_detail_level", "analyst") or "analyst"),
+        workflow_selection_kind=str(session_state.get("workflow_selection_kind", "none") or "none"),
+        workflow_selection_id=str(session_state.get("workflow_selection_id")) if session_state.get("workflow_selection_id") is not None else None,
         selected_workflow_node_id=str(session_state.get("selected_workflow_node_id")) if session_state.get("selected_workflow_node_id") is not None else None,
         selected_workflow_edge_id=str(session_state.get("selected_workflow_edge_id")) if session_state.get("selected_workflow_edge_id") is not None else None,
     )

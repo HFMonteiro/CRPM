@@ -16,6 +16,7 @@ from crpm.pages.common import (
     render_html_card_grid,
     render_html_ranked_table,
     render_inline_empty,
+    render_metric_card_grid,
     render_plotly_chart,
     render_quiet_note,
     store_cache_entry,
@@ -26,10 +27,6 @@ from crpm.visualization import create_activity_duration_chart, create_bottleneck
 
 def render_performance_page(snapshot: AnalysisSnapshot) -> None:
     st.subheader("Process Performance")
-    st.caption(
-        "Performance analytics summarize durations and bottlenecks over the current filtered log. "
-        "Use the tables for exact values and the charts for pattern recognition."
-    )
 
     if not snapshot.analysis_complete or snapshot.filtered_log is None:
         render_empty_state("No performance results yet. Run the analysis from the sidebar to populate this page.")
@@ -65,13 +62,37 @@ def render_performance_page(snapshot: AnalysisSnapshot) -> None:
     bottlenecks = cached_payload["bottlenecks"]
     case_durations = cached_payload["case_durations"]
 
-    stat_cols = st.columns(4)
-    stat_cols[0].metric("Activities", len(activity_stats))
-    stat_cols[1].metric("Transitions", len(transition_stats))
-    stat_cols[2].metric("Bottlenecks", len(bottlenecks))
-    stat_cols[3].metric("Cases with duration", len(case_durations))
-    render_quiet_note(
-        "Bottlenecks are ranked by a blend of median delay and frequency. Re-run the analysis after changing filters or algorithms."
+    render_metric_card_grid(
+        [
+            {
+                "eyebrow": "Scope",
+                "title": "Activities",
+                "value": len(activity_stats),
+                "body": "Ranked activity durations.",
+                "tone": "neutral",
+            },
+            {
+                "eyebrow": "Flow",
+                "title": "Transitions",
+                "value": len(transition_stats),
+                "body": "Observed hand-offs.",
+                "tone": "accent",
+            },
+            {
+                "eyebrow": "Risk",
+                "title": "Bottlenecks",
+                "value": len(bottlenecks),
+                "body": "Delay-heavy transitions.",
+                "tone": "success",
+            },
+            {
+                "eyebrow": "Cohort",
+                "title": "Cases with duration",
+                "value": len(case_durations),
+                "body": "Cases with valid start/end.",
+                "tone": "neutral",
+            },
+        ]
     )
 
     # --- Bottlenecks ---

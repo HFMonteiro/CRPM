@@ -8,7 +8,7 @@ from typing import Any, Mapping
 import streamlit as st
 
 from crpm.app_state import AnalysisSnapshot
-from crpm.pages.common import format_metric_value, render_html_card_grid, render_quiet_note
+from crpm.pages.common import format_metric_value, render_html_card_grid, render_metric_card_grid
 
 
 PAGE_GUIDE = [
@@ -27,26 +27,54 @@ def render_overview_page(snapshot: AnalysisSnapshot) -> None:
     summary = _analysis_summary(snapshot)
     _render_overview_hero(snapshot, summary)
 
-    if snapshot.analysis_complete:
-        render_quiet_note(
-            "Start with the current run and quality cards, then move to Operational Flow and Conformance Analytics when the cohort shows timing stretch or deviation pressure."
-        )
-    else:
-        render_quiet_note(
-            "Load a screening log, set the cohort filters, and run the analysis once. The overview then becomes an executive dashboard for the current filtered run."
-        )
-
-    kpi_cols = st.columns(4, gap="small")
-    kpi_cols[0].metric("Cases", format_metric_value(summary.get("cases"), kind="count"))
-    kpi_cols[1].metric("Events", format_metric_value(summary.get("events"), kind="count"))
-    kpi_cols[2].metric("Dominant path", _display_optional(summary.get("dominant_path_share"), kind="percent"))
-    kpi_cols[3].metric("Median throughput", _display_optional(summary.get("median_throughput_days"), kind="days"))
+    render_metric_card_grid(
+        [
+            {
+                "eyebrow": "Cohort",
+                "title": "Cases",
+                "value": format_metric_value(summary.get("cases"), kind="count"),
+                "body": "Current filtered run.",
+                "tone": "neutral",
+            },
+            {
+                "eyebrow": "Cohort",
+                "title": "Events",
+                "value": format_metric_value(summary.get("events"), kind="count"),
+                "body": "Observed activity records.",
+                "tone": "accent",
+            },
+            {
+                "eyebrow": "Pathway",
+                "title": "Dominant path",
+                "value": _display_optional(summary.get("dominant_path_share"), kind="percent"),
+                "body": "Mainline concentration.",
+                "tone": "success",
+            },
+            {
+                "eyebrow": "Timing",
+                "title": "Median throughput",
+                "value": _display_optional(summary.get("median_throughput_days"), kind="days"),
+                "body": "Current cohort median.",
+                "tone": "neutral",
+            },
+        ]
+    )
 
     left_col, right_col = st.columns([1.25, 1.0], gap="large")
 
     with left_col:
         st.markdown("#### Current run")
         render_html_card_grid(_overview_signal_cards(snapshot, summary))
+        st.markdown(
+            (
+                "<div class='crpm-reading-order-band'>"
+                "<span class='crpm-reading-order-band__eyebrow'>Guide</span>"
+                "<span class='crpm-reading-order-band__title'>Reading order</span>"
+                "<span class='crpm-reading-order-band__body'>Open the sequence below to see the recommended page flow for this run.</span>"
+                "</div>"
+            ),
+            unsafe_allow_html=True,
+        )
         with st.expander("Reading order", expanded=False):
             st.markdown(_render_page_guide_html(snapshot.analysis_complete), unsafe_allow_html=True)
 

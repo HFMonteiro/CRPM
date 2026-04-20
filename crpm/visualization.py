@@ -7,12 +7,16 @@ from __future__ import annotations
 
 from collections import defaultdict
 from html import escape
-from typing import Dict, List, Optional, Any, Mapping
+import math
+import logging
+from typing import Dict, List, Optional, Any, Literal, Mapping
 from textwrap import wrap
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
+
+LOGGER = logging.getLogger(__name__)
 
 
 CHART_THEME = {
@@ -1000,9 +1004,9 @@ _WORKFLOW_SEVERITY_THEME = {
 }
 
 _WORKFLOW_CONFORMANCE_THEME = {
-    "Conformant": {"fill": "#dff1db", "stroke": "#7ab889"},
-    "Log deviation": {"fill": "#f0db77", "stroke": "#d0a23f"},
-    "Model deviation": {"fill": "#e39ac3", "stroke": "#c56f9f"},
+    "Conformant": {"fill": "#dff1db", "stroke": "#7ab889", "accent": "#bfe3be", "ink": "#20312a"},
+    "Log deviation": {"fill": "#f0db77", "stroke": "#d0a23f", "accent": "#f3e29b", "ink": "#3a311a"},
+    "Model deviation": {"fill": "#e39ac3", "stroke": "#c56f9f", "accent": "#edb0d1", "ink": "#4c2330"},
 }
 
 _WORKFLOW_TIMING_THEME = [
@@ -1016,17 +1020,349 @@ _WORKFLOW_TIMING_THEME = [
 def render_workflow_conformance_svg(
     payload: Mapping[str, Any] | pd.DataFrame | None,
     edges: pd.DataFrame | None = None,
+    *,
+    layout_mode: Literal["vertical", "horizontal"] = "vertical",
+    detail_level: Literal["executive", "analyst", "research"] = "analyst",
 ) -> str:
     """Render a deterministic SVG workflow board from workflow conformance payloads."""
     nodes_df, edges_df, legend_df, overall_median = _coerce_workflow_payload(payload, edges)
     ordered_nodes = _order_workflow_nodes(nodes_df)
     normalized_edges = _normalize_workflow_edges(edges_df, ordered_nodes)
+    layout_mode = str(layout_mode or "vertical").lower()
+    detail_level = str(detail_level or "analyst").lower()
 
     if ordered_nodes.empty and normalized_edges.empty:
         return _workflow_svg_empty("No workflow conformance structure available")
 
     if ordered_nodes.empty and not normalized_edges.empty:
         ordered_nodes = _derive_nodes_from_edges(normalized_edges)
+
+    if layout_mode == "horizontal":
+        step_groups: dict[int, list[pd.Series]] = defaultdict(list)
+        for _, row in ordered_nodes.iterrows():
+            step_groups[_workflow_layout_step_rank(row.get("step_rank", 999))].append(row)
+
+        sorted_steps = sorted(step_groups)
+        step_count = max(1, len(sorted_steps))
+
+        max_top_branches = 0
+        max_bottom_branches = 0
+        for rows in step_groups.values():
+            top_count = 0
+            bottom_count = 0
+            for row in rows:
+                if str(row.get("branch_role", "mainline")) == "mainline":
+                    continue
+                if str(row.get("lane", "left") or "left").lower() == "right":
+                    bottom_count += 1
+                else:
+                    top_count += 1
+            max_top_branches = max(max_top_branches, top_count)
+            max_bottom_branches = max(max_bottom_branches, bottom_count)
+
+        simple_mainline_mode = step_count <= 7 and max_top_branches == 0 and max_bottom_branches == 0
+        preferred_shelf_width = 1540.0
+        left_margin = 28.0
+        right_margin = 28.0
+        min_inter_step_gap = 24.0 if step_count > 1 else 0.0
+        max_inter_step_gap = 56.0
+        preferred_mainline_width = 236.0 if simple_mainline_mode else 220.0
+        min_mainline_width = 184.0 if simple_mainline_mode else 176.0
+        max_mainline_width = 248.0 if simple_mainline_mode else 232.0
+        per_step_slot = max(1.0, (preferred_shelf_width - left_margin - right_margin) / float(step_count))
+        mainline_width = min(max_mainline_width, max(min_mainline_width, per_step_slot * 0.82))
+        inter_step_gap = max(min_inter_step_gap, min(max_inter_step_gap, per_step_slot - mainline_width))
+        required_mainline_span = (step_count * mainline_width) + (max(0, step_count - 1) * inter_step_gap)
+        board_width = int(math.ceil(max(preferred_shelf_width, left_margin + right_margin + required_mainline_span)))
+        side_margin = max(left_margin, (board_width - required_mainline_span) / 2.0)
+        branch_width = max(156.0, min(184.0, mainline_width * 0.82))
+        if simple_mainline_mode:
+            mainline_height = 96.0
+            branch_height = 56.0
+            lane_gap_y = 60.0
+            top_margin = 52.0
+            bottom_margin = 46.0
+        else:
+            mainline_height = 104.0
+            branch_height = 64.0
+            lane_gap_y = 66.0
+            top_margin = 58.0
+            bottom_margin = 56.0
+
+        upper_stack_height = max_top_branches * (branch_height + lane_gap_y) if max_top_branches else 0.0
+        lower_stack_height = max_bottom_branches * (branch_height + lane_gap_y) if max_bottom_branches else 0.0
+        x_by_step: dict[int, float] = {}
+        current_x = side_margin
+        for step_rank in sorted_steps:
+            x_by_step[step_rank] = current_x + (mainline_width / 2.0)
+            current_x += mainline_width + inter_step_gap
+        mainline_center_y = top_margin + upper_stack_height + (mainline_height / 2.0)
+        nodes_layout: list[dict[str, Any]] = []
+        for step_rank in sorted_steps:
+            rows = sorted(
+                step_groups[step_rank],
+                key=lambda row: (
+                    0 if str(row.get("branch_role", "mainline")) == "mainline" else 1,
+                    -_safe_int(row.get("cases", 0)),
+                    str(row.get("display_name", row.get("activity", ""))),
+                ),
+            )
+            mainline_rows = [row for row in rows if str(row.get("branch_role", "mainline")) == "mainline"]
+            top_rows = [
+                row for row in rows
+                if str(row.get("branch_role", "mainline")) != "mainline"
+                and str(row.get("lane", "left") or "left").lower() != "right"
+            ]
+            bottom_rows = [
+                row for row in rows
+                if str(row.get("branch_role", "mainline")) != "mainline"
+                and str(row.get("lane", "left") or "left").lower() == "right"
+            ]
+            x_center = x_by_step[step_rank]
+            for main_index, row in enumerate(mainline_rows):
+                activity = str(row.get("activity", row.get("display_name", f"node-{step_rank}-{main_index}")))
+                nodes_layout.append(
+                    {
+                        "row": row,
+                        "index": len(nodes_layout),
+                        "activity": activity,
+                        "x": x_center - mainline_width / 2.0,
+                        "y": mainline_center_y - mainline_height / 2.0 + (main_index * 10.0),
+                        "width": mainline_width,
+                        "height": mainline_height,
+                    }
+                )
+            for branch_index, row in enumerate(top_rows):
+                activity = str(row.get("activity", row.get("display_name", f"branch-top-{step_rank}-{branch_index}")))
+                y = mainline_center_y - mainline_height / 2.0 - lane_gap_y - branch_height - (branch_index * (branch_height + lane_gap_y))
+                nodes_layout.append(
+                    {
+                        "row": row,
+                        "index": len(nodes_layout),
+                        "activity": activity,
+                        "x": x_center - branch_width / 2.0,
+                        "y": y,
+                        "width": branch_width,
+                        "height": branch_height,
+                    }
+                )
+            for branch_index, row in enumerate(bottom_rows):
+                activity = str(row.get("activity", row.get("display_name", f"branch-bottom-{step_rank}-{branch_index}")))
+                y = mainline_center_y + mainline_height / 2.0 + lane_gap_y + (branch_index * (branch_height + lane_gap_y))
+                nodes_layout.append(
+                    {
+                        "row": row,
+                        "index": len(nodes_layout),
+                        "activity": activity,
+                        "x": x_center - branch_width / 2.0,
+                        "y": y,
+                        "width": branch_width,
+                        "height": branch_height,
+                    }
+                )
+
+        if nodes_layout:
+            content_max_y = max(float(item["y"]) + float(item["height"]) for item in nodes_layout)
+            if simple_mainline_mode:
+                board_height = max(320, int(math.ceil(content_max_y + bottom_margin)))
+                mainline_items = [
+                    item for item in nodes_layout if str(item["row"].get("branch_role", "mainline")) == "mainline"
+                ]
+                if mainline_items:
+                    current_center_y = (
+                        min(float(item["y"]) for item in mainline_items)
+                        + max(float(item["y"]) + float(item["height"]) for item in mainline_items)
+                    ) / 2.0
+                    shift_y = (board_height / 2.0) - current_center_y
+                    if abs(shift_y) > 0.1:
+                        for item in nodes_layout:
+                            item["y"] = float(item["y"]) + shift_y
+            else:
+                board_height = max(352, int(math.ceil(content_max_y + bottom_margin)))
+        else:
+            board_height = 320 if simple_mainline_mode else 352
+
+        node_positions = {str(item["activity"]): item for item in nodes_layout}
+        edge_groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        edge_records = []
+        for _, row in normalized_edges.iterrows():
+            source = str(row.get("source", ""))
+            target = str(row.get("target", ""))
+            if source not in node_positions or target not in node_positions:
+                continue
+            edge_groups[source].append({"source": source, "target": target, "row": row})
+
+        for source, group in edge_groups.items():
+            group.sort(
+                key=lambda item: (
+                    node_positions[item["target"]]["index"],
+                    -_safe_int(item["row"].get("frequency", 0)),
+                    item["target"],
+                )
+            )
+            for lane_index, item in enumerate(group):
+                item["lane_index"] = lane_index
+                edge_records.append(item)
+
+        svg_parts = [
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {board_width} {board_height}" width="{board_width:.0f}" height="{board_height:.0f}" style="display:block;width:{board_width:.0f}px;min-width:100%;height:auto;" role="img" aria-label="Workflow conformance board">',
+            "<defs>",
+            '<linearGradient id="workflow-bg" x1="0" y1="0" x2="0" y2="1">',
+            '<stop offset="0%" stop-color="#ffffff"/>',
+            '<stop offset="100%" stop-color="#faf7fd"/>',
+            "</linearGradient>",
+            '<filter id="workflow-shadow" x="-20%" y="-20%" width="160%" height="160%">',
+            '<feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#433655" flood-opacity="0.12"/>',
+            "</filter>",
+            '<marker id="workflow-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth">',
+            '<path d="M 0 0 L 7 3.5 L 0 7 z" fill="#51645a"/>',
+            "</marker>",
+            "</defs>",
+            '<rect x="0" y="0" width="100%" height="100%" fill="url(#workflow-bg)"/>',
+        ]
+
+        top_branch_items = [
+            item
+            for item in nodes_layout
+            if str(item["row"].get("branch_role", "mainline")) != "mainline"
+            and str(item["row"].get("lane", "left") or "left").lower() != "right"
+        ]
+        bottom_branch_items = [
+            item
+            for item in nodes_layout
+            if str(item["row"].get("branch_role", "mainline")) != "mainline"
+            and str(item["row"].get("lane", "left") or "left").lower() == "right"
+        ]
+
+        if top_branch_items:
+            upper_band_y = min(float(item["y"]) for item in top_branch_items) - 16.0
+            upper_band_height = max(float(item["y"]) + float(item["height"]) for item in top_branch_items) - upper_band_y + 16.0
+            svg_parts.extend(
+                [
+                    f'<rect x="{side_margin - 16:.1f}" y="{upper_band_y:.1f}" width="{board_width - (side_margin * 2.0) + 32:.1f}" height="{upper_band_height:.1f}" rx="22" ry="22" fill="#f6f4fa" fill-opacity="0.88"/>',
+                    f'<text x="{side_margin - 6:.1f}" y="{upper_band_y - 8:.1f}" font-size="10.5" font-weight="700" fill="#8a8097">Upper variation</text>',
+                ]
+            )
+        if bottom_branch_items:
+            lower_band_y = min(float(item["y"]) for item in bottom_branch_items) - 14.0
+            lower_band_height = max(float(item["y"]) + float(item["height"]) for item in bottom_branch_items) - lower_band_y + 18.0
+            svg_parts.extend(
+                [
+                    f'<rect x="{side_margin - 16:.1f}" y="{lower_band_y:.1f}" width="{board_width - (side_margin * 2.0) + 32:.1f}" height="{lower_band_height:.1f}" rx="22" ry="22" fill="#f6f4fa" fill-opacity="0.84"/>',
+                    f'<text x="{side_margin - 6:.1f}" y="{lower_band_y - 8:.1f}" font-size="10.5" font-weight="700" fill="#8a8097">Lower variation</text>',
+                ]
+            )
+
+        max_frequency = max((_safe_int(row.get("frequency", 0)) for _, row in normalized_edges.iterrows()), default=0)
+        for item in edge_records:
+            row = item["row"]
+            source_layout = node_positions[item["source"]]
+            target_layout = node_positions[item["target"]]
+            lane_index = item["lane_index"]
+            severity = str(row.get("severity", "Low"))
+            palette = _WORKFLOW_SEVERITY_THEME.get(severity, _WORKFLOW_SEVERITY_THEME["Low"])
+            freq = _safe_int(row.get("frequency", 0))
+            median_days = _safe_float(row.get("median_days"))
+            source_x = source_layout["x"] + source_layout["width"]
+            source_y = source_layout["y"] + source_layout["height"] / 2.0
+            target_x = target_layout["x"]
+            target_y = target_layout["y"] + target_layout["height"] / 2.0
+            if source_layout["row"].get("activity") == target_layout["row"].get("activity"):
+                loop_up = str(source_layout["row"].get("lane", "center") or "center").lower() != "right"
+                loop_y = source_layout["y"] - (34.0 + lane_index * 16.0) if loop_up else source_layout["y"] + source_layout["height"] + (34.0 + lane_index * 16.0)
+                path = (
+                    f"M {source_x - 16.0:.1f} {source_y:.1f} "
+                    f"C {source_x + 34.0:.1f} {source_y:.1f}, {source_x + 34.0:.1f} {loop_y:.1f}, {source_x - 6.0:.1f} {loop_y:.1f} "
+                    f"C {source_layout['x'] - 18.0:.1f} {loop_y:.1f}, {source_layout['x'] - 18.0:.1f} {source_y:.1f}, {source_layout['x'] + 8.0:.1f} {source_y:.1f}"
+                )
+                label_x = source_layout["x"] + source_layout["width"] / 2.0
+                label_y = loop_y - 8.0 if loop_up else loop_y + 16.0
+            else:
+                delta_x = max(86.0, target_x - source_x)
+                control = min(132.0, delta_x * 0.36)
+                bend_y = (source_y + target_y) / 2.0 + ((lane_index - 0.5) * 10.0)
+                path = (
+                    f"M {source_x:.1f} {source_y:.1f} "
+                    f"C {source_x + control:.1f} {source_y:.1f}, {target_x - control:.1f} {target_y:.1f}, {target_x:.1f} {target_y:.1f}"
+                )
+                label_x = (source_x + target_x) / 2.0
+                label_y = bend_y - 14.0 if source_y <= target_y else bend_y + 6.0
+
+            is_deviating = bool(row.get("is_deviating")) or str(row.get("stroke_style", "")).lower() == "dashed"
+            dash = ' stroke-dasharray="9 6"' if is_deviating else ""
+            is_mainline_edge = str(row.get("branch_role", "mainline")) == "mainline"
+            opacity = "0.94" if is_mainline_edge else "0.66"
+            stroke_width = (2.2 if is_mainline_edge else 1.35) + min(freq / 32000.0, 2.8 if is_mainline_edge else 1.15)
+            conf_bucket = str(row.get("conformance_bucket", "Conformant"))
+            conf_theme = _WORKFLOW_CONFORMANCE_THEME.get(conf_bucket, _WORKFLOW_CONFORMANCE_THEME["Conformant"])
+            show_label = is_mainline_edge and freq >= max(220, int(max_frequency * 0.6))
+            edge_id = str(row.get("edge_id", f'{item["source"]} -> {item["target"]}'))
+            svg_parts.append(
+                f'<path d="{path}" fill="none" stroke="{palette["stroke"]}" stroke-width="{stroke_width:.1f}" stroke-linecap="round"{dash} opacity="{opacity}" marker-end="url(#workflow-arrow)" data-edge-id="{escape(edge_id)}" data-edge-role="{escape(str(row.get("edge_type", "expected")))}"/>'
+            )
+            if show_label:
+                edge_label = [f"{freq:,} cases" if freq else "0 cases"]
+                if median_days is not None and freq >= 200:
+                    edge_label.append(f"{median_days:.1f} d")
+                text_lines = _workflow_text_lines(edge_label, max_chars=14)
+                label_width = max(76, min(132, max((len(line) for line in edge_label), default=8) * 7 + 14))
+                label_height = 18 + max(0, len(text_lines) - 1) * 12 + 8
+                svg_parts.append(
+                    f'<g transform="translate({label_x:.1f},{label_y:.1f})">'
+                    f'<rect x="{-label_width/2:.1f}" y="{-label_height/2:.1f}" width="{label_width:.1f}" height="{label_height:.1f}" rx="8" ry="8" fill="#ffffff" fill-opacity="0.93" stroke="{conf_theme["stroke"]}" stroke-width="0.8"/>'
+                )
+                for line_index, line in enumerate(text_lines):
+                    dy = -3 + line_index * 12 if len(text_lines) > 1 else 4
+                    weight = "700" if line_index == 0 else "500"
+                    size = 11 if line_index == 0 else 9
+                    svg_parts.append(
+                        f'<text x="0" y="{dy}" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="{size}" font-weight="{weight}" fill="#20312a">{escape(line)}</text>'
+                    )
+                svg_parts.append("</g>")
+
+        for item in nodes_layout:
+            row = item["row"]
+            severity = str(row.get("severity", "Low"))
+            palette = _WORKFLOW_SEVERITY_THEME.get(severity, _WORKFLOW_SEVERITY_THEME["Low"])
+            title = str(row.get("display_name") or row.get("business_label") or row.get("activity") or "Node")
+            cases = _safe_int(row.get("cases", 0))
+            median_delay = _safe_float(row.get("median_next_delay_days"))
+            conformance_bucket = str(row.get("conformance_bucket", "Conformant"))
+            conformance_theme = _WORKFLOW_CONFORMANCE_THEME.get(conformance_bucket, _WORKFLOW_CONFORMANCE_THEME["Conformant"])
+            branch_role = str(row.get("branch_role", "mainline"))
+            header_lines = _workflow_text_lines([title], max_chars=34)
+            detail_lines = (
+                [
+                    f"{cases:,} cases" if cases else "0 cases",
+                    f"{median_delay:.1f} d median" if median_delay is not None else "Delay n/a",
+                ]
+                if branch_role == "mainline"
+                else [f"{cases:,} cases" if cases else "0 cases"]
+            )
+            chip_label = conformance_bucket if conformance_bucket != "Conformant" else severity
+            title_size = 15 if branch_role == "mainline" else 13
+            detail_size = 11 if branch_role == "mainline" else 10
+            svg_parts.append(
+                f'<g filter="url(#workflow-shadow)" data-activity="{escape(str(row.get("activity", title)))}" data-branch-role="{escape(branch_role)}" data-lane="{escape(str(row.get("lane", "center")))}" data-node-type="{escape(str(row.get("node_type", "mainline")))}">'
+                f'<rect x="{item["x"]:.1f}" y="{item["y"]:.1f}" width="{item["width"]:.1f}" height="{item["height"]:.1f}" rx="16" ry="16" fill="{palette["fill"]}" stroke="{palette["stroke"]}" stroke-width="2.2"/>'
+                f'<rect x="{item["x"]:.1f}" y="{item["y"]:.1f}" width="{item["width"]:.1f}" height="11" rx="16" ry="16" fill="{conformance_theme["fill"]}" fill-opacity="0.95"/>'
+                f'<rect x="{item["x"] + item["width"] - 110:.1f}" y="{item["y"] + 15:.1f}" width="94" height="24" rx="12" ry="12" fill="{palette["stroke"]}" />'
+                f'<text x="{item["x"] + item["width"] - 63:.1f}" y="{item["y"] + 31:.1f}" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="10" font-weight="700" fill="#ffffff">{escape(chip_label)}</text>'
+            )
+            title_y = item["y"] + 33
+            for line_index, line in enumerate(header_lines):
+                svg_parts.append(
+                    f'<text x="{item["x"] + 16:.1f}" y="{title_y + line_index * 16:.1f}" font-family="Segoe UI, Arial, sans-serif" font-size="{title_size}" font-weight="700" fill="{palette["ink"]}">{escape(line)}</text>'
+                )
+            detail_start = title_y + max(len(header_lines), 1) * 16 + 7
+            for line_index, line in enumerate(detail_lines):
+                svg_parts.append(
+                    f'<text x="{item["x"] + 16:.1f}" y="{detail_start + line_index * 15:.1f}" font-family="Segoe UI, Arial, sans-serif" font-size="{detail_size}" fill="{palette["ink"]}" fill-opacity="0.88">{escape(line)}</text>'
+                )
+            svg_parts.append("</g>")
+
+        svg_parts.append("</svg>")
+        return f'<div class="crpm-workflow-board crpm-workflow-board--horizontal">{"".join(svg_parts)}</div>'
 
     board_width = 1180
     center_x = board_width / 2
@@ -1035,19 +1371,23 @@ def render_workflow_conformance_svg(
         "center": center_x,
         "right": center_x + 285,
     }
-    mainline_width = 448.0
+    mainline_width = 424.0
     branch_width = 208.0
     mainline_height = 110.0
     branch_height = 64.0
     top_margin = 44
-    step_gap = 168
+    step_gap = 194
     branch_gap = 82
+    lens_value = str(payload.get("conformance_lens", "% of paths")) if isinstance(payload, Mapping) else "% of paths"
+    lens_is_activity = "activit" in lens_value.lower()
+    lens_is_paths = not lens_is_activity
 
     step_groups: dict[int, list[pd.Series]] = defaultdict(list)
     for _, row in ordered_nodes.iterrows():
-        step_groups[int(row.get("step_rank", 999) or 999)].append(row)
+        step_groups[_workflow_layout_step_rank(row.get("step_rank", 999))].append(row)
 
     nodes_layout: list[dict[str, Any]] = []
+    center_step = max(1.0, (len(step_groups) - 1) / 2.0)
     for step_index, step_rank in enumerate(sorted(step_groups)):
         rows = sorted(
             step_groups[step_rank],
@@ -1060,6 +1400,9 @@ def render_workflow_conformance_svg(
         mainline_rows = [row for row in rows if str(row.get("branch_role", "mainline")) == "mainline"]
         branch_rows = [row for row in rows if str(row.get("branch_role", "mainline")) != "mainline"]
         base_y = top_margin + step_index * step_gap
+        wobble = math.sin(step_index * 0.86) * (28.0 if lens_is_paths else 20.0)
+        drift = (step_index - center_step) * (2.0 if lens_is_paths else 1.2)
+        x_center = center_x + wobble + drift
 
         for main_index, row in enumerate(mainline_rows):
             activity = str(row.get("activity", row.get("display_name", f"node-{step_rank}-{main_index}")))
@@ -1068,7 +1411,7 @@ def render_workflow_conformance_svg(
                     "row": row,
                     "index": len(nodes_layout),
                     "activity": activity,
-                    "x": lane_x["center"] - mainline_width / 2,
+                    "x": x_center - mainline_width / 2,
                     "y": base_y + (main_index * 12.0),
                     "width": mainline_width,
                     "height": mainline_height,
@@ -1078,7 +1421,7 @@ def render_workflow_conformance_svg(
         for branch_index, row in enumerate(branch_rows):
             activity = str(row.get("activity", row.get("display_name", f"branch-{step_rank}-{branch_index}")))
             lane = str(row.get("lane", "left") or "left").lower()
-            x = lane_x["right"] if lane == "right" else lane_x["left"]
+            x = (x_center + 320.0) if lane == "right" else (x_center - 320.0)
             nodes_layout.append(
                 {
                     "row": row,
@@ -1123,8 +1466,8 @@ def render_workflow_conformance_svg(
         '<filter id="workflow-shadow" x="-20%" y="-20%" width="160%" height="160%">',
         '<feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#433655" flood-opacity="0.12"/>',
         "</filter>",
-        '<marker id="workflow-arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">',
-        '<path d="M 0 0 L 10 5 L 0 10 z" fill="#51645a"/>',
+        '<marker id="workflow-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth">',
+        '<path d="M 0 0 L 7 3.5 L 0 7 z" fill="#51645a"/>',
         "</marker>",
         "</defs>",
         '<rect x="0" y="0" width="100%" height="100%" fill="url(#workflow-bg)"/>',
@@ -1163,25 +1506,25 @@ def render_workflow_conformance_svg(
             label_x = loop_x + 16
             label_y = loop_y - 4
         else:
-            control_offset = 50.0 if str(row.get("branch_role", "mainline")) == "mainline" else 78.0
+            control_offset = 44.0 if str(row.get("branch_role", "mainline")) == "mainline" else 68.0
             bend_x = (source_x + target_x) / 2
             if source_lane == "left" or target_lane == "left":
-                bend_x = min(bend_x, center_x - 66)
+                bend_x = min(bend_x, center_x - 72 - lane_index * 10)
             if source_lane == "right" or target_lane == "right":
-                bend_x = max(bend_x, center_x + 66)
+                bend_x = max(bend_x, center_x + 72 + lane_index * 10)
             path = (
                 f"M {source_x:.1f} {source_y:.1f} "
                 f"C {source_x:.1f} {source_y + control_offset:.1f}, {bend_x:.1f} {((source_y + target_y) / 2) - 28:.1f}, {bend_x:.1f} {((source_y + target_y) / 2):.1f} "
                 f"C {bend_x:.1f} {((source_y + target_y) / 2) + 28:.1f}, {target_x:.1f} {target_y - control_offset:.1f}, {target_x:.1f} {target_y:.1f}"
             )
             label_x = bend_x
-            label_y = ((source_y + target_y) / 2) - 8
+            label_y = ((source_y + target_y) / 2) - 14 - lane_index * 2
 
         is_deviating = bool(row.get("is_deviating")) or str(row.get("stroke_style", "")).lower() == "dashed"
         dash = ' stroke-dasharray="9 6"' if is_deviating else ""
         is_mainline_edge = str(row.get("branch_role", "mainline")) == "mainline"
         opacity = "0.94" if is_mainline_edge else "0.66"
-        stroke_width = (3.0 if is_mainline_edge else 1.7) + min(freq / 25000.0, 4.2 if is_mainline_edge else 1.8)
+        stroke_width = (2.2 if is_mainline_edge else 1.35) + min(freq / 32000.0, 2.8 if is_mainline_edge else 1.15)
         conf_bucket = str(row.get("conformance_bucket", "Conformant"))
         conf_theme = _WORKFLOW_CONFORMANCE_THEME.get(conf_bucket, _WORKFLOW_CONFORMANCE_THEME["Conformant"])
         show_label = is_mainline_edge and freq >= max(220, int(max_frequency * 0.6))
@@ -1195,11 +1538,11 @@ def render_workflow_conformance_svg(
             if median_days is not None and freq >= 200:
                 edge_label.append(f"{median_days:.1f} d")
             text_lines = _workflow_text_lines(edge_label, max_chars=14)
-            label_width = max(84, min(152, max((len(line) for line in edge_label), default=8) * 8 + 16))
+            label_width = max(76, min(132, max((len(line) for line in edge_label), default=8) * 7 + 14))
             label_height = 18 + max(0, len(text_lines) - 1) * 12 + 8
             svg_parts.append(
                 f'<g transform="translate({label_x:.1f},{label_y:.1f})">'
-                f'<rect x="{-label_width/2:.1f}" y="{-label_height/2:.1f}" width="{label_width:.1f}" height="{label_height:.1f}" rx="9" ry="9" fill="#ffffff" fill-opacity="0.95" stroke="{conf_theme["stroke"]}" stroke-width="1.0"/>'
+                f'<rect x="{-label_width/2:.1f}" y="{-label_height/2:.1f}" width="{label_width:.1f}" height="{label_height:.1f}" rx="8" ry="8" fill="#ffffff" fill-opacity="0.93" stroke="{conf_theme["stroke"]}" stroke-width="0.8"/>'
             )
             for line_index, line in enumerate(text_lines):
                 dy = -3 + line_index * 12 if len(text_lines) > 1 else 4
@@ -1261,7 +1604,7 @@ def render_workflow_conformance_svg(
         svg_parts.append("</g>")
 
     svg_parts.append("</svg>")
-    return f'<div class="crpm-workflow-board">{"".join(svg_parts)}</div>'
+    return f'<div class="crpm-workflow-board crpm-workflow-board--vertical">{"".join(svg_parts)}</div>'
 
 
 def filter_workflow_payload(
@@ -1439,6 +1782,50 @@ def _workflow_view_summary(
     }
 
 
+def _workflow_layout_step_rank(value: Any) -> int:
+    from crpm.screening import STEP_ORDER
+
+    if value is None or pd.isna(value):
+        return len(STEP_ORDER)
+    return max(0, min(_safe_int(value), len(STEP_ORDER)))
+
+
+def _workflow_primary_path_nodes(node_items: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """Pick one dominant path node per step for anchors/backbone when mainline tags are absent."""
+    if not node_items:
+        return []
+
+    explicit_mainline = [node for node in node_items if str(node.get("branch_role", "")).lower() == "mainline"]
+    if explicit_mainline:
+        return sorted(
+            explicit_mainline,
+            key=lambda node: (float(node.get("center_y", 0.0)), -_safe_int(node.get("cases", 0))),
+        )
+
+    grouped: dict[int, list[Mapping[str, Any]]] = defaultdict(list)
+    for node in node_items:
+        grouped[_safe_int(node.get("step_rank", 999))].append(node)
+
+    primary_nodes: list[Mapping[str, Any]] = []
+    for step_rank in sorted(grouped):
+        candidates = grouped[step_rank]
+        preferred_candidates = [
+            node for node in candidates if str(node.get("lane_position", "")).lower() in {"mainline", "left", "center"}
+        ]
+        usable_candidates = preferred_candidates or ([] if primary_nodes else candidates)
+        if not usable_candidates:
+            continue
+        usable_candidates.sort(
+            key=lambda node: (
+                0 if str(node.get("lane_position", "")).lower() in {"mainline", "left", "center"} else 1,
+                -_safe_int(node.get("cases", 0)),
+                float(node.get("center_y", 0.0)),
+            )
+        )
+        primary_nodes.append(usable_candidates[0])
+    return primary_nodes
+
+
 def create_workflow_interactive_payload(
     payload: Mapping[str, Any] | pd.DataFrame | None,
     *,
@@ -1450,11 +1837,25 @@ def create_workflow_interactive_payload(
     """Build a process-map explorer payload from the canonical workflow payload."""
     detail_level = str(detail_level or "analyst").lower()
     nodes_df, edges_df, legend_df, overall_median = _coerce_workflow_payload(payload, None)
-    ordered_nodes = _order_workflow_nodes(nodes_df)
-    normalized_edges = _normalize_workflow_edges(edges_df, ordered_nodes)
+    ordered_nodes = _aggregate_explorer_nodes(_order_workflow_nodes(nodes_df))
+    normalized_edges = _aggregate_explorer_edges(_normalize_workflow_edges(edges_df, ordered_nodes), ordered_nodes)
 
     if ordered_nodes.empty and normalized_edges.empty:
-        return {"nodes": [], "edges": [], "legend": legend_df, "height": 520, "overall_median_delay_days": overall_median}
+        return {
+            "nodes": [],
+            "edges": [],
+            "legend": legend_df,
+            "height": 520,
+            "frame_height": 640,
+            "width": 760,
+            "content_offset_x": 0.0,
+            "content_offset_y": 0.0,
+            "overall_median_delay_days": overall_median,
+            "content_bounds": {"min_x": 0.0, "min_y": 0.0, "max_x": 760.0, "max_y": 520.0},
+            "anchor_bounds": {"min_x": 0.0, "min_y": 0.0, "max_x": 0.0, "max_y": 0.0},
+            "fit_padding": {"top": 16.0, "right": 14.0, "bottom": 36.0, "left": 14.0},
+            "toolbar_height_hint": 120,
+        }
     if ordered_nodes.empty and not normalized_edges.empty:
         ordered_nodes = _derive_nodes_from_edges(normalized_edges)
 
@@ -1467,19 +1868,24 @@ def create_workflow_interactive_payload(
 
     step_groups: dict[int, list[pd.Series]] = defaultdict(list)
     for _, row in ordered_nodes.iterrows():
-        step_groups[int(row.get("step_rank", 999) or 999)].append(row)
+        step_groups[_workflow_layout_step_rank(row.get("step_rank", 999))].append(row)
 
     sorted_steps = sorted(step_groups)
-    step_gap = 248.0
-    left_margin = 96.0
-    mainline_width = 188.0 if detail_level == "executive" else 198.0
-    branch_width = 156.0 if detail_level == "executive" else 166.0
-    mainline_height = 76.0 if detail_level == "executive" else 88.0
-    branch_height = 56.0 if detail_level == "executive" else 64.0
-    vertical_gap = 20.0
+    lens_value = str(payload.get("conformance_lens", "% of paths")) if isinstance(payload, Mapping) else "% of paths"
+    lens_is_activity = "activit" in lens_value.lower()
+    lens_is_paths = not lens_is_activity
+    step_gap = 78.0 if len(sorted_steps) >= 6 else 88.0
+    top_margin = 34.0
+    side_margin = 52.0
+    mainline_width = 152.0 if detail_level != "executive" else 142.0
+    branch_width = 124.0 if detail_level != "executive" else 116.0
+    mainline_height = 56.0 if detail_level != "executive" else 50.0
+    branch_height = 38.0 if detail_level != "executive" else 34.0
+    vertical_gap = 8.0 if detail_level != "research" else 10.0
+    lane_gap = 42.0 if detail_level != "executive" else 38.0
 
-    max_top_branches = 1
-    max_bottom_branches = 1
+    max_top_branches = 0
+    max_bottom_branches = 0
     for rows in step_groups.values():
         top_count = 0
         bottom_count = 0
@@ -1495,16 +1901,32 @@ def create_workflow_interactive_payload(
         max_top_branches = max(max_top_branches, top_count)
         max_bottom_branches = max(max_bottom_branches, bottom_count)
 
-    top_block_height = max(84.0, max_top_branches * (branch_height + vertical_gap))
-    mainline_y = top_block_height + 72.0
-    bottom_y = mainline_y + mainline_height + 96.0
-    canvas_height = int(bottom_y + max_bottom_branches * (branch_height + vertical_gap) + 104.0)
-    canvas_width = int(max(1160.0, left_margin * 2 + max(1, len(sorted_steps) - 1) * step_gap + mainline_width + 80.0))
+    has_top_branches = max_top_branches > 0
+    has_bottom_branches = max_bottom_branches > 0
+    min_canvas_width = 760.0 if (has_top_branches or has_bottom_branches) else 520.0
+    canvas_width = int(
+        max(
+            min_canvas_width,
+            side_margin * 2 + mainline_width + ((branch_width + lane_gap) * 2 if (has_top_branches or has_bottom_branches) else 0.0),
+        )
+    )
+    canvas_height = int(
+        top_margin
+        + max(1, len(sorted_steps) - 1) * step_gap
+        + mainline_height
+        + max(max_top_branches, max_bottom_branches) * (branch_height + vertical_gap * 0.6)
+        + 96.0
+    )
+    center_x = canvas_width / 2.0
 
     node_items: list[dict[str, Any]] = []
     node_map: dict[str, dict[str, Any]] = {}
     for step_index, step_rank in enumerate(sorted_steps):
-        x_center = left_margin + step_index * step_gap + mainline_width / 2
+        y_center = top_margin + step_index * step_gap
+        wobble = math.sin(step_index * 1.08) * (24.0 if lens_is_paths else 18.0)
+        sway = math.cos(step_index * 0.66) * (6.0 if lens_is_paths else 4.0)
+        drift = (step_index - ((len(sorted_steps) - 1) / 2.0)) * (0.8 if lens_is_paths else 0.45)
+        x_center = center_x + wobble + sway + drift
         rows = sorted(
             step_groups[step_rank],
             key=lambda row: (
@@ -1532,7 +1954,7 @@ def create_workflow_interactive_payload(
             palette = _workflow_metric_palette(row, metric_coloring, item_kind="node")
             is_neighbor = bool(selected_node and activity in node_neighbors.get(selected_node, set()))
             is_selected = activity == selected_node
-            y = mainline_y + main_index * 10.0
+            y = y_center - mainline_height / 2.0 + main_index * 8.0
             node_item = {
                 "id": activity,
                 "business_label": _workflow_business_label(row),
@@ -1552,27 +1974,31 @@ def create_workflow_interactive_payload(
                 "height": mainline_height,
                 "center_x": x_center,
                 "center_y": y + mainline_height / 2,
+                "surface_fill": palette["surface"],
                 "stroke": palette["stroke"],
                 "ink": palette["ink"],
                 "accent": palette["accent"],
                 "accent_fill": palette["fill"],
+                "chip_fill": palette["chip_fill"],
+                "chip_ink": palette["chip_ink"],
                 "selected": is_selected,
                 "neighbor": is_neighbor,
             }
             node_items.append(node_item)
             node_map[activity] = node_item
 
-        for lane_rows, lane_position in ((top_rows, "top"), (bottom_rows, "bottom")):
+        for lane_rows, lane_position in ((top_rows, "left"), (bottom_rows, "right")):
             row_count = len(lane_rows)
             for lane_index, row in enumerate(lane_rows):
                 activity = str(row.get("activity", f"branch-{step_rank}-{lane_position}-{lane_index}"))
                 palette = _workflow_metric_palette(row, metric_coloring, item_kind="node")
                 is_neighbor = bool(selected_node and activity in node_neighbors.get(selected_node, set()))
                 is_selected = activity == selected_node
-                if lane_position == "top":
-                    y = mainline_y - 94.0 - (row_count - 1 - lane_index) * (branch_height + vertical_gap)
+                y = y_center - branch_height / 2.0 + (lane_index - ((row_count - 1) / 2.0)) * (branch_height + vertical_gap * 0.4)
+                if lane_position == "left":
+                    x = x_center - mainline_width / 2.0 - lane_gap - branch_width
                 else:
-                    y = bottom_y + lane_index * (branch_height + vertical_gap)
+                    x = x_center + mainline_width / 2.0 + lane_gap
                 node_item = {
                     "id": activity,
                     "business_label": _workflow_business_label(row),
@@ -1586,26 +2012,74 @@ def create_workflow_interactive_payload(
                     "branch_role": str(row.get("branch_role", "branch")),
                     "lane_position": lane_position,
                     "step_rank": step_rank,
-                    "x": x_center - branch_width / 2,
+                    "x": x,
                     "y": y,
                     "width": branch_width,
                     "height": branch_height,
-                    "center_x": x_center,
+                    "center_x": x + branch_width / 2.0,
                     "center_y": y + branch_height / 2,
+                    "surface_fill": palette["surface"],
                     "stroke": palette["stroke"],
                     "ink": palette["ink"],
                     "accent": palette["accent"],
                     "accent_fill": palette["fill"],
+                    "chip_fill": palette["chip_fill"],
+                    "chip_ink": palette["chip_ink"],
                     "selected": is_selected,
                     "neighbor": is_neighbor,
                 }
                 node_items.append(node_item)
                 node_map[activity] = node_item
 
+    if node_items:
+        bounds_pad_x = 20.0
+        bounds_pad_y = 24.0
+        min_x = min(float(node["x"]) for node in node_items)
+        min_y = min(float(node["y"]) for node in node_items)
+        max_x = max(float(node["x"]) + float(node["width"]) for node in node_items)
+        content_width = max_x - min_x
+        canvas_width = int(max(min_canvas_width, content_width + bounds_pad_x * 2))
+        shift_x = ((canvas_width - content_width) / 2.0) - min_x
+        shift_y = bounds_pad_y - min_y
+        for node in node_items:
+            node["x"] = float(node["x"]) + shift_x
+            node["y"] = float(node["y"]) + shift_y
+            node["center_x"] = float(node["center_x"]) + shift_x
+            node["center_y"] = float(node["center_y"]) + shift_y
+            node_map[str(node["id"])] = node
+
+        max_x = max(float(node["x"]) + float(node["width"]) for node in node_items)
+        max_y = max(float(node["y"]) + float(node["height"]) for node in node_items)
+        canvas_width = int(max(min_canvas_width, max_x + bounds_pad_x))
+        canvas_height = int(max(300.0, max_y + bounds_pad_y + 46.0))
+        center_x = canvas_width / 2.0
+
     edge_items: list[dict[str, Any]] = []
+    edge_lane_meta: dict[str, tuple[int, int]] = {}
+    grouped_edges: dict[str, list[tuple[str, pd.Series]]] = defaultdict(list)
+    for _, grouped_row in normalized_edges.iterrows():
+        grouped_source = str(grouped_row.get("source", ""))
+        grouped_target = str(grouped_row.get("target", ""))
+        grouped_edge_id = str(grouped_row.get("edge_uid", grouped_row.get("edge_id", f"{grouped_source} -> {grouped_target}")))
+        if grouped_source not in node_map or grouped_target not in node_map:
+            continue
+        grouped_edges[grouped_source].append((grouped_edge_id, grouped_row))
+
+    for grouped_source, grouped_rows in grouped_edges.items():
+        grouped_rows.sort(
+            key=lambda item: (
+                node_map[str(item[1].get("target", ""))]["center_y"],
+                -_safe_int(item[1].get("frequency", 0)),
+                str(item[1].get("target", "")),
+            )
+        )
+        lane_count = len(grouped_rows)
+        for lane_index, (grouped_edge_id, _) in enumerate(grouped_rows):
+            edge_lane_meta[grouped_edge_id] = (lane_index, lane_count)
+
     selected_edge_neighbors: set[str] = set()
     if selected_edge and not normalized_edges.empty:
-        selected_edge_rows = normalized_edges[normalized_edges.get("edge_id", pd.Series(dtype=str)).astype(str) == selected_edge]
+        selected_edge_rows = normalized_edges[normalized_edges.get("edge_uid", normalized_edges.get("edge_id", pd.Series(dtype=str))).astype(str) == selected_edge]
         if not selected_edge_rows.empty:
             selected_edge_neighbors.update(
                 {
@@ -1622,38 +2096,45 @@ def create_workflow_interactive_payload(
             continue
         source_item = node_map[source]
         target_item = node_map[target]
-        edge_id = str(row.get("edge_id", f"{source} -> {target}"))
+        edge_id = str(row.get("edge_uid", row.get("edge_id", f"{source} -> {target}")))
         palette = _workflow_metric_palette(row, metric_coloring, item_kind="edge")
         is_mainline = str(row.get("branch_role", "mainline")) == "mainline"
         is_selected = edge_id == selected_edge
         is_neighbor = bool(selected_node and (source == selected_node or target == selected_node)) or bool(
             selected_edge_neighbors and (source in selected_edge_neighbors or target in selected_edge_neighbors)
         )
+        lane_index, lane_count = edge_lane_meta.get(edge_id, (0, 1))
+        sibling_offset = (lane_index - ((lane_count - 1) / 2.0)) * (10.0 if is_mainline else 13.0)
 
-        forward = target_item["center_x"] >= source_item["center_x"]
-        source_y = source_item["center_y"]
-        target_y = target_item["center_y"]
+        forward = target_item["center_y"] >= source_item["center_y"]
+        source_x = source_item["center_x"] + sibling_offset
+        target_x = target_item["center_x"] + sibling_offset * 0.8
         if forward:
-            start_x = source_item["x"] + source_item["width"]
-            end_x = target_item["x"]
-            distance = max(50.0, end_x - start_x)
-            control = min(84.0, distance * 0.42)
+            start_y = source_item["y"] + source_item["height"] + 6.0
+            end_y = target_item["y"] - 6.0
+            distance = max(72.0, end_y - start_y)
+            control = min(96.0, distance * 0.36)
+            bend_x = (source_x + target_x) / 2.0 + (14.0 if source_item["lane_position"] == "right" else -14.0)
             path = (
-                f"M {start_x:.1f} {source_y:.1f} "
-                f"C {start_x + control:.1f} {source_y:.1f}, {end_x - control:.1f} {target_y:.1f}, {end_x:.1f} {target_y:.1f}"
+                f"M {source_x:.1f} {start_y:.1f} "
+                f"C {source_x:.1f} {start_y + control:.1f}, {target_x:.1f} {end_y - control:.1f}, {target_x:.1f} {end_y:.1f}"
             )
-            label_x = (start_x + end_x) / 2
-            label_y = min(source_y, target_y) - (20.0 if is_mainline else 10.0)
+            label_x = bend_x
+            label_y = (start_y + end_y) / 2.0 - 18.0 - abs(sibling_offset) * 0.1
         else:
-            start_x = source_item["center_x"]
-            end_x = target_item["center_x"]
-            arc_y = min(source_y, target_y) - 88.0 if source_item["lane_position"] != "bottom" else max(source_y, target_y) + 88.0
-            path = (
-                f"M {start_x:.1f} {source_y:.1f} "
-                f"C {start_x + 44:.1f} {arc_y:.1f}, {end_x - 44:.1f} {arc_y:.1f}, {end_x:.1f} {target_y:.1f}"
+            start_y = source_item["center_y"]
+            end_y = target_item["center_y"]
+            arc_x = (
+                min(source_x, target_x) - (82.0 + lane_index * 12.0)
+                if source_item["lane_position"] != "right"
+                else max(source_x, target_x) + (82.0 + lane_index * 12.0)
             )
-            label_x = (start_x + end_x) / 2
-            label_y = arc_y - 12.0 if arc_y < source_y else arc_y + 16.0
+            path = (
+                f"M {source_x:.1f} {start_y:.1f} "
+                f"C {arc_x:.1f} {start_y:.1f}, {arc_x:.1f} {end_y:.1f}, {target_x:.1f} {end_y:.1f}"
+            )
+            label_x = arc_x
+            label_y = (start_y + end_y) / 2.0 - 14.0
 
         edge_items.append(
             {
@@ -1669,7 +2150,7 @@ def create_workflow_interactive_payload(
                 "conformance_bucket": str(row.get("conformance_bucket", "Conformant")),
                 "branch_role": str(row.get("branch_role", "mainline")),
                 "stroke_style": str(row.get("stroke_style", "solid")),
-                "stroke_width": max(2.0, min(8.2, _safe_float(row.get("stroke_weight")) or (3.2 if is_mainline else 2.3))),
+                "stroke_width": max(1.2, min(4.3, (_safe_float(row.get("stroke_weight")) or (2.3 if is_mainline else 1.7)) * (0.9 if lens_is_paths else 0.82))),
                 "stroke": palette["stroke"],
                 "accent": palette["accent"],
                 "path": path,
@@ -1677,25 +2158,160 @@ def create_workflow_interactive_payload(
                 "label_y": label_y,
                 "selected": is_selected,
                 "neighbor": is_neighbor,
-                "show_label": is_mainline and _safe_int(row.get("frequency", 0)) >= max(220, int(max_frequency * 0.55)),
+                "show_label": is_mainline and len(edge_items) < 10 and (
+                    _safe_int(row.get("frequency", 0)) >= max(900, int(max_frequency * (0.74 if lens_is_paths else 0.86)))
+                    or selected_edge == edge_id
+                ),
+                "path_min_x": min(source_x, target_x, arc_x if not forward else source_x, arc_x if not forward else target_x) - 10.0,
+                "path_max_x": max(source_x, target_x, arc_x if not forward else source_x, arc_x if not forward else target_x) + 10.0,
+                "path_min_y": min(start_y, end_y) - 10.0,
+                "path_max_y": max(start_y, end_y) + 10.0,
             }
         )
+
+    anchor_layout_nodes = _workflow_primary_path_nodes(node_items) or node_items
+    first_layout_node = min(anchor_layout_nodes, key=lambda node: float(node.get("center_y", 0.0))) if anchor_layout_nodes else None
+    last_layout_node = max(anchor_layout_nodes, key=lambda node: float(node.get("center_y", 0.0))) if anchor_layout_nodes else None
+    top_reference_y = float(first_layout_node["y"]) if first_layout_node else top_margin
+    bottom_reference_y = (
+        float(last_layout_node["y"]) + float(last_layout_node["height"])
+        if last_layout_node
+        else top_reference_y + mainline_height
+    )
+    mainline_band_y = max(12.0, top_reference_y - 12.0)
+    top_band_y = max(12.0, top_reference_y - (42.0 if has_top_branches else 12.0))
+    bottom_band_y = bottom_reference_y + 12.0
+    start_anchor_y = max(16.0, top_reference_y - 18.0)
+    end_anchor_y = bottom_reference_y + 28.0
+    top_band_height = max(16.0 if not has_top_branches else 44.0, mainline_band_y - top_band_y - (10.0 if has_top_branches else 4.0))
+    mainline_band_height = (
+        max(94.0, (end_anchor_y + 18.0) - mainline_band_y)
+        if not has_bottom_branches
+        else max(76.0, bottom_band_y - mainline_band_y - 8.0)
+    )
+    bottom_band_height = max(16.0 if not has_bottom_branches else 48.0, (end_anchor_y + 18.0) - bottom_band_y)
+    first_anchor_x = float(first_layout_node.get("center_x", center_x)) if first_layout_node else float(center_x)
+    last_anchor_x = float(last_layout_node.get("center_x", center_x)) if last_layout_node else float(center_x)
+
+    fit_min_x = float("inf")
+    fit_min_y = float("inf")
+    fit_max_x = float("-inf")
+    fit_max_y = float("-inf")
+
+    def _include_fit_bounds(min_x: float, min_y: float, max_x: float, max_y: float) -> None:
+        nonlocal fit_min_x, fit_min_y, fit_max_x, fit_max_y
+        fit_min_x = min(fit_min_x, float(min_x))
+        fit_min_y = min(fit_min_y, float(min_y))
+        fit_max_x = max(fit_max_x, float(max_x))
+        fit_max_y = max(fit_max_y, float(max_y))
+
+    for node in node_items:
+        node_pad = 18.0 if node.get("selected") else 10.0
+        _include_fit_bounds(
+            float(node["x"]) - node_pad,
+            float(node["y"]) - node_pad,
+            float(node["x"]) + float(node["width"]) + node_pad,
+            float(node["y"]) + float(node["height"]) + node_pad,
+        )
+
+    for edge in edge_items:
+        _include_fit_bounds(
+            float(edge.get("path_min_x", 0.0)),
+            float(edge.get("path_min_y", 0.0)),
+            float(edge.get("path_max_x", 0.0)),
+            float(edge.get("path_max_y", 0.0)),
+        )
+        if edge.get("show_label") and detail_level != "executive":
+            label_width = 76.0
+            label_height = 32.0 if detail_level == "research" and edge.get("share_pct") is not None else 20.0
+            _include_fit_bounds(
+                float(edge["label_x"]) - (label_width / 2.0) - 6.0,
+                float(edge["label_y"]) - (label_height / 2.0) - 6.0,
+                float(edge["label_x"]) + (label_width / 2.0) + 6.0,
+                float(edge["label_y"]) + (label_height / 2.0) + 6.0,
+            )
+
+    anchor_bounds = {
+        "min_x": min(first_anchor_x - 40.0, last_anchor_x - 40.0),
+        "min_y": min(start_anchor_y - 26.0, end_anchor_y - 32.0),
+        "max_x": max(first_anchor_x + 40.0, last_anchor_x + 40.0),
+        "max_y": max(start_anchor_y + 26.0, end_anchor_y + 32.0),
+    }
+    _include_fit_bounds(
+        anchor_bounds["min_x"],
+        anchor_bounds["min_y"],
+        anchor_bounds["max_x"],
+        anchor_bounds["max_y"],
+    )
+
+    if not all(math.isfinite(value) for value in (fit_min_x, fit_min_y, fit_max_x, fit_max_y)):
+        fit_min_x = 10.0
+        fit_min_y = 10.0
+        fit_max_x = float(canvas_width - 10.0)
+        fit_max_y = float(canvas_height - 10.0)
+
+    fit_padding = {
+        "top": 16.0,
+        "right": 14.0,
+        "bottom": 36.0,
+        "left": 14.0,
+    }
+    fit_width = max(1.0, fit_max_x - fit_min_x)
+    fit_height = max(1.0, fit_max_y - fit_min_y)
+    fit_width_with_padding = fit_width + fit_padding["left"] + fit_padding["right"]
+    fit_height_with_padding = fit_height + fit_padding["top"] + fit_padding["bottom"]
+    preferred_aspect_ratio = 0.68 if not (has_top_branches or has_bottom_branches) else 0.74
+    base_view_width = 920.0 if not (has_top_branches or has_bottom_branches) else 980.0
+    base_view_height = 500.0 if not (has_top_branches or has_bottom_branches) else 560.0
+    target_width = int(
+        math.ceil(
+            max(
+                base_view_width,
+                fit_width_with_padding,
+                fit_height_with_padding / preferred_aspect_ratio,
+            )
+        )
+    )
+    target_height = int(math.ceil(max(base_view_height, fit_height_with_padding)))
+    toolbar_height_hint = 126 + (22 if detail_level == "research" else 0) + (14 if has_top_branches or has_bottom_branches else 0)
+    responsive_scale_hint = max(
+        1.0,
+        min(
+            1.18,
+            (980.0 if has_top_branches or has_bottom_branches else 960.0) / max(float(target_width), 1.0),
+        ),
+    )
 
     return {
         "nodes": node_items,
         "edges": edge_items,
         "legend": legend_df,
-        "height": max(600, canvas_height),
-        "width": canvas_width,
+        "height": max(320, target_height),
+        "frame_height": max(420, int(math.ceil(target_height * responsive_scale_hint)) + toolbar_height_hint + 16),
+        "width": max(520, target_width),
+        "content_offset_x": 0.0,
+        "content_offset_y": 0.0,
         "overall_median_delay_days": overall_median,
         "selected_node_id": selected_node,
         "selected_edge_id": selected_edge,
         "metric_coloring": metric_coloring,
         "detail_level": detail_level,
+        "conformance_lens": lens_value,
+        "has_top_branches": has_top_branches,
+        "has_bottom_branches": has_bottom_branches,
+        "content_bounds": {
+            "min_x": round(fit_min_x, 1),
+            "min_y": round(fit_min_y, 1),
+            "max_x": round(fit_max_x, 1),
+            "max_y": round(fit_max_y, 1),
+        },
+        "anchor_bounds": {key: round(float(value), 1) for key, value in anchor_bounds.items()},
+        "fit_padding": fit_padding,
+        "toolbar_height_hint": toolbar_height_hint,
         "lane_bands": {
-            "top_y": max(56.0, mainline_y - 132.0),
-            "mainline_y": mainline_y - 22.0,
-            "bottom_y": bottom_y - 22.0,
+            "top_y": top_band_y,
+            "mainline_y": mainline_band_y,
+            "bottom_y": bottom_band_y,
         },
     }
 
@@ -1706,21 +2322,51 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
     edge_items = list(explorer_payload.get("edges", []))
     metric_coloring = str(explorer_payload.get("metric_coloring", "Conformance bucket"))
     detail_level = str(explorer_payload.get("detail_level", "analyst")).lower()
+    conformance_lens = str(explorer_payload.get("conformance_lens", "% of paths"))
     selected_node_id = str(explorer_payload.get("selected_node_id") or "").strip()
     selected_edge_id = str(explorer_payload.get("selected_edge_id") or "").strip()
     canvas_width = int(explorer_payload.get("width", 1080))
     canvas_height = int(explorer_payload.get("height", 520))
+    base_offset_x = float(explorer_payload.get("content_offset_x", 0.0) or 0.0)
+    base_offset_y = float(explorer_payload.get("content_offset_y", 0.0) or 0.0)
+    drawable_width = max(320.0, float(canvas_width))
+    drawable_height = max(320.0, float(canvas_height))
     lane_bands = explorer_payload.get("lane_bands", {}) if isinstance(explorer_payload.get("lane_bands"), Mapping) else {}
-    top_band_y = float(lane_bands.get("top_y", 56.0))
-    mainline_band_y = float(lane_bands.get("mainline_y", max(144.0, canvas_height * 0.44)))
-    bottom_band_y = float(lane_bands.get("bottom_y", min(canvas_height - 120.0, mainline_band_y + 150.0)))
-    top_band_height = max(72.0, mainline_band_y - top_band_y - 34.0)
-    mainline_band_height = max(92.0, bottom_band_y - mainline_band_y - 26.0)
-    bottom_band_height = max(72.0, canvas_height - bottom_band_y - 56.0)
+    content_bounds = explorer_payload.get("content_bounds", {}) if isinstance(explorer_payload.get("content_bounds"), Mapping) else {}
+    fit_padding = explorer_payload.get("fit_padding", {}) if isinstance(explorer_payload.get("fit_padding"), Mapping) else {}
+    has_top_branches = bool(explorer_payload.get("has_top_branches", True))
+    has_bottom_branches = bool(explorer_payload.get("has_bottom_branches", True))
+    instance_id = escape(str(explorer_payload.get("instance_id", "workflow-explorer")))
+    top_band_y = float(lane_bands.get("top_y", 14.0))
+    mainline_band_y = float(lane_bands.get("mainline_y", 14.0))
+    bottom_band_y = float(lane_bands.get("bottom_y", mainline_band_y + 156.0))
+    top_band_height = max(18.0 if not has_top_branches else 50.0, mainline_band_y - top_band_y - (12.0 if has_top_branches else 6.0))
+    primary_path_nodes = _workflow_primary_path_nodes(node_items)
+    mainline_nodes = primary_path_nodes or [node for node in node_items if str(node.get("branch_role", "mainline")) == "mainline"]
+    anchor_nodes = primary_path_nodes or node_items
+    first_anchor_x = drawable_width / 2.0
+    last_anchor_x = drawable_width / 2.0
+    start_anchor_y = max(18.0, top_band_y + 18.0)
+    end_anchor_y = bottom_band_y + 40.0
+    if anchor_nodes:
+        ordered_anchor_nodes = sorted(anchor_nodes, key=lambda item: float(item.get("center_y", 0.0)))
+        first_node = ordered_anchor_nodes[0]
+        last_node = ordered_anchor_nodes[-1]
+        first_anchor_x = float(first_node.get("center_x", drawable_width / 2.0))
+        last_anchor_x = float(last_node.get("center_x", drawable_width / 2.0))
+        start_anchor_y = max(18.0, float(first_node.get("y", 60.0)) - 24.0)
+        end_anchor_y = float(last_node.get("y", 60.0)) + float(last_node.get("height", 84.0)) + 40.0
+    mainline_band_height = (
+        max(104.0, (end_anchor_y + 22.0) - mainline_band_y)
+        if not has_bottom_branches
+        else max(86.0, bottom_band_y - mainline_band_y - 10.0)
+    )
+    bottom_band_height = max(18.0 if not has_bottom_branches else 56.0, (end_anchor_y + 22.0) - bottom_band_y)
+    anchor_y = mainline_band_y + (mainline_band_height / 2.0)
     if not node_items and not edge_items:
         return (
             '<div class="crpm-workflow-explorer">'
-            '<div style="padding:18px;border:1px solid #d8d2e0;border-radius:18px;background:#ffffff;color:#1f2c25;font-family:Segoe UI, Arial, sans-serif;">'
+            '<div style="padding:18px;border:1px solid #d8dfe8;border-radius:20px;background:#ffffff;color:#1f2c25;font-family:Segoe UI, Arial, sans-serif;">'
             "No workflow explorer could be built for this selection."
             "</div></div>"
         )
@@ -1733,44 +2379,71 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
         selection_state = "Overview mode"
     coloring_hint = _workflow_metric_coloring_hint(metric_coloring)
     density_hint = _workflow_density_hint(detail_level)
+    lens_hint = "Activity lens" if "activit" in conformance_lens.lower() else "Path lens"
+    mainline_backbone_points: list[tuple[float, float]] = [(first_anchor_x, start_anchor_y)]
+    for node in sorted(mainline_nodes, key=lambda item: float(item.get("center_y", 0.0))):
+        mainline_backbone_points.append((float(node.get("center_x", canvas_width / 2.0)), float(node.get("center_y", anchor_y))))
+    mainline_backbone_points.append((last_anchor_x, end_anchor_y))
+    if len(mainline_backbone_points) >= 2:
+        backbone_segments = [f"M {mainline_backbone_points[0][0]:.1f} {mainline_backbone_points[0][1]:.1f}"]
+        for point_x, point_y in mainline_backbone_points[1:]:
+            backbone_segments.append(f"L {point_x:.1f} {point_y:.1f}")
+        mainline_backbone_path = " ".join(backbone_segments)
+    else:
+        mainline_backbone_path = ""
 
     parts = [
-        '<div class="crpm-workflow-explorer" style="font-family:Segoe UI, Arial, sans-serif;">',
+        f'<div class="crpm-workflow-explorer" data-instance="{instance_id}" style="font-family:Segoe UI, Arial, sans-serif;">',
         "<style>"
-        ".crpm-workflow-explorer{color:#1f2c25;}"
-        ".crpm-explorer-shell{display:grid;gap:8px;}"
-        ".crpm-explorer-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:0;padding:10px 12px;border:1px solid #d8d2e0;border-radius:18px;background:linear-gradient(180deg,#ffffff 0%,#f6f4fa 100%);box-shadow:0 10px 24px rgba(55,43,74,.06);}"
+        ".crpm-workflow-explorer{color:#1d2c34;}"
+        ".crpm-explorer-shell{display:grid;gap:6px;}"
+        ".crpm-explorer-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:10px;padding:8px 10px;border:1px solid #d9dfe6;border-radius:14px;background:#ffffff;box-shadow:none;}"
         ".crpm-explorer-toolbar__copy{min-width:0;display:grid;gap:5px;}"
-        ".crpm-explorer-toolbar__title-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;}"
-        ".crpm-explorer-toolbar__title{font-size:13px;font-weight:800;letter-spacing:.01em;color:#21342b;}"
-        ".crpm-explorer-toolbar__sub{font-size:11px;line-height:1.4;color:#5d6a63;}"
-        ".crpm-explorer-badge{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;background:#eef2f8;border:1px solid #d5dae6;font-size:10px;font-weight:700;color:#30435f;}"
-        "#crpm-explorer-selection-chip{background:linear-gradient(135deg,#e8eef8 0%,#eef4ff 100%);border-color:#c6d3ea;color:#2f4466;}"
-        ".crpm-explorer-toolbar__actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;}"
-        ".crpm-explorer-action{border:1px solid #d6d2df;background:#ffffff;border-radius:11px;padding:7px 11px;font-size:11px;font-weight:700;color:#22352d;cursor:pointer;box-shadow:0 6px 14px rgba(60,46,83,.05);transition:transform .14s ease,box-shadow .14s ease,border-color .14s ease;}"
-        ".crpm-explorer-action:hover{transform:translateY(-1px);box-shadow:0 10px 18px rgba(60,46,83,.09);border-color:#bcc6d7;}"
-        ".crpm-explorer-action--reset{background:linear-gradient(135deg,#f6f8fc 0%,#edf3fb 100%);color:#29425e;}"
-        ".crpm-explorer-status-line{display:flex;align-items:center;gap:8px;min-width:0;}"
-        ".crpm-explorer-live-title{font-size:11px;font-weight:800;color:#22352d;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}"
-        ".crpm-explorer-live-meta{font-size:11px;color:#5d6a63;line-height:1.38;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}"
-        ".crpm-explorer-canvas{border:1px solid #d8d2e0;border-radius:20px;background:linear-gradient(180deg,#f8f6fb 0%,#ffffff 100%);overflow:hidden;box-shadow:0 10px 26px rgba(55,43,74,.05);}"
+        ".crpm-explorer-toolbar__title-row{display:flex;align-items:center;flex-wrap:wrap;gap:7px;}"
+        ".crpm-explorer-toolbar__title{font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#394b5a;}"
+        ".crpm-explorer-toolbar__summary{font-size:10px;line-height:1.35;color:#5b6977;}"
+        ".crpm-explorer-toolbar__sub{font-size:9px;line-height:1.25;color:#6b7886;}"
+        ".crpm-explorer-badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;background:#f7f9fb;border:1px solid #dde4ea;font-size:9px;font-weight:700;color:#44586b;}"
+        "#crpm-explorer-selection-chip{background:#eef3f8;border-color:#cfd9e2;color:#405668;}"
+        ".crpm-explorer-toolbar__actions{display:flex;flex-wrap:wrap;justify-content:flex-end;align-content:flex-start;gap:7px;}"
+        ".crpm-explorer-action{border:1px solid #d6dde5;background:#ffffff;border-radius:10px;padding:5px 9px;font-size:9px;font-weight:700;color:#24343f;cursor:pointer;box-shadow:none;transition:transform .14s ease,border-color .14s ease,background .14s ease;}"
+        ".crpm-explorer-action:hover{transform:translateY(-1px);border-color:#b4c0cd;background:#f7f9fb;}"
+        ".crpm-explorer-action--reset{background:#f7f9fb;color:#3b5062;}"
+        ".crpm-explorer-status-line{display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap;}"
+        ".crpm-explorer-live-title{font-size:10.5px;font-weight:800;color:#20313c;line-height:1.2;min-width:0;overflow-wrap:anywhere;}"
+        ".crpm-explorer-live-meta{font-size:9.5px;color:#657381;line-height:1.25;min-width:0;overflow-wrap:anywhere;}"
+        ".crpm-explorer-legend{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:9px;color:#677381;}"
+        ".crpm-explorer-legend__item{display:inline-flex;align-items:center;gap:6px;padding:0;border-radius:0;border:none;background:transparent;}"
+        ".crpm-explorer-legend__swatch{width:8px;height:8px;border-radius:999px;display:inline-block;}"
+        ".crpm-explorer-canvas{border:1px solid #d9dfe6;border-radius:18px;background:#ffffff;overflow:visible;box-shadow:none;}"
+        ".crpm-explorer-figure{margin:0 auto;width:100%;}"
+        ".crpm-explorer-canvas svg{display:block;width:100%;height:auto;}"
         ".crpm-explorer-node,.crpm-explorer-edge{transition:opacity .16s ease,filter .16s ease;}"
-        ".crpm-explorer-node.is-muted,.crpm-explorer-edge.is-muted{opacity:.14;}"
-        ".crpm-explorer-node.is-neighbor{opacity:.96;}"
-        ".crpm-explorer-edge.is-neighbor{opacity:.78;}"
-        ".crpm-explorer-node.is-focus,.crpm-explorer-edge.is-focus{opacity:1;filter:drop-shadow(0 0 10px rgba(82,113,170,.18));}"
+        ".crpm-explorer-node.is-muted{opacity:.32;}"
+        ".crpm-explorer-edge.is-muted{opacity:.24;}"
+        ".crpm-explorer-node.is-neighbor{opacity:.97;}"
+        ".crpm-explorer-edge.is-neighbor{opacity:.74;}"
+        ".crpm-explorer-node.is-focus,.crpm-explorer-edge.is-focus{opacity:1;filter:drop-shadow(0 8px 16px rgba(82,113,170,.14));}"
+        "@media (max-width: 920px){.crpm-explorer-toolbar{grid-template-columns:minmax(0,1fr);}.crpm-explorer-toolbar__actions{justify-content:flex-start;}.crpm-explorer-action{flex:0 1 auto;}}"
         "</style>",
         '<div class="crpm-explorer-shell">',
         '<div class="crpm-explorer-toolbar" id="crpm-explorer-toolbar">',
         '<div class="crpm-explorer-toolbar__copy">',
         '<div class="crpm-explorer-toolbar__title-row">'
-        '<div class="crpm-explorer-toolbar__title">Interactive workflow explorer</div>'
+        '<div class="crpm-explorer-toolbar__title">Active process flow</div>'
         f'<span id="crpm-explorer-selection-chip" class="crpm-explorer-badge">{escape(selection_state)}</span>'
+        f'<span class="crpm-explorer-badge">{escape(metric_coloring)}</span>'
+        f'<span class="crpm-explorer-badge">{escape(lens_hint)}</span>'
         "</div>",
-        f'<div class="crpm-explorer-toolbar__sub">{escape(coloring_hint)} · {escape(density_hint)} · layout stays left to right.</div>',
+        f'<div class="crpm-explorer-toolbar__summary">{escape(coloring_hint)} {escape(density_hint)}</div>',
         '<div class="crpm-explorer-status-line">'
         '<div id="crpm-explorer-live-title" class="crpm-explorer-live-title">Overview mode</div>'
-        '<div id="crpm-explorer-live-meta" class="crpm-explorer-live-meta">Click a node or edge in the canvas for quick local context. Exact ranked metrics remain in the inspector.</div>'
+        '<div id="crpm-explorer-live-meta" class="crpm-explorer-live-meta">Click a node or edge for local focus. Use the inspector selector when you need pinned exact metrics.</div>'
+        "</div>",
+        '<div class="crpm-explorer-legend">'
+        '<span class="crpm-explorer-legend__item"><span class="crpm-explorer-legend__swatch" style="background:#9ed2a2;"></span>Conformance class</span>'
+        '<span class="crpm-explorer-legend__item"><span class="crpm-explorer-legend__swatch" style="background:#7c98bd;"></span>Timing burden on links</span>'
+        '<span class="crpm-explorer-toolbar__sub">Reference flow now reads top to bottom. Use local focus to inspect neighboring transitions without losing the full pathway.</span>'
         "</div>",
         "</div>",
         '<div class="crpm-explorer-toolbar__actions">',
@@ -1779,35 +2452,83 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
         '<button id="crpm-explorer-clear-focus" class="crpm-explorer-action" type="button">Clear focus</button>',
         '<button id="crpm-explorer-reset-view" class="crpm-explorer-action crpm-explorer-action--reset" type="button">Reset view</button>',
         "</div></div>",
-        '<div class="crpm-explorer-canvas">'
-        f'<svg id="crpm-workflow-explorer-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {canvas_width} {canvas_height}" width="100%" height="{canvas_height}" aria-label="Workflow process explorer" style="display:block;width:100%;height:{canvas_height}px;">',
+        '<div class="crpm-explorer-canvas">',
+        '<div class="crpm-explorer-figure" style="width:100%;">',
+            f'<svg id="crpm-workflow-explorer-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {canvas_width} {canvas_height}" preserveAspectRatio="xMidYMin meet" aria-label="Workflow process explorer" style="display:block;width:100%;max-width:{canvas_width}px;height:auto;aspect-ratio:{canvas_width}/{canvas_height};overflow:visible;margin:0 auto;" data-content-min-x="{float(content_bounds.get("min_x", 0.0)):.1f}" data-content-min-y="{float(content_bounds.get("min_y", 0.0)):.1f}" data-content-max-x="{float(content_bounds.get("max_x", float(canvas_width))):.1f}" data-content-max-y="{float(content_bounds.get("max_y", float(canvas_height))):.1f}" data-fit-pad-top="{float(fit_padding.get("top", 18.0)):.1f}" data-fit-pad-right="{float(fit_padding.get("right", 16.0)):.1f}" data-fit-pad-bottom="{float(fit_padding.get("bottom", 30.0)):.1f}" data-fit-pad-left="{float(fit_padding.get("left", 16.0)):.1f}">',
         "<defs>",
-        '<filter id="workflow-explorer-shadow" x="-20%" y="-20%" width="160%" height="160%">',
-        '<feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#433655" flood-opacity="0.10"/>',
+        '<filter id="workflow-explorer-shadow" x="-18%" y="-18%" width="150%" height="150%">',
+        '<feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#4c5d78" flood-opacity="0.08"/>',
         "</filter>",
-        '<filter id="workflow-explorer-glow" x="-30%" y="-30%" width="180%" height="180%">',
-        '<feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#6d87b5" flood-opacity="0.26"/>',
+        '<filter id="workflow-explorer-glow" x="-24%" y="-24%" width="168%" height="168%">',
+        '<feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#7e9dc4" flood-opacity="0.18"/>',
         "</filter>",
-        '<marker id="workflow-explorer-arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">',
-        '<path d="M 0 0 L 10 5 L 0 10 z" fill="#728179"/>',
+        '<marker id="workflow-explorer-arrow" markerWidth="10" markerHeight="10" refX="9.2" refY="5" orient="auto" markerUnits="strokeWidth">',
+        '<path d="M 1 1.4 L 10 5 L 1 8.6 z" fill="#24313a"/>',
         "</marker>",
         "</defs>",
         '<g id="crpm-workflow-viewport">',
-        f'<rect x="24" y="{top_band_y:.1f}" width="{canvas_width - 48:.1f}" height="{top_band_height:.1f}" rx="22" ry="22" fill="#f3f0f8" fill-opacity="0.62"/>',
-        f'<rect x="24" y="{mainline_band_y:.1f}" width="{canvas_width - 48:.1f}" height="{mainline_band_height:.1f}" rx="24" ry="24" fill="#eef4ff" fill-opacity="0.82"/>',
-        f'<rect x="24" y="{bottom_band_y:.1f}" width="{canvas_width - 48:.1f}" height="{bottom_band_height:.1f}" rx="22" ry="22" fill="#f3f0f8" fill-opacity="0.62"/>',
-        f'<line x1="40" y1="{top_band_y + top_band_height:.1f}" x2="{canvas_width - 40:.1f}" y2="{top_band_y + top_band_height:.1f}" stroke="#d8d3e3" stroke-width="1" stroke-dasharray="6 8"/>',
-        f'<line x1="40" y1="{mainline_band_y + (mainline_band_height / 2):.1f}" x2="{canvas_width - 40:.1f}" y2="{mainline_band_y + (mainline_band_height / 2):.1f}" stroke="#a7b9d8" stroke-width="2" stroke-dasharray="9 8"/>',
-        f'<line x1="40" y1="{bottom_band_y:.1f}" x2="{canvas_width - 40:.1f}" y2="{bottom_band_y:.1f}" stroke="#d8d3e3" stroke-width="1" stroke-dasharray="6 8"/>',
-        f'<text x="44" y="{top_band_y - 8:.1f}" font-size="10.5" font-weight="700" fill="#7c748a">Upper branches</text>',
-        f'<text x="44" y="{mainline_band_y - 8:.1f}" font-size="11" font-weight="800" fill="#35527c">Mainline backbone</text>',
-        f'<text x="44" y="{bottom_band_y - 8:.1f}" font-size="10.5" font-weight="700" fill="#7c748a">Lower branches</text>',
+            f'<rect x="4" y="4" width="{drawable_width - 8:.1f}" height="{drawable_height - 8:.1f}" rx="18" ry="18" fill="#ffffff" stroke="#e6ebf0" stroke-width="1.1"/>',
     ]
 
+    if has_top_branches:
+        parts.extend(
+            [
+                f'<rect x="6" y="{top_band_y:.1f}" width="{drawable_width - 12:.1f}" height="{top_band_height:.1f}" rx="12" ry="12" fill="#fbfcfd" fill-opacity="1"/>',
+                f'<line x1="24" y1="{top_band_y + top_band_height:.1f}" x2="{drawable_width - 24:.1f}" y2="{top_band_y + top_band_height:.1f}" stroke="#dddbe4" stroke-width="1" stroke-dasharray="6 8"/>',
+                f'<text x="24" y="{top_band_y - 8:.1f}" font-size="10.5" font-weight="700" fill="#8a8097">Upper variation</text>',
+            ]
+        )
+    if has_bottom_branches:
+        parts.extend(
+            [
+                f'<rect x="6" y="{bottom_band_y:.1f}" width="{drawable_width - 12:.1f}" height="{bottom_band_height:.1f}" rx="12" ry="12" fill="#fbfcfd" fill-opacity="1"/>',
+                f'<line x1="24" y1="{bottom_band_y:.1f}" x2="{drawable_width - 24:.1f}" y2="{bottom_band_y:.1f}" stroke="#dddbe4" stroke-width="1" stroke-dasharray="6 8"/>',
+                f'<text x="24" y="{bottom_band_y - 8:.1f}" font-size="10.5" font-weight="700" fill="#8a8097">Lower variation</text>',
+            ]
+        )
+
+    parts.extend(
+        [
+            f'<rect x="6" y="{mainline_band_y:.1f}" width="{drawable_width - 12:.1f}" height="{mainline_band_height:.1f}" rx="12" ry="12" fill="#ffffff" fill-opacity="1" stroke="#d8dfe6" stroke-width="1.15"/>',
+            f'<text x="22" y="{mainline_band_y - 8:.1f}" font-size="10.5" font-weight="800" fill="#5c6d7b">Reference flow</text>',
+            (
+                f'<path d="{mainline_backbone_path}" fill="none" stroke="#e8edf1" stroke-width="12" '
+                'stroke-linecap="round" stroke-linejoin="round" opacity="1"/>'
+                if mainline_backbone_path
+                else ""
+            ),
+            (
+                f'<path d="{mainline_backbone_path}" fill="none" stroke="#bfcbd5" stroke-width="2.4" '
+                'stroke-linecap="round" stroke-linejoin="round" opacity="1"/>'
+                if mainline_backbone_path
+                else ""
+            ),
+            f'<line x1="{first_anchor_x:.1f}" y1="{start_anchor_y + 12:.1f}" x2="{last_anchor_x:.1f}" y2="{end_anchor_y - 12:.1f}" stroke="#d4dde5" stroke-width="1.2" stroke-dasharray="6 8" opacity="0.9"/>',
+        ]
+    )
+
+    start_width = 56.0
+    start_height = 32.0
+    parts.extend(
+        [
+            f'<rect x="{first_anchor_x - start_width / 2:.1f}" y="{start_anchor_y - start_height / 2:.1f}" width="{start_width:.1f}" height="{start_height:.1f}" rx="14" ry="14" fill="#ffffff" stroke="#243744" stroke-width="1.5"/>',
+            f'<text x="{first_anchor_x:.1f}" y="{start_anchor_y + 4.8:.1f}" text-anchor="middle" font-size="11.5" font-weight="700" fill="#243744">Start</text>',
+            f'<rect x="{last_anchor_x - start_width / 2:.1f}" y="{end_anchor_y - start_height / 2:.1f}" width="{start_width:.1f}" height="{start_height:.1f}" rx="14" ry="14" fill="#ffffff" stroke="#243744" stroke-width="1.5"/>',
+            f'<text x="{last_anchor_x:.1f}" y="{end_anchor_y + 4.8:.1f}" text-anchor="middle" font-size="11.5" font-weight="700" fill="#243744">End</text>',
+        ]
+    )
+
     for edge in edge_items:
-        opacity = "1.0" if edge["selected"] else "0.78" if edge["neighbor"] else "0.40"
+        is_mainline_edge = str(edge.get("branch_role", "mainline")) == "mainline"
+        opacity = "0.98" if edge["selected"] else "0.86" if edge["neighbor"] else ("0.82" if is_mainline_edge else "0.58")
         dash = ' stroke-dasharray="9 6"' if str(edge.get("stroke_style", "solid")).lower() == "dashed" else ""
-        label = [f'{edge["caption"]}', f'{edge["frequency"]:,} events']
+        if "activit" in conformance_lens.lower():
+            label = [
+                f'{edge["caption"]}',
+                f'{edge["share_pct"]:.1f}% activity support' if edge.get("share_pct") is not None else f'{edge["frequency"]:,} events',
+            ]
+        else:
+            label = [f'{edge["caption"]}', f'{edge["frequency"]:,} paths']
         if detail_level == "research" and edge.get("median_days") is not None:
             label.append(f'median {edge["median_days"]:.1f} d')
         if detail_level == "research" and edge.get("p90_days") is not None:
@@ -1819,9 +2540,10 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             edge_classes.append("is-focus")
         elif edge["neighbor"]:
             edge_classes.append("is-neighbor")
-        base_stroke_width = edge["stroke_width"] + (1.6 if edge["selected"] else 0)
+        edge_stroke = "#24313a" if is_mainline_edge else "#667788"
+        base_stroke_width = edge["stroke_width"] + (1.2 if edge["selected"] else (0.7 if is_mainline_edge else 0.2))
         parts.append(
-            f'<g><path class="{" ".join(edge_classes)}" d="{edge["path"]}" fill="none" stroke="{edge["stroke"]}" stroke-width="{base_stroke_width:.1f}" stroke-linecap="round" opacity="{opacity}" marker-end="url(#workflow-explorer-arrow)"{dash} '
+            f'<g><path class="{" ".join(edge_classes)}" d="{edge["path"]}" fill="none" stroke="{edge_stroke}" stroke-width="{base_stroke_width:.1f}" stroke-linecap="round" opacity="{opacity}" marker-end="url(#workflow-explorer-arrow)"{dash} '
             f'data-edge-id="{escape(str(edge.get("id", "")))}" '
             f'data-source="{escape(str(edge.get("source", "")))}" '
             f'data-target="{escape(str(edge.get("target", "")))}" '
@@ -1838,30 +2560,39 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             f'<title>{escape(" | ".join(label))}</title></path>'
         )
         if edge.get("show_label") and detail_level != "executive":
-            freq_label = f"{edge['frequency']:,}"
+            freq_label = f"{edge['share_pct']:.1f}%" if "activit" in conformance_lens.lower() and edge.get("share_pct") is not None else f"{edge['frequency']:,}"
             secondary_label = f"{edge['share_pct']:.1f}% share" if detail_level == "research" and edge.get("share_pct") is not None else None
-            label_height = 36 if secondary_label else 24
+            label_height = 32 if secondary_label else 20
+            label_y = -label_height / 2
             parts.append(
                 f'<g transform="translate({edge["label_x"]:.1f},{edge["label_y"]:.1f})">'
-                f'<rect x="-46" y="{-label_height/2:.1f}" width="92" height="{label_height}" rx="8" ry="8" fill="#ffffff" fill-opacity="0.96" stroke="{edge["stroke"]}" stroke-width="1"/>'
-                f'<text x="0" y="4" text-anchor="middle" font-size="11" font-weight="700" fill="#20312a">{escape(freq_label)}</text>'
+                f'<rect x="-38" y="{label_y:.1f}" width="76" height="{label_height}" rx="6" ry="6" fill="#ffffff" fill-opacity="0.97" stroke="#d4dce4" stroke-width="0.8"/>'
+                f'<text x="0" y="3" text-anchor="middle" font-size="9.2" font-weight="700" fill="#20313c">{escape(freq_label)}</text>'
             )
             if secondary_label:
-                parts.append(f'<text x="0" y="16" text-anchor="middle" font-size="9.5" fill="#5d6a63">{escape(secondary_label)}</text>')
+                parts.append(f'<text x="0" y="14" text-anchor="middle" font-size="8.7" fill="#697887">{escape(secondary_label)}</text>')
             parts.append("</g>")
         parts.append("</g>")
 
     for node in node_items:
-        stroke_width = 3.0 if node["selected"] else 2.4 if node["neighbor"] else 1.8
+        stroke_width = 2.4 if node["selected"] else 1.8 if node["neighbor"] else 1.3
         cases_label = f"{node['cases']:,} cases"
         median_label = f"median {node['median_days']:.1f} d" if node.get("median_days") is not None else None
         p90_label = f"p90 {node['p90_days']:.1f} d" if node.get("p90_days") is not None else None
-        title_lines = [
-            node["business_label"],
-            f'{node["cases"]:,} cases',
-            f'Severity: {node["severity"]}',
-            f'Conformance: {node["conformance_bucket"]}',
-        ]
+        if "activit" in conformance_lens.lower():
+            title_lines = [
+                node["business_label"],
+                f'{node["cases"]:,} cases',
+                f'{node["occurrences"]:,} occurrences' if node.get("occurrences") is not None else f'Severity: {node["severity"]}',
+                f'Conformance: {node["conformance_bucket"]}',
+            ]
+        else:
+            title_lines = [
+                node["business_label"],
+                f'{node["cases"]:,} cases',
+                f'Severity: {node["severity"]}',
+                f'Conformance: {node["conformance_bucket"]}',
+            ]
         if detail_level != "executive" and node.get("median_days") is not None:
             title_lines.append(f'Median next delay: {node["median_days"]:.1f} d')
         if detail_level == "research" and node.get("p90_days") is not None:
@@ -1883,38 +2614,36 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             f'data-branch="{escape(str(node.get("branch_role", "mainline")))}" '
             'style="cursor:pointer;">'
         )
-        if node["selected"] or node["neighbor"]:
-            halo_stroke = node["stroke"] if node["selected"] else "#b6b0c6"
-            halo_opacity = "0.24" if node["selected"] else "0.14"
+        if node["selected"]:
             parts.append(
-                f'<rect x="{node["x"] - 6:.1f}" y="{node["y"] - 6:.1f}" width="{node["width"] + 12:.1f}" height="{node["height"] + 12:.1f}" rx="22" ry="22" fill="none" stroke="{halo_stroke}" stroke-width="2.8" opacity="{halo_opacity}" filter="url(#workflow-explorer-glow)"/>'
+                f'<rect x="{node["x"] - 4:.1f}" y="{node["y"] - 4:.1f}" width="{node["width"] + 8:.1f}" height="{node["height"] + 8:.1f}" rx="10" ry="10" fill="none" stroke="{node["stroke"]}" stroke-width="1.8" opacity="0.16" filter="url(#workflow-explorer-glow)"/>'
             )
-        card_fill = "#ffffff" if str(node.get("branch_role", "mainline")) == "mainline" else "#f8f6fb"
+        card_fill = node.get("surface_fill", "#ffffff")
+        chip_label = node["conformance_bucket"] if metric_coloring == "Conformance bucket" else node["severity"]
+        chip_x = node["x"] + node["width"] - 60.0
+        chip_y = node["y"] + 8.0
         parts.append(
-            f'<rect x="{node["x"]:.1f}" y="{node["y"]:.1f}" width="{node["width"]:.1f}" height="{node["height"]:.1f}" rx="18" ry="18" fill="{card_fill}" stroke="{node["stroke"]}" stroke-width="{stroke_width:.1f}" opacity="0.99">'
+            f'<rect x="{node["x"]:.1f}" y="{node["y"]:.1f}" width="{node["width"]:.1f}" height="{node["height"]:.1f}" rx="8" ry="8" fill="{card_fill}" stroke="{node["stroke"]}" stroke-width="{stroke_width:.1f}" opacity="0.998">'
             f'<title>{escape(" | ".join(title_lines))}</title></rect>'
-            f'<rect x="{node["x"]:.1f}" y="{node["y"]:.1f}" width="{node["width"]:.1f}" height="10" rx="18" ry="18" fill="{node["accent_fill"]}" fill-opacity="0.92"/>'
-            f'<rect x="{node["x"] + 14:.1f}" y="{node["y"] + 16:.1f}" width="5" height="{node["height"] - 32:.1f}" rx="2.5" ry="2.5" fill="{node["stroke"]}" fill-opacity="0.75"/>'
-            f'<text x="{node["x"] + 16:.1f}" y="{node["y"] + 30:.1f}" font-size="16" font-weight="700" fill="{node["ink"]}">{escape(node["business_label"])}</text>'
-            f'<text x="{node["x"] + 28:.1f}" y="{node["y"] + 50:.1f}" font-size="12" fill="{node["ink"]}" fill-opacity="0.88">{escape(cases_label)}</text>'
+            f'<rect x="{node["x"] + 8:.1f}" y="{node["y"] + 8:.1f}" width="3" height="{node["height"] - 16:.1f}" rx="1.5" ry="1.5" fill="{node["stroke"]}" fill-opacity="0.82"/>'
+            f'<rect x="{chip_x:.1f}" y="{chip_y:.1f}" width="50" height="16" rx="8" ry="8" fill="{node["chip_fill"]}" fill-opacity="0.94" stroke="none"/>'
+            f'<text x="{chip_x + 25:.1f}" y="{chip_y + 11.2:.2f}" text-anchor="middle" font-size="7.8" font-weight="700" fill="{node["chip_ink"]}">{escape(chip_label)}</text>'
+            f'<text x="{node["x"] + 18:.1f}" y="{node["y"] + 24:.1f}" font-size="12.6" font-weight="700" fill="{node["ink"]}">{escape(node["business_label"])}</text>'
+            f'<text x="{node["x"] + 18:.1f}" y="{node["y"] + 39:.1f}" font-size="9.6" fill="{node["ink"]}" fill-opacity="0.82">{escape(cases_label)}</text>'
         )
         if detail_level != "executive" and median_label is not None:
             parts.append(
-                f'<text x="{node["x"] + 28:.1f}" y="{node["y"] + 68:.1f}" font-size="11" fill="{node["ink"]}" fill-opacity="0.76">{escape(median_label)}</text>'
+                f'<text x="{node["x"] + 18:.1f}" y="{node["y"] + 52:.1f}" font-size="8.8" fill="{node["ink"]}" fill-opacity="0.68">{escape(median_label)}</text>'
             )
         if detail_level == "research" and p90_label is not None and node["height"] >= 92:
             parts.append(
-                f'<text x="{node["x"] + 28:.1f}" y="{node["y"] + 84:.1f}" font-size="11" fill="{node["ink"]}" fill-opacity="0.72">{escape(p90_label)}</text>'
+                f'<text x="{node["x"] + 26:.1f}" y="{node["y"] + 82:.1f}" font-size="10.3" fill="{node["ink"]}" fill-opacity="0.62">{escape(p90_label)}</text>'
             )
-        parts.append(
-            f'<rect x="{node["x"] + node["width"] - 92:.1f}" y="{node["y"] + 14:.1f}" width="76" height="24" rx="12" ry="12" fill="{node["stroke"]}"/>'
-            f'<text x="{node["x"] + node["width"] - 54:.1f}" y="{node["y"] + 30:.1f}" text-anchor="middle" font-size="10" font-weight="700" fill="#ffffff">{escape(node["severity"] if detail_level != "executive" else node["conformance_bucket"])}</text>'
-            "</g>"
-        )
+        parts.append("</g>")
 
     parts.extend(
         [
-            "</g></svg></div>",
+            "</g></svg></div></div>",
             "<script>",
             "(() => {",
             "const svg = document.getElementById('crpm-workflow-explorer-svg');",
@@ -1927,17 +2656,50 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             "const clearFocusButton = document.getElementById('crpm-explorer-clear-focus');",
             "const resetViewButton = document.getElementById('crpm-explorer-reset-view');",
             "if (!svg || !viewport || !liveTitle || !liveMeta) return;",
+            "const shell = document.querySelector('.crpm-explorer-shell');",
             "const nodeEls = Array.from(svg.querySelectorAll('.crpm-explorer-node'));",
             "const edgeEls = Array.from(svg.querySelectorAll('.crpm-explorer-edge'));",
-            "let scale = 1;",
-            "let tx = 0;",
-            "let ty = 0;",
-            "const apply = () => { viewport.setAttribute('transform', `translate(${tx} ${ty}) scale(${scale})`); };",
+            "const viewBox = svg.viewBox && svg.viewBox.baseVal ? svg.viewBox.baseVal : { width: svg.clientWidth || 0, height: svg.clientHeight || 0 };",
+            "const contentMinX = Number(svg.getAttribute('data-content-min-x') || '0');",
+            "const contentMinY = Number(svg.getAttribute('data-content-min-y') || '0');",
+            "const contentMaxX = Number(svg.getAttribute('data-content-max-x') || String(viewBox.width || 0));",
+            "const contentMaxY = Number(svg.getAttribute('data-content-max-y') || String(viewBox.height || 0));",
+            "const fitPadTop = Number(svg.getAttribute('data-fit-pad-top') || '18');",
+            "const fitPadRight = Number(svg.getAttribute('data-fit-pad-right') || '16');",
+            "const fitPadBottom = Number(svg.getAttribute('data-fit-pad-bottom') || '30');",
+            "const fitPadLeft = Number(svg.getAttribute('data-fit-pad-left') || '16');",
+            "let baselineScale = 1.0;",
+            "let baselineTx = 0.0;",
+            "let baselineTy = 0.0;",
+            "let zoomFactor = 1.0;",
+            "const computeBaselineFit = () => {",
+            "  const drawableWidth = Math.max(1, Number(viewBox.width || 0));",
+            "  const drawableHeight = Math.max(1, Number(viewBox.height || 0));",
+            "  const availableWidth = Math.max(1, drawableWidth - fitPadLeft - fitPadRight);",
+            "  const availableHeight = Math.max(1, drawableHeight - fitPadTop - fitPadBottom);",
+            "  const boundsWidth = Math.max(1, contentMaxX - contentMinX);",
+            "  const boundsHeight = Math.max(1, contentMaxY - contentMinY);",
+            "  baselineScale = Math.min(availableWidth / boundsWidth, availableHeight / boundsHeight);",
+            "  const fittedWidth = boundsWidth * baselineScale;",
+            "  const fittedHeight = boundsHeight * baselineScale;",
+            "  baselineTx = fitPadLeft + ((availableWidth - fittedWidth) / 2) - (contentMinX * baselineScale);",
+            "  baselineTy = fitPadTop + ((availableHeight - fittedHeight) / 2) - (contentMinY * baselineScale);",
+            "};",
+            "const apply = () => { viewport.setAttribute('transform', `translate(${baselineTx} ${baselineTy}) scale(${baselineScale * zoomFactor})`); };",
+            "const notifyFrameHeight = () => {",
+            "  const measuredHeight = Math.max(",
+            "    ((shell || document.body).getBoundingClientRect().height || 0),",
+            "    document.body ? document.body.scrollHeight || 0 : 0,",
+            "    document.documentElement ? document.documentElement.scrollHeight || 0 : 0",
+            "  );",
+            "  const hostHeight = Math.ceil(measuredHeight + 8);",
+            "  window.parent.postMessage({ isStreamlitMessage: true, type: 'streamlit:setFrameHeight', height: hostHeight }, '*');",
+            "};",
             "const setChip = (value) => { if (selectionChip) selectionChip.textContent = value; };",
             "const setOverview = () => {",
             "  setChip('Overview mode');",
             "  liveTitle.textContent = 'Overview mode';",
-            "  liveMeta.textContent = 'Click a node or edge in the canvas for quick local context. Use the inspector for pinned detail.';",
+            "  liveMeta.textContent = 'Click a node or edge for local focus. Use the inspector selector when you need pinned exact metrics.';",
             "};",
             "const resetFocusClasses = () => {",
             "  nodeEls.forEach((el) => el.classList.remove('is-focus', 'is-neighbor', 'is-muted'));",
@@ -1961,13 +2723,13 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             "    const baseStroke = Number(edgeEl.getAttribute('data-base-stroke') || '2');",
             "    if (touchesNode) {",
             "      edgeEl.classList.add('is-focus');",
-            "      edgeEl.setAttribute('opacity', '1');",
-            "      edgeEl.setAttribute('stroke-width', String(baseStroke + 1.7));",
+            "      edgeEl.setAttribute('opacity', '0.98');",
+            "      edgeEl.setAttribute('stroke-width', String(baseStroke + 1.4));",
             "      if (source) relatedNodes.add(source);",
             "      if (target) relatedNodes.add(target);",
             "    } else {",
             "      edgeEl.classList.add('is-muted');",
-            "      edgeEl.setAttribute('opacity', '0.15');",
+            "      edgeEl.setAttribute('opacity', '0.22');",
             "    }",
             "  });",
             "  nodeEls.forEach((el) => {",
@@ -1993,19 +2755,19 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             "    const baseStroke = Number(el.getAttribute('data-base-stroke') || '2');",
             "    if (el === edgeEl) {",
             "      el.classList.add('is-focus');",
-            "      el.setAttribute('opacity', '1');",
-            "      el.setAttribute('stroke-width', String(baseStroke + 1.9));",
+            "      el.setAttribute('opacity', '0.98');",
+            "      el.setAttribute('stroke-width', String(baseStroke + 1.6));",
             "      return;",
             "    }",
             "    const sameSource = source && (el.getAttribute('data-source') || '') === source;",
             "    const sameTarget = target && (el.getAttribute('data-target') || '') === target;",
             "    if (sameSource || sameTarget) {",
             "      el.classList.add('is-neighbor');",
-            "      el.setAttribute('opacity', '0.75');",
+            "      el.setAttribute('opacity', '0.68');",
             "      return;",
             "    }",
             "    el.classList.add('is-muted');",
-            "    el.setAttribute('opacity', '0.14');",
+            "    el.setAttribute('opacity', '0.22');",
             "  });",
             "  nodeEls.forEach((el) => {",
             "    const id = el.getAttribute('data-node-id') || '';",
@@ -2027,17 +2789,27 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             "  edgeEl.addEventListener('click', (event) => { event.stopPropagation(); focusEdge(edgeEl); });",
             "});",
             "svg.addEventListener('click', () => { resetFocusClasses(); setOverview(); });",
-            "const zoomBy = (factor) => { scale = Math.max(0.65, Math.min(1.85, scale * factor)); apply(); };",
+            "const zoomBy = (factor) => { zoomFactor = Math.max(0.72, Math.min(1.6, zoomFactor * factor)); apply(); };",
             "const clearFocus = () => { resetFocusClasses(); setOverview(); };",
-            "const resetView = () => { scale = 1; tx = 0; ty = 0; apply(); clearFocus(); };",
-            "if (zoomInButton) zoomInButton.addEventListener('click', (event) => { event.stopPropagation(); zoomBy(1.15); });",
-            "if (zoomOutButton) zoomOutButton.addEventListener('click', (event) => { event.stopPropagation(); zoomBy(0.87); });",
+            "const resetView = () => { zoomFactor = 1.0; computeBaselineFit(); apply(); clearFocus(); notifyFrameHeight(); };",
+            "if (zoomInButton) zoomInButton.addEventListener('click', (event) => { event.stopPropagation(); zoomBy(1.14); });",
+            "if (zoomOutButton) zoomOutButton.addEventListener('click', (event) => { event.stopPropagation(); zoomBy(0.88); });",
             "if (clearFocusButton) clearFocusButton.addEventListener('click', (event) => { event.stopPropagation(); clearFocus(); });",
             "if (resetViewButton) resetViewButton.addEventListener('click', (event) => { event.stopPropagation(); resetView(); });",
             "window.crpmZoom = zoomBy;",
             "window.crpmClearFocus = clearFocus;",
             "window.crpmReset = resetView;",
+            "computeBaselineFit();",
             "apply();",
+            "notifyFrameHeight();",
+            "requestAnimationFrame(() => notifyFrameHeight());",
+            "window.setTimeout(notifyFrameHeight, 120);",
+            "window.setTimeout(notifyFrameHeight, 280);",
+            "window.addEventListener('resize', () => { computeBaselineFit(); apply(); notifyFrameHeight(); });",
+            "if (window.ResizeObserver) {",
+            "  const resizeObserver = new ResizeObserver(() => { computeBaselineFit(); apply(); notifyFrameHeight(); });",
+            "  resizeObserver.observe(shell || document.body);",
+            "}",
             "const initialNode = nodeEls.find((el) => (el.getAttribute('data-node-id') || '') === "
             + repr(selected_node_id)
             + ");",
@@ -2140,10 +2912,11 @@ def create_workflow_cytoscape_payload(payload: Mapping[str, Any] | pd.DataFrame)
         elements_edges.append(
             {
                 "data": {
-                    "id": f"{source} -> {target}",
+                    "id": str(row.get("edge_uid", f"{source} -> {target}")),
                     "source": source,
                     "target": target,
                     "label": style_key,
+                    "edge_uid": str(row.get("edge_uid", f"{source} -> {target}")),
                     "caption": caption,
                     "frequency": frequency,
                     "median_days": median_days,
@@ -2305,12 +3078,31 @@ def _order_workflow_nodes(nodes_df: pd.DataFrame) -> pd.DataFrame:
     from crpm.screening import STEP_ORDER
 
     step_rank = {step: idx for idx, step in enumerate(STEP_ORDER)}
+    existing_step_rank = (
+        pd.to_numeric(working["step_rank"], errors="coerce")
+        if "step_rank" in working.columns
+        else pd.Series([float("nan")] * len(working), index=working.index, dtype=float)
+    )
     if "step" in working.columns:
         step_values = working["step"].fillna("unmapped")
+        mapped_step_rank = step_values.map(lambda value: step_rank.get(str(value), len(step_rank) + 1)).astype(float)
     else:
-        step_values = pd.Series(["unmapped"] * len(working), index=working.index)
-    working["_step_rank"] = step_values.map(lambda value: step_rank.get(str(value), len(step_rank) + 1))
-    sort_cols = ["_step_rank"]
+        mapped_step_rank = pd.Series([float("nan")] * len(working), index=working.index, dtype=float)
+    missing_rank = existing_step_rank.isna()
+    if missing_rank.any():
+        existing_step_rank.loc[missing_rank] = mapped_step_rank.loc[missing_rank]
+    still_missing_rank = existing_step_rank.isna()
+    if still_missing_rank.any():
+        LOGGER.warning(
+            "Workflow explorer payload missing step_rank/step for %s node(s); using deterministic index fallback.",
+            int(still_missing_rank.sum()),
+        )
+        existing_step_rank.loc[still_missing_rank] = (
+            pd.Series(range(int(still_missing_rank.sum())), index=existing_step_rank.index[still_missing_rank], dtype=float)
+            + float(len(step_rank) + 2)
+        )
+    working["step_rank"] = existing_step_rank.astype(int)
+    sort_cols = ["step_rank"]
     ascending = [True]
     if "cases" in working.columns:
         sort_cols.append("cases")
@@ -2321,7 +3113,7 @@ def _order_workflow_nodes(nodes_df: pd.DataFrame) -> pd.DataFrame:
     if "display_name" in working.columns:
         sort_cols.append("display_name")
         ascending.append(True)
-    return working.sort_values(by=sort_cols, ascending=ascending, kind="stable").drop(columns=["_step_rank"], errors="ignore").reset_index(drop=True)
+    return working.sort_values(by=sort_cols, ascending=ascending, kind="stable").reset_index(drop=True)
 
 
 def _normalize_workflow_edges(edges_df: pd.DataFrame, nodes_df: pd.DataFrame) -> pd.DataFrame:
@@ -2343,10 +3135,38 @@ def _normalize_workflow_edges(edges_df: pd.DataFrame, nodes_df: pd.DataFrame) ->
             lambda row: f"{row.get('source', '')} -> {row.get('target', '')}",
             axis=1,
         )
+    else:
+        working["edge_id"] = working["edge_id"].astype(str)
     _ensure_workflow_string_column(working, "severity", "Low")
     _ensure_workflow_string_column(working, "conformance_bucket", "Conformant")
     _ensure_workflow_string_column(working, "coverage_group", "dominant")
     _ensure_workflow_string_column(working, "branch_role", "mainline")
+    _ensure_workflow_string_column(working, "stroke_style", "solid")
+    if "edge_uid" not in working.columns:
+        working["edge_uid"] = working.apply(
+            lambda row: (
+                (
+                    str(row.get("edge_id", "")).strip()
+                    if str(row.get("edge_id", "")).strip()
+                    else f"{str(row.get('source', '')).strip()} -> {str(row.get('target', '')).strip()}"
+                )
+                + "|"
+                + "|".join(
+                    token
+                    for token in (
+                        str(row.get("business_label", "")).strip(),
+                        str(row.get("branch_role", "mainline")).strip(),
+                        str(row.get("coverage_group", "dominant")).strip(),
+                        str(row.get("conformance_bucket", "Conformant")).strip(),
+                        str(row.get("severity", "Low")).strip(),
+                    )
+                    if token
+                )
+            ).strip("|"),
+            axis=1,
+        )
+    else:
+        working["edge_uid"] = working["edge_uid"].astype(str)
     if "share_pct" not in working.columns:
         total_edges = float(working["frequency"].sum() or 1.0)
         working["share_pct"] = working["frequency"].fillna(0).astype(float) / total_edges * 100.0
@@ -2390,6 +3210,157 @@ def _derive_nodes_from_edges(edges_df: pd.DataFrame) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(rows)
+
+
+def _aggregate_explorer_nodes(nodes_df: pd.DataFrame) -> pd.DataFrame:
+    if nodes_df.empty or "activity" not in nodes_df.columns:
+        return nodes_df.copy()
+    working = nodes_df.copy()
+    working["activity"] = working["activity"].astype(str)
+    if not working["activity"].duplicated().any():
+        return working
+
+    severity_rank = {"low": 1, "moderate": 2, "high": 3, "critical": 4}
+    bucket_rank = {"conformant": 1, "log deviation": 2, "model deviation": 3}
+
+    rows: list[dict[str, Any]] = []
+    for activity, group in working.groupby("activity", sort=False):
+        group = group.copy()
+        if "cases" in group.columns:
+            case_weights = pd.to_numeric(group["cases"], errors="coerce").fillna(0.0)
+        else:
+            case_weights = pd.Series([0.0] * len(group.index), index=group.index)
+        anchor_idx = case_weights.idxmax() if float(case_weights.max()) > 0 else group.index[0]
+        anchor = group.loc[anchor_idx]
+
+        if "severity" in group.columns:
+            sev_idx = group["severity"].astype(str).str.lower().map(severity_rank).fillna(0).idxmax()
+            severity_value = str(group.loc[sev_idx].get("severity", anchor.get("severity", "Low")))
+        else:
+            severity_value = str(anchor.get("severity", "Low"))
+
+        if "conformance_bucket" in group.columns:
+            bucket_idx = group["conformance_bucket"].astype(str).str.lower().map(bucket_rank).fillna(0).idxmax()
+            bucket_value = str(group.loc[bucket_idx].get("conformance_bucket", anchor.get("conformance_bucket", "Conformant")))
+        else:
+            bucket_value = str(anchor.get("conformance_bucket", "Conformant"))
+
+        branch_role = str(anchor.get("branch_role", "mainline"))
+        lane_value = str(anchor.get("lane", "center" if branch_role == "mainline" else "left")).lower()
+        step_rank_value = _safe_int(anchor.get("step_rank", 999))
+
+        neighbor_union: set[str] = set()
+        if "neighbor_ids" in group.columns:
+            for values in group["neighbor_ids"]:
+                if isinstance(values, (list, tuple, set)):
+                    neighbor_union.update(str(value) for value in values if value)
+
+        def _sum_column(name: str) -> int:
+            if name not in group.columns:
+                return _safe_int(anchor.get(name))
+            return _safe_int(pd.to_numeric(group[name], errors="coerce").fillna(0).sum())
+
+        def _median_column(name: str) -> Optional[float]:
+            if name not in group.columns:
+                return _safe_float(anchor.get(name))
+            numeric = pd.to_numeric(group[name], errors="coerce").dropna()
+            return _safe_float(numeric.median()) if not numeric.empty else _safe_float(anchor.get(name))
+
+        rows.append(
+            {
+                **anchor.to_dict(),
+                "activity": activity,
+                "display_name": anchor.get("display_name", activity),
+                "business_label": anchor.get("business_label", anchor.get("display_name", activity)),
+                "cases": _sum_column("cases"),
+                "occurrences": _sum_column("occurrences"),
+                "median_next_delay_days": _median_column("median_next_delay_days"),
+                "p90_next_delay_days": _median_column("p90_next_delay_days"),
+                "severity": severity_value,
+                "conformance_bucket": bucket_value,
+                "branch_role": branch_role,
+                "lane": lane_value,
+                "step_rank": step_rank_value,
+                "neighbor_ids": sorted(neighbor_union),
+            }
+        )
+    return _order_workflow_nodes(pd.DataFrame(rows))
+
+
+def _aggregate_explorer_edges(edges_df: pd.DataFrame, nodes_df: pd.DataFrame) -> pd.DataFrame:
+    if edges_df.empty:
+        return edges_df.copy()
+    working = edges_df.copy()
+    if "source" not in working.columns or "target" not in working.columns:
+        return working
+
+    working["source"] = working["source"].astype(str)
+    working["target"] = working["target"].astype(str)
+    node_ids = set(nodes_df.get("activity", pd.Series(dtype=str)).astype(str).tolist())
+    if node_ids:
+        working = working[working["source"].isin(node_ids) & working["target"].isin(node_ids)].copy()
+    if working.empty:
+        return working
+
+    if "frequency" in working.columns:
+        freq_series = pd.to_numeric(working["frequency"], errors="coerce").fillna(0.0)
+    else:
+        freq_series = pd.Series([1.0] * len(working.index), index=working.index)
+    working["_freq_weight"] = freq_series.where(freq_series > 0, 1.0)
+
+    severity_rank = {"low": 1, "moderate": 2, "high": 3, "critical": 4}
+    bucket_rank = {"conformant": 1, "log deviation": 2, "model deviation": 3}
+
+    rows: list[dict[str, Any]] = []
+    for edge_key, group in working.groupby(working.get("edge_uid", pd.Series(dtype=str)).astype(str), sort=False):
+        group = group.copy()
+        anchor_idx = group["_freq_weight"].idxmax()
+        anchor = group.loc[anchor_idx]
+
+        sev_idx = group.get("severity", pd.Series(["Low"] * len(group.index), index=group.index)).astype(str).str.lower().map(severity_rank).fillna(0).idxmax()
+        severity_value = str(group.loc[sev_idx].get("severity", anchor.get("severity", "Low")))
+        bucket_idx = group.get("conformance_bucket", pd.Series(["Conformant"] * len(group.index), index=group.index)).astype(str).str.lower().map(bucket_rank).fillna(0).idxmax()
+        bucket_value = str(group.loc[bucket_idx].get("conformance_bucket", anchor.get("conformance_bucket", "Conformant")))
+
+        total_frequency = _safe_int(pd.to_numeric(group.get("frequency", pd.Series(dtype=float)), errors="coerce").fillna(0).sum())
+        if total_frequency <= 0:
+            total_frequency = _safe_int(anchor.get("frequency", 0))
+
+        def _weighted_avg(name: str) -> Optional[float]:
+            if name not in group.columns:
+                return _safe_float(anchor.get(name))
+            values = pd.to_numeric(group[name], errors="coerce")
+            valid_mask = values.notna()
+            if not valid_mask.any():
+                return _safe_float(anchor.get(name))
+            weights = pd.to_numeric(group["_freq_weight"], errors="coerce").fillna(1.0)
+            denom = float(weights[valid_mask].sum())
+            if denom <= 0:
+                return _safe_float(values[valid_mask].mean())
+            return _safe_float(float((values[valid_mask] * weights[valid_mask]).sum()) / denom)
+
+        rows.append(
+            {
+                **anchor.to_dict(),
+                "source": str(anchor.get("source", "")),
+                "target": str(anchor.get("target", "")),
+                "edge_id": f"{anchor.get('source', '')} -> {anchor.get('target', '')}",
+                "edge_uid": str(edge_key),
+                "frequency": total_frequency,
+                "median_days": _weighted_avg("median_days"),
+                "p90_days": _weighted_avg("p90_days"),
+                "stroke_weight": _weighted_avg("stroke_weight"),
+                "severity": severity_value,
+                "conformance_bucket": bucket_value,
+            }
+        )
+
+    aggregated = pd.DataFrame(rows)
+    if aggregated.empty:
+        return aggregated
+    total_edges = float(pd.to_numeric(aggregated.get("frequency", pd.Series(dtype=float)), errors="coerce").fillna(0).sum() or 1.0)
+    aggregated["share_pct"] = pd.to_numeric(aggregated.get("frequency", pd.Series(dtype=float)), errors="coerce").fillna(0.0) / total_edges * 100.0
+    return aggregated.reset_index(drop=True)
 
 
 def _ensure_workflow_string_column(df: pd.DataFrame, column: str, default: str) -> None:
@@ -2497,21 +3468,33 @@ def _workflow_metric_palette(row: Mapping[str, Any], metric_coloring: str, *, it
     }.get(coverage_group, {"fill": "#f1eef5", "stroke": "#8f80a6", "ink": "#2f2740", "accent": "#cbc0dc"})
 
     if metric_key == "conformance bucket":
+        theme = conformance_theme
+    elif metric_key in {"frequency", "coverage"}:
+        theme = coverage_theme
+    elif metric_key in {"median delay", "median delay (days)", "p90 delay", "p90 delay (days)"}:
+        theme = severity_theme
+    else:
+        theme = conformance_theme if item_kind == "edge" else severity_theme
+
+    if item_kind == "edge":
         return {
-            "fill": conformance_theme["fill"],
-            "stroke": conformance_theme["stroke"],
-            "ink": severity_theme["ink"],
-            "accent": severity_theme["accent"],
+            "fill": theme["fill"],
+            "surface": theme["fill"],
+            "stroke": theme["stroke"],
+            "ink": theme["ink"],
+            "accent": theme["accent"],
+            "chip_fill": theme["fill"],
+            "chip_ink": theme["ink"],
         }
-    if metric_key in {"frequency", "coverage"}:
-        return coverage_theme
-    if metric_key in {"median delay", "median delay (days)", "p90 delay", "p90 delay (days)"}:
-        return severity_theme
+
     return {
-        "fill": severity_theme["fill"] if item_kind == "node" else conformance_theme["fill"],
-        "stroke": severity_theme["stroke"] if item_kind == "edge" else conformance_theme["stroke"],
-        "ink": severity_theme["ink"],
-        "accent": severity_theme["accent"],
+        "fill": theme["fill"],
+        "surface": "#ffffff",
+        "stroke": theme["stroke"],
+        "ink": "#20303a",
+        "accent": theme["accent"],
+        "chip_fill": theme["fill"],
+        "chip_ink": theme["stroke"] if metric_key == "conformance bucket" else "#314150",
     }
 
 

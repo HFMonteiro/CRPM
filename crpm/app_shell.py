@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import html as _html
 import logging
 from datetime import date
@@ -37,6 +38,38 @@ LEGAL_NOTICE = (
 )
 
 
+def _svg_data_uri(svg_markup: str) -> str:
+    """Encode inline SVG markup as a data URI for stable logo rendering."""
+    encoded = base64.b64encode(svg_markup.encode("utf-8")).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded}"
+
+
+UP_BADGE_SRC = _svg_data_uri(
+    """
+    <svg xmlns="http://www.w3.org/2000/svg" width="196" height="64" viewBox="0 0 196 64" role="img" aria-label="Universidade do Porto">
+      <rect width="196" height="64" rx="14" fill="#ffffff"/>
+      <rect x="6" y="6" width="52" height="52" rx="10" fill="#111111"/>
+      <text x="32" y="40" text-anchor="middle" fill="#ffffff" font-family="Georgia, 'Times New Roman', serif" font-size="28" font-weight="700">U.</text>
+      <text x="71" y="27" fill="#141414" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="800" letter-spacing="1.6">PORTO</text>
+      <text x="71" y="46" fill="#55606d" font-family="Arial, Helvetica, sans-serif" font-size="8.5" font-weight="700" letter-spacing="1.1">UNIVERSIDADE DO PORTO</text>
+    </svg>
+    """.strip()
+)
+
+FMUP_BADGE_SRC = _svg_data_uri(
+    """
+    <svg xmlns="http://www.w3.org/2000/svg" width="232" height="64" viewBox="0 0 232 64" role="img" aria-label="Faculdade de Medicina da Universidade do Porto">
+      <rect width="232" height="64" rx="14" fill="#ffffff"/>
+      <rect x="6" y="6" width="52" height="52" rx="10" fill="#111111"/>
+      <text x="32" y="40" text-anchor="middle" fill="#ffffff" font-family="Georgia, 'Times New Roman', serif" font-size="28" font-weight="700">U.</text>
+      <text x="71" y="24" fill="#141414" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="800" letter-spacing="1.2">FMUP</text>
+      <rect x="71" y="32" width="88" height="10" rx="5" fill="#ffd54a"/>
+      <text x="71" y="53" fill="#55606d" font-family="Arial, Helvetica, sans-serif" font-size="8.5" font-weight="700" letter-spacing="0.8">FACULDADE DE MEDICINA</text>
+    </svg>
+    """.strip()
+)
+
+
 def render_app() -> None:
     """Render the CRPM screening workbench."""
     _safe_set_page_config()
@@ -55,7 +88,7 @@ def render_app() -> None:
         key="crpm_preview_page",
     )
 
-    _render_header(snapshot)
+    _render_header(snapshot, page=page)
     PAGE_REGISTRY[page](snapshot)
     _render_footer()
 
@@ -78,51 +111,80 @@ def _render_sidebar_session_info(snapshot: AnalysisSnapshot) -> None:
     """Show compact session info beneath the analysis controls."""
     preflight_warnings = st.session_state.get("crpm_preflight_warnings", [])
     if snapshot.analysis_complete:
+        if snapshot.input_name or snapshot.active_followup_label:
+            context_bits = []
+            if snapshot.input_name:
+                context_bits.append(f"Input: {snapshot.input_name}")
+            if snapshot.active_followup_label:
+                context_bits.append(f"Follow-up: {snapshot.active_followup_label}")
+            st.sidebar.caption(" · ".join(context_bits))
         st.sidebar.caption(
             f"✓ {snapshot.model_count} model(s) discovered · {snapshot.case_count:,} cases · {snapshot.event_count:,} events"
         )
-        if snapshot.stage_timings:
-            with st.sidebar.expander("Latest stage timings", expanded=False):
-                for stage_name, seconds in snapshot.stage_timings.items():
-                    st.caption(f"{stage_name}: {seconds:.3f}s")
     else:
         st.sidebar.caption("Load a log and click **Run analysis** to start.")
     for warning in preflight_warnings:
         st.sidebar.warning(warning)
 
 
-def _render_header(snapshot: AnalysisSnapshot) -> None:
+def _render_header(snapshot: AnalysisSnapshot, *, page: str) -> None:
     """Render the main content header with hero and summary metrics."""
+    if page == "Conformance Analytics":
+        if getattr(snapshot, "config_change_message", None):
+            render_quiet_note(
+                "Settings changed since the last successful run. "
+                "Click Run analysis to rebuild the filtered log, conformance workspace, and charts."
+            )
+            if hasattr(st, "toast"):
+                st.toast("Settings changed. Run analysis to refresh results.", icon="ℹ️")
+        if getattr(snapshot, "filter_error_message", None):
+            st.error(snapshot.filter_error_message)
+        return
+
+    context_bits = []
+    if getattr(snapshot, "input_name", None):
+        context_bits.append(snapshot.input_name)
+    if getattr(snapshot, "active_followup_label", None):
+        context_bits.append(snapshot.active_followup_label)
+    if getattr(snapshot, "analysis_complete", False):
+        context_bits.append(f"{snapshot.model_count:,} model(s)")
+    context_line = " · ".join(context_bits) if context_bits else "Load a log and run the analysis to populate the workbench."
+    intro_copy = _shell_intro_copy(page)
     st.markdown(
-        """
-        <div class="crpm-shell-hero">
-            <div class="crpm-shell-hero__eyebrow">CRPM &mdash; Colorectal Cancer Screening</div>
-            <div class="crpm-shell-hero__title">Screening Program Process Mining Workbench</div>
-            <div class="crpm-shell-hero__body">Load an event log, discover empirical process models, compare fitness and precision across algorithms, assess conformance against normative pathways, inspect bottlenecks and delays, review dominant variants, and visualise directly-follows graphs.</div>
+        f"""
+        <div class="crpm-shell-hero crpm-shell-hero--compact">
+            <div class="crpm-shell-hero__eyebrow">Current run context</div>
+            <div class="crpm-shell-hero__body">{_html.escape(intro_copy)}</div>
+            <div class="crpm-shell-hero__meta">{_html.escape(context_line)}</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    meta_cols = st.columns(4)
+    meta_cols = st.columns(2)
     meta_cols[0].metric("Cases", f"{snapshot.case_count:,}")
     meta_cols[1].metric("Events", f"{snapshot.event_count:,}")
-    meta_cols[2].metric("Discovered models", snapshot.model_count)
-    meta_cols[3].metric("Comparison rows", len(snapshot.comparison_df))
-
-    if snapshot.input_name:
-        st.caption(f"Current input: {snapshot.input_name}")
-    if snapshot.active_followup_label:
-        st.caption(f"Follow-up window: {snapshot.active_followup_label}")
-    if snapshot.config_change_message:
+    if getattr(snapshot, "config_change_message", None):
         render_quiet_note(
             "Settings changed since the last successful run. "
             "Click Run analysis to rebuild the filtered log, conformance workspace, and charts."
         )
         if hasattr(st, "toast"):
             st.toast("Settings changed. Run analysis to refresh results.", icon="ℹ️")
-    if snapshot.filter_error_message:
+    if getattr(snapshot, "filter_error_message", None):
         st.error(snapshot.filter_error_message)
+
+
+def _shell_intro_copy(page: str) -> str:
+    return {
+        "Overview": "Start with the current cohort and the next analytical surface worth opening.",
+        "Discovery": "Use this page to inspect discovered model candidates before moving into formal comparison.",
+        "Model Comparison": "Compare discovery candidates on fitness, precision, and balance without duplicating page-level explanation.",
+        "Operational Flow": "Review throughput movement, queue pressure, and stage aging over the current filtered pathway.",
+        "DFG Visualizations": "Read the directly-follows map first, then drop into ranked transitions only when exact values matter.",
+        "Variant Analysis": "Inspect dominant trace concentration and only then widen into rare-path behavior.",
+        "Process Performance": "Use the timing charts for pattern recognition and the ranked tables for exact durations.",
+    }.get(page, "Continue with the selected analytical surface for the current filtered run.")
 
 
 # ---------------------------------------------------------------------------
@@ -138,12 +200,10 @@ def _render_header_brand() -> None:
                 <span>www.hfmonteiro.com</span>
             </a>
             <a class="crpm-fmup-badge" href="{FMUP_HOME_URL}" target="_blank" aria-label="Faculdade de Medicina da Universidade do Porto">
-                <img src="{FMUP_LOGO_URL}" alt="FMUP logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" />
-                <span style="display:none;">FMUP</span>
+                <img src="{FMUP_BADGE_SRC}" alt="FMUP symbol" />
             </a>
             <a class="crpm-up-badge" href="{UP_HOME_URL}" target="_blank" aria-label="Universidade do Porto">
-                <img src="{UP_SYMBOL_URL}" alt="UP logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" />
-                <span style="display:none;">UP</span>
+                <img src="{UP_BADGE_SRC}" alt="U.Porto symbol" />
             </a>
         </div>
         """,
@@ -166,8 +226,9 @@ def _render_footer() -> None:
         f"""
         <div class="crpm-footer">
             <div class="crpm-footer__row">
-                <img class="crpm-footer__logo" src="{FMUP_LOGO_URL}" alt="FMUP logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-flex';" />
-                <span class="crpm-footer__logo-fallback" style="display:none;">FMUP</span>
+                <a class="crpm-footer__logo-link" href="{FMUP_HOME_URL}" target="_blank" aria-label="Faculdade de Medicina da Universidade do Porto">
+                    <img class="crpm-footer__logo" src="{FMUP_BADGE_SRC}" alt="FMUP symbol" />
+                </a>
                 <div class="crpm-footer__text">
                     Developed in the context of PhD work by Hugo Monteiro &middot;
                     <a href="{AUTHOR_WEBSITE}" target="_blank">hfmonteiro.com</a>

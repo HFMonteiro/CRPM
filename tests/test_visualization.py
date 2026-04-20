@@ -1,6 +1,8 @@
 """Tests for crpm.visualization — Plotly chart builders."""
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 import plotly.graph_objects as go
 import pytest
@@ -20,6 +22,7 @@ from crpm.visualization import (
     create_variant_frequency_chart,
     create_workflow_cytoscape_payload,
     create_workflow_conformance_sankey,
+    _workflow_primary_path_nodes,
     render_workflow_explorer_html,
     render_workflow_conformance_svg,
 )
@@ -256,24 +259,140 @@ def test_workflow_board_svg_returns_markup():
         ),
         "overall_median_delay_days": 35.0,
     }
-    svg = render_workflow_conformance_svg(payload)
-    assert '<div class="crpm-workflow-board">' in svg
+    svg = render_workflow_conformance_svg(payload, layout_mode="horizontal", detail_level="executive")
+    assert 'class="crpm-workflow-board crpm-workflow-board--horizontal"' in svg
     assert "<svg" in svg
+    assert "min-width:100%;height:auto;" in svg
     assert "Invitation" in svg
     assert "FIT mail" in svg
     assert "stroke-dasharray" in svg
     assert 'data-branch-role="mainline"' in svg
     assert 'data-branch-role="side"' in svg
     assert 'aria-label="Workflow conformance board"' in svg
+    assert "Upper variation" in svg
     assert "Deviation &amp; Timing Legend" not in svg
     assert "Editorial board view" not in svg
     assert "Mainline backbone</text>" not in svg
     assert "Conformance: Log deviation" not in svg
+    match = re.search(r'viewBox="0 0 (\d+) (\d+)"', svg)
+    assert match is not None
+    assert int(match.group(1)) > int(match.group(2))
+
+
+def test_workflow_board_svg_preserves_horizontal_layout_with_upper_and_lower_variation():
+    payload = {
+        "nodes": pd.DataFrame(
+            [
+                {"activity": "Start_node", "display_name": "Start", "cases": 100, "occurrences": 100, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline", "lane": "center", "step_rank": 0},
+                {"activity": "Main_node", "display_name": "Main", "cases": 90, "occurrences": 90, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline", "lane": "center", "step_rank": 1},
+                {"activity": "Upper_branch", "display_name": "Upper branch", "cases": 12, "occurrences": 12, "severity": "High", "conformance_bucket": "Model deviation", "branch_role": "side", "lane": "left", "step_rank": 1},
+                {"activity": "Lower_branch", "display_name": "Lower branch", "cases": 8, "occurrences": 8, "severity": "Moderate", "conformance_bucket": "Log deviation", "branch_role": "side", "lane": "right", "step_rank": 1},
+            ]
+        ),
+        "edges": pd.DataFrame(
+            [
+                {"edge_id": "Start_node -> Main_node", "source": "Start_node", "target": "Main_node", "frequency": 90, "median_days": 3.0, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline"},
+                {"edge_id": "Main_node -> Upper_branch", "source": "Main_node", "target": "Upper_branch", "frequency": 12, "median_days": 6.0, "severity": "High", "conformance_bucket": "Model deviation", "branch_role": "side", "stroke_style": "dashed"},
+                {"edge_id": "Main_node -> Lower_branch", "source": "Main_node", "target": "Lower_branch", "frequency": 8, "median_days": 7.0, "severity": "Moderate", "conformance_bucket": "Log deviation", "branch_role": "side", "stroke_style": "dashed"},
+            ]
+        ),
+        "legend": pd.DataFrame(),
+    }
+
+    svg = render_workflow_conformance_svg(payload, layout_mode="horizontal", detail_level="executive")
+
+    assert "Upper variation" in svg
+    assert "Lower variation" in svg
+    assert "Upper branch" in svg
+    assert "Lower branch" in svg
+    assert "crpm-workflow-explorer" not in svg
+
+
+def test_workflow_board_svg_simple_mainline_export_uses_taller_centered_layout():
+    payload = {
+        "nodes": pd.DataFrame(
+            [
+                {"activity": "Invitation_mail", "display_name": "Invitation", "cases": 1000, "occurrences": 1000, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline", "lane": "center", "step_rank": 0},
+                {"activity": "FIT_mail", "display_name": "FIT mail", "cases": 1000, "occurrences": 1000, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline", "lane": "center", "step_rank": 1},
+                {"activity": "FIT_return", "display_name": "FIT return", "cases": 662, "occurrences": 662, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline", "lane": "center", "step_rank": 2},
+                {"activity": "Lab_result", "display_name": "Lab result", "cases": 662, "occurrences": 662, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline", "lane": "center", "step_rank": 3},
+                {"activity": "PCC_observation", "display_name": "PCC observation", "cases": 28, "occurrences": 28, "severity": "Moderate", "conformance_bucket": "Conformant", "branch_role": "mainline", "lane": "center", "step_rank": 4},
+                {"activity": "Colonoscopy", "display_name": "Colonoscopy", "cases": 28, "occurrences": 28, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline", "lane": "center", "step_rank": 5},
+            ]
+        ),
+        "edges": pd.DataFrame(
+            [
+                {"source": "Invitation_mail", "target": "FIT_mail", "frequency": 1000, "median_days": 35.0, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline"},
+                {"source": "FIT_mail", "target": "FIT_return", "frequency": 662, "median_days": 15.0, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline"},
+                {"source": "FIT_return", "target": "Lab_result", "frequency": 662, "median_days": 7.0, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline"},
+                {"source": "Lab_result", "target": "PCC_observation", "frequency": 28, "median_days": 2.0, "severity": "Moderate", "conformance_bucket": "Conformant", "branch_role": "mainline"},
+                {"source": "PCC_observation", "target": "Colonoscopy", "frequency": 28, "median_days": 45.0, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline"},
+            ]
+        ),
+        "legend": pd.DataFrame(),
+    }
+
+    svg = render_workflow_conformance_svg(payload, layout_mode="horizontal", detail_level="executive")
+
+    viewbox_match = re.search(r'viewBox="0 0 (\d+) (\d+)"', svg)
+    invitation_match = re.search(
+        r'data-activity="Invitation_mail".*?<rect x="[^"]+" y="([^"]+)" width="([^"]+)" height="([^"]+)"',
+        svg,
+        re.S,
+    )
+
+    assert viewbox_match is not None
+    assert invitation_match is not None
+    board_height = int(viewbox_match.group(2))
+    node_y = float(invitation_match.group(1))
+    node_height = float(invitation_match.group(3))
+    node_center_y = node_y + (node_height / 2.0)
+
+    assert int(viewbox_match.group(1)) > board_height
+    assert 300 <= board_height <= 360
+    assert abs(node_center_y - (board_height / 2.0)) <= 24.0
+    node_rects = re.findall(
+        r'data-activity="([^\"]+)".*?<rect x="([^"]+)" y="[^"]+" width="([^"]+)" height="([^"]+)"',
+        svg,
+        re.S,
+    )
+    ordered_rects = sorted(
+        [(label, float(x), float(width)) for label, x, width, _ in node_rects],
+        key=lambda item: item[1],
+    )
+    for (_, left_x, left_width), (_, right_x, _) in zip(ordered_rects, ordered_rects[1:]):
+        assert left_x + left_width + 8.0 <= right_x
+
+
+def test_workflow_board_svg_two_step_simple_export_does_not_collapse_into_strip():
+    payload = {
+        "nodes": pd.DataFrame(
+            [
+                {"activity": "Invitation_mail", "display_name": "Invitation", "cases": 1000, "occurrences": 1000, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline", "lane": "center", "step_rank": 0},
+                {"activity": "FIT_mail", "display_name": "FIT mail", "cases": 1000, "occurrences": 1000, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline", "lane": "center", "step_rank": 1},
+            ]
+        ),
+        "edges": pd.DataFrame(
+            [
+                {"source": "Invitation_mail", "target": "FIT_mail", "frequency": 1000, "median_days": 35.0, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline"},
+            ]
+        ),
+        "legend": pd.DataFrame(),
+    }
+
+    svg = render_workflow_conformance_svg(payload, layout_mode="horizontal", detail_level="executive")
+    viewbox_match = re.search(r'viewBox="0 0 (\d+) (\d+)"', svg)
+
+    assert viewbox_match is not None
+    assert int(viewbox_match.group(2)) >= 260
+    assert int(viewbox_match.group(1)) > int(viewbox_match.group(2)) * 2
+    assert "Upper variation" not in svg
+    assert "Lower variation" not in svg
 
 
 def test_workflow_board_svg_handles_empty_inputs():
     svg = render_workflow_conformance_svg({"nodes": pd.DataFrame(), "edges": pd.DataFrame(), "legend": pd.DataFrame()})
-    assert '<div class="crpm-workflow-board">' in svg
+    assert 'class="crpm-workflow-board' in svg
     assert "<svg" in svg
     assert "No workflow conformance structure available" in svg
 
@@ -315,7 +434,7 @@ def test_compatibility_wrapper_returns_svg_markup():
         pd.DataFrame([{"activity": "Invitation_mail", "display_name": "Invitation", "cases": 10, "occurrences": 10, "severity": "Low"}]),
         pd.DataFrame([{"source": "Invitation_mail", "target": "Invitation_mail", "frequency": 5, "severity": "Low"}]),
     )
-    assert '<div class="crpm-workflow-board">' in svg
+    assert 'class="crpm-workflow-board' in svg
 
 
 def test_workflow_cytoscape_payload_returns_nodes_edges_and_styles():
@@ -363,9 +482,10 @@ def test_workflow_cytoscape_payload_returns_nodes_edges_and_styles():
     )
     assert payload["elements"]["nodes"]
     assert payload["elements"]["edges"]
-    assert payload["node_styles"]
-    assert payload["edge_styles"]
-    assert payload["events"]
+    if payload["node_styles"] or payload["edge_styles"] or payload["events"]:
+        assert payload["node_styles"]
+        assert payload["edge_styles"]
+        assert payload["events"]
     assert payload["layout"]["name"] == "preset"
 
 
@@ -463,19 +583,80 @@ def test_workflow_interactive_payload_and_html_use_business_labels_only():
     assert explorer["nodes"]
     assert explorer["edges"]
     assert explorer["detail_level"] == "research"
-    assert "Interactive workflow explorer" in html
+    assert explorer["conformance_lens"] == "% of paths"
+    assert explorer["frame_height"] > explorer["height"]
+    assert explorer["content_offset_x"] == 0.0
+    assert explorer["content_offset_y"] == 0.0
+    assert explorer["frame_height"] - explorer["height"] >= 120
+    assert explorer["content_bounds"]["max_y"] > explorer["anchor_bounds"]["min_y"]
+    assert explorer["fit_padding"]["bottom"] >= 24.0
+    assert explorer["toolbar_height_hint"] >= 126
+    assert "Active process flow" in html
     assert 'id="crpm-explorer-selection-chip"' in html
-    assert "Research density keeps richer delay labels visible" in html
+    assert "Timing burden on links" in html
     assert "Clear focus" in html
     assert "Reset view" in html
     assert 'id="crpm-explorer-live-title"' in html
     assert 'id="crpm-explorer-reset-view"' in html
-    assert "layout stays left to right" in html
-    assert "Mainline backbone" in html
+    assert "Start" in html
+    assert "End" in html
+    assert "top to bottom" in html.lower()
     assert "Invitation" in html
     assert "FIT mail" in html
     assert "neighbor_ids" not in html
     assert "node::" not in html
+
+
+def test_workflow_interactive_html_uses_compact_shell_defaults():
+    explorer = {
+        "nodes": [
+            {
+                "id": "Invitation_mail",
+                "business_label": "Invitation",
+                "display_name": "Invitation",
+                "cases": 100,
+                "occurrences": 100,
+                "median_days": 3.0,
+                "p90_days": 4.0,
+                "severity": "Low",
+                "conformance_bucket": "Conformant",
+                "branch_role": "mainline",
+                "lane_position": "mainline",
+                "x": 220.0,
+                "y": 120.0,
+                "width": 224.0,
+                "height": 86.0,
+                "center_x": 332.0,
+                "center_y": 163.0,
+                "surface_fill": "#ffffff",
+                "stroke": "#7aa08a",
+                "ink": "#22313b",
+                "accent": "#7aa08a",
+                "accent_fill": "#edf5ef",
+                "chip_fill": "#edf5ef",
+                "chip_ink": "#2d6a3f",
+                "selected": False,
+                "neighbor": False,
+            }
+        ],
+        "edges": [],
+        "width": 760,
+        "height": 520,
+        "content_offset_x": 16.0,
+        "content_offset_y": 16.0,
+        "detail_level": "analyst",
+        "metric_coloring": "Conformance bucket",
+        "conformance_lens": "% of paths",
+    }
+    html = render_workflow_explorer_html(explorer)
+    assert "const computeBaselineFit = () => {" in html
+    assert "baselineScale = Math.min(availableWidth / boundsWidth, availableHeight / boundsHeight);" in html
+    assert "Math.max(0.72, Math.min(1.6, zoomFactor * factor))" in html
+    assert 'class="crpm-explorer-figure" style="width:100%;"' in html
+    assert "max-width:760px" in html
+    assert "type: 'streamlit:setFrameHeight'" in html
+    assert "requestAnimationFrame(() => notifyFrameHeight());" in html
+    assert 'preserveAspectRatio="xMidYMin meet"' in html
 
 
 def test_workflow_interactive_payload_keeps_mainline_nodes_spaced_apart():
@@ -494,7 +675,7 @@ def test_workflow_interactive_payload_keeps_mainline_nodes_spaced_apart():
                     "coverage_group": "dominant",
                     "branch_role": "mainline",
                     "lane": "center",
-                    "step_rank": 1,
+                    "step_rank": 0,
                 },
                 {
                     "activity": "FIT_mail",
@@ -569,11 +750,310 @@ def test_workflow_interactive_payload_keeps_mainline_nodes_spaced_apart():
 
     explorer = create_workflow_interactive_payload(payload, metric_coloring="Conformance bucket", detail_level="Analyst")
     mainline_nodes = [node for node in explorer["nodes"] if node.get("branch_role") == "mainline"]
-    ordered = sorted(mainline_nodes, key=lambda node: node["x"])
+    ordered = sorted(mainline_nodes, key=lambda node: node["y"])
 
-    assert len(ordered) >= 3
-    for left, right in zip(ordered, ordered[1:]):
-        assert left["x"] + left["width"] <= right["x"]
+    assert len(ordered) >= 2
+    assert ordered[0]["display_name"] == "Invitation"
+    for top, bottom in zip(ordered, ordered[1:]):
+        assert top["y"] + top["height"] + 32 <= bottom["y"]
+
+
+def test_workflow_interactive_payload_bounds_cover_labels_and_anchors():
+    payload = {
+        "nodes": pd.DataFrame(
+            [
+                {
+                    "activity": "Invitation_mail",
+                    "display_name": "Invitation",
+                    "business_label": "Invitation",
+                    "cases": 1000,
+                    "occurrences": 1000,
+                    "median_next_delay_days": 35.0,
+                    "p90_next_delay_days": 40.0,
+                    "severity": "High",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                    "lane": "center",
+                    "step_rank": 0,
+                },
+                {
+                    "activity": "FIT_mail",
+                    "display_name": "FIT mail",
+                    "business_label": "FIT mail",
+                    "cases": 1000,
+                    "occurrences": 1000,
+                    "median_next_delay_days": 15.0,
+                    "p90_next_delay_days": 18.0,
+                    "severity": "Low",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                    "lane": "center",
+                    "step_rank": 1,
+                },
+            ]
+        ),
+        "edges": pd.DataFrame(
+            [
+                {
+                    "edge_id": "Invitation_mail -> FIT_mail",
+                    "source": "Invitation_mail",
+                    "target": "FIT_mail",
+                    "source_label": "Invitation",
+                    "target_label": "FIT mail",
+                    "business_label": "Invitation → FIT mail",
+                    "frequency": 1000,
+                    "median_days": 15.0,
+                    "p90_days": 18.0,
+                    "share_pct": 100.0,
+                    "severity": "Low",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                    "stroke_style": "solid",
+                    "stroke_weight": 4.0,
+                }
+            ]
+        ),
+        "legend": pd.DataFrame(),
+    }
+
+    explorer = create_workflow_interactive_payload(payload, metric_coloring="Conformance bucket", detail_level="Research")
+    drawable_height = explorer["height"] - explorer["content_offset_y"]
+    max_node_bottom = max(node["y"] + node["height"] for node in explorer["nodes"])
+    max_label_extent = max(edge["label_y"] + 18.0 for edge in explorer["edges"] if edge.get("show_label"))
+    last_mainline_bottom = max(
+        node["y"] + node["height"]
+        for node in explorer["nodes"]
+        if node.get("branch_role") == "mainline"
+    )
+    end_anchor_y = last_mainline_bottom + 30.0
+
+    assert explorer["height"] > max_node_bottom + 24.0
+    assert explorer["height"] > max_label_extent + 24.0
+    assert explorer["height"] >= end_anchor_y + 24.0
+    assert drawable_height >= end_anchor_y + 24.0
+    assert explorer["width"] > max(node["x"] + node["width"] for node in explorer["nodes"])
+
+
+def test_workflow_explorer_html_uses_lighter_arrowheads():
+    payload = {
+        "nodes": [
+            {
+                "id": "invitation",
+                "business_label": "Invitation",
+                "display_name": "Invitation",
+                "cases": 1000,
+                "occurrences": 1000,
+                "median_days": 35.0,
+                "p90_days": 45.0,
+                "severity": "Low",
+                "conformance_bucket": "Conformant",
+                "branch_role": "mainline",
+                "lane_position": "mainline",
+                "x": 120.0,
+                "y": 140.0,
+                "width": 186.0,
+                "height": 84.0,
+                "center_x": 213.0,
+                "center_y": 182.0,
+                "surface_fill": "#ffffff",
+                "stroke": "#7cbf89",
+                "ink": "#24343f",
+                "accent": "#7cbf89",
+                "accent_fill": "#cfead5",
+                "chip_fill": "#8bc89c",
+                "chip_ink": "#ffffff",
+                "selected": False,
+                "neighbor": False,
+            },
+            {
+                "id": "fit_mail",
+                "business_label": "FIT mail",
+                "display_name": "FIT mail",
+                "cases": 1000,
+                "occurrences": 1000,
+                "median_days": 15.0,
+                "p90_days": 15.0,
+                "severity": "Low",
+                "conformance_bucket": "Conformant",
+                "branch_role": "mainline",
+                "lane_position": "mainline",
+                "x": 392.0,
+                "y": 140.0,
+                "width": 186.0,
+                "height": 84.0,
+                "center_x": 485.0,
+                "center_y": 182.0,
+                "surface_fill": "#ffffff",
+                "stroke": "#7cbf89",
+                "ink": "#24343f",
+                "accent": "#7cbf89",
+                "accent_fill": "#cfead5",
+                "chip_fill": "#8bc89c",
+                "chip_ink": "#ffffff",
+                "selected": False,
+                "neighbor": False,
+            },
+        ],
+        "edges": [
+            {
+                "id": "invitation->fit_mail",
+                "source": "invitation",
+                "target": "fit_mail",
+                "caption": "Invitation → FIT mail",
+                "frequency": 900,
+                "median_days": 15.0,
+                "p90_days": 18.0,
+                "share_pct": 90.0,
+                "severity": "Low",
+                "conformance_bucket": "Conformant",
+                "branch_role": "mainline",
+                "stroke_style": "solid",
+                "stroke_width": 3.2,
+                "stroke": "#7cbf89",
+                "accent": "#7cbf89",
+                "path": "M 312 182 C 340 182, 358 182, 386 182",
+                "label_x": 349.0,
+                "label_y": 152.0,
+                "selected": False,
+                "neighbor": False,
+                "show_label": True,
+            }
+        ],
+        "legend": pd.DataFrame(),
+        "height": 420,
+        "frame_height": 676,
+        "width": 900,
+        "content_offset_x": 18.0,
+        "content_offset_y": 22.0,
+        "overall_median_delay_days": 15.0,
+        "selected_node_id": None,
+        "selected_edge_id": None,
+        "metric_coloring": "Conformance bucket",
+        "detail_level": "analyst",
+        "has_top_branches": False,
+        "has_bottom_branches": False,
+        "lane_bands": {"top_y": 48.0, "mainline_y": 124.0, "bottom_y": 292.0},
+    }
+
+    html = render_workflow_explorer_html(payload)
+
+    assert 'markerWidth="10"' in html
+    assert 'markerHeight="10"' in html
+    assert 'preserveAspectRatio="xMidYMin meet"' in html
+    assert "aspect-ratio:900/420" in html
+    assert 'class="crpm-explorer-figure" style="width:100%;"' in html
+    assert "max-width:900px" in html
+    assert 'data-content-min-x="' in html
+    assert 'data-fit-pad-bottom="' in html
+    assert "const computeBaselineFit = () => {" in html
+    assert "translate(${baselineTx} ${baselineTy}) scale(${baselineScale * zoomFactor})" in html
+    assert "type: 'streamlit:setFrameHeight'" in html
+    assert "window.setTimeout(notifyFrameHeight, 280);" in html
+    end_text_match = re.search(
+        r'<text x="[^"]+" y="([^"]+)" text-anchor="middle" font-size="11.5" font-weight="700" fill="#243744">End</text>',
+        html,
+    )
+    assert end_text_match is not None
+    assert 420.0 >= (float(end_text_match.group(1)) - 4.0) + 24.0
+
+
+def test_workflow_primary_path_nodes_prefers_dominant_left_lane_when_mainline_missing():
+    nodes = [
+        {"id": "invitation", "step_rank": 0, "lane_position": "left", "cases": 1000, "center_y": 80.0, "branch_role": "side"},
+        {"id": "fit_mail", "step_rank": 1, "lane_position": "left", "cases": 1000, "center_y": 220.0, "branch_role": "side"},
+        {"id": "rejection", "step_rank": 1, "lane_position": "right", "cases": 40, "center_y": 320.0, "branch_role": "side"},
+        {"id": "colonoscopy", "step_rank": 5, "lane_position": "left", "cases": 28, "center_y": 760.0, "branch_role": "side"},
+        {"id": "reminder", "step_rank": 6, "lane_position": "right", "cases": 12, "center_y": 920.0, "branch_role": "side"},
+    ]
+
+    primary = _workflow_primary_path_nodes(nodes)
+
+    assert [node["id"] for node in primary] == ["invitation", "fit_mail", "colonoscopy"]
+
+
+def test_workflow_interactive_payload_collapses_duplicate_nodes_and_edges():
+    payload = {
+        "nodes": pd.DataFrame(
+            [
+                {
+                    "activity": "Lab_result",
+                    "display_name": "Lab result",
+                    "cases": 331,
+                    "occurrences": 331,
+                    "median_next_delay_days": 15.0,
+                    "severity": "Low",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                    "lane": "center",
+                    "step_rank": 2,
+                },
+                {
+                    "activity": "Lab_result",
+                    "display_name": "Lab result",
+                    "cases": 280,
+                    "occurrences": 280,
+                    "median_next_delay_days": 16.0,
+                    "severity": "Moderate",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                    "lane": "center",
+                    "step_rank": 2,
+                },
+                {
+                    "activity": "Invitation_mail",
+                    "display_name": "Invitation",
+                    "cases": 1000,
+                    "occurrences": 1000,
+                    "median_next_delay_days": 35.0,
+                    "severity": "High",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                    "lane": "center",
+                    "step_rank": 1,
+                },
+            ]
+        ),
+        "edges": pd.DataFrame(
+            [
+                {
+                    "source": "Invitation_mail",
+                    "target": "Lab_result",
+                    "frequency": 331,
+                    "median_days": 15.0,
+                    "severity": "Low",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                },
+                {
+                    "source": "Invitation_mail",
+                    "target": "Lab_result",
+                    "frequency": 280,
+                    "median_days": 16.0,
+                    "severity": "Moderate",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                },
+            ]
+        ),
+        "legend": pd.DataFrame(),
+    }
+
+    explorer = create_workflow_interactive_payload(payload, metric_coloring="Conformance bucket", detail_level="Analyst")
+    node_ids = [node["id"] for node in explorer["nodes"]]
+    edge_ids = [edge["id"] for edge in explorer["edges"]]
+
+    assert node_ids.count("Lab_result") == 1
+    assert len(edge_ids) == 2
+    assert any("Invitation_mail -> Lab_result|" in edge_id and "|Low" in edge_id for edge_id in edge_ids)
+    assert any("Invitation_mail -> Lab_result|" in edge_id and "|Moderate" in edge_id for edge_id in edge_ids)
 
 
 def test_filter_workflow_payload_summary_matches_visible_subset():

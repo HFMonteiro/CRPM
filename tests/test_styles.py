@@ -29,8 +29,15 @@ def test_conformance_note_and_workflow_board_styles_exist() -> None:
     css = get_custom_css()
     assert ".crpm-note" in css
     assert ".crpm-workflow-board" in css
+    assert ".crpm-workflow-board svg" in css
+    assert "width: 100%;" in css
+    assert "height: auto;" in css
     assert ".crpm-empty-state" in css
     assert ".crpm-inline-empty" in css
+    assert ".crpm-conformance-hero" in css
+    assert ".crpm-conformance-stage-header" in css
+    assert ".crpm-conformance-report-band" in css
+    assert ".crpm-conformance-evidence-band" in css
 
 
 def test_primary_button_and_inspector_styles_exist() -> None:
@@ -38,7 +45,6 @@ def test_primary_button_and_inspector_styles_exist() -> None:
     assert ".stButton button[kind=\"primary\"]:focus" in css
     assert "[data-testid=\"stBaseButton-primary\"] *" in css
     assert ".crpm-selection-card" in css
-    assert ".crpm-mode-banner" in css
     assert ".crpm-detail-card" in css
     assert ".crpm-model-card-grid" in css
     assert ".crpm-ranked-table" in css
@@ -47,12 +53,23 @@ def test_primary_button_and_inspector_styles_exist() -> None:
     assert ".crpm-chip--conformant" in css
 
 
+def test_conformance_compact_shell_styles_exist() -> None:
+    css = get_custom_css()
+    assert ".crpm-conformance-kpi-strip" in css
+    assert ".crpm-conformance-kpi-strip--rail" in css
+    assert "max-height: 360px;" in css
+    assert ".crpm-workflow-board--horizontal" in css
+
+
 def test_overview_and_bi_card_styles_exist() -> None:
     css = get_custom_css()
     assert ".crpm-overview-hero" in css
     assert ".crpm-overview-hero__chip--accent" in css
     assert ".crpm-bi-card-grid" in css
     assert ".crpm-page-card-grid" in css
+    assert ".crpm-reading-order-band" in css
+    assert ".crpm-shell-hero--compact" in css
+    assert ".crpm-shell-hero__meta" in css
     assert ".crpm-chip--watch" in css
     assert ".crpm-chip--deviation-heavy" in css
     assert ".crpm-header-badges" in css

@@ -153,6 +153,12 @@ def test_render_dfg_page_uses_coverage_slider_and_ranked_table(monkeypatch):
         def __init__(self, index: int):
             self.index = index
 
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
         def selectbox(self, label, options, **kwargs):
             calls["labels"].append(label)
             return "Frequency"
@@ -167,6 +173,17 @@ def test_render_dfg_page_uses_coverage_slider_and_ranked_table(monkeypatch):
 
         def dataframe(self, df, **kwargs):
             calls["tables"].append(df)
+            return None
+
+        def markdown(self, text, **kwargs):
+            calls["markdown"].append(text)
+            return None
+
+        def image(self, *args, **kwargs):
+            calls["charts"] = calls.get("charts", 0) + 1
+            return None
+
+        def warning(self, *args, **kwargs):
             return None
 
     class _Spinner:
@@ -194,6 +211,11 @@ def test_render_dfg_page_uses_coverage_slider_and_ranked_table(monkeypatch):
     monkeypatch.setattr(dfg_page.st, "markdown", lambda text, **kwargs: calls["markdown"].append(text))
     monkeypatch.setattr(dfg_page, "render_quiet_note", lambda message: calls["notes"].append(message))
     monkeypatch.setattr(dfg_page, "render_inline_empty", lambda message: calls["notes"].append(message))
+    monkeypatch.setattr(
+        dfg_page,
+        "render_html_ranked_table",
+        lambda df, **kwargs: calls["tables"].append(df),
+    )
     monkeypatch.setattr(dfg_page, "discover_dfg_frequency", lambda log: ({("A", "B"): 10, ("B", "C"): 6, ("C", "D"): 3, ("D", "E"): 1}, {"A": 1}, {"E": 1}))
     monkeypatch.setattr(dfg_page, "discover_dfg_performance", lambda log: ({("A", "B"): 10, ("B", "C"): 6, ("C", "D"): 3, ("D", "E"): 1}, {"A": 1}, {"E": 1}))
     monkeypatch.setattr(dfg_page, "render_dfg_to_svg", lambda *args, **kwargs: "<svg><text>demo</text></svg>")
@@ -201,12 +223,13 @@ def test_render_dfg_page_uses_coverage_slider_and_ranked_table(monkeypatch):
 
     dfg_page.render_dfg_page(snapshot)
 
-    assert "Edge frequency coverage (%)" in calls["labels"]
+    assert "Edge coverage band (%)" in calls["labels"]
     assert any("Coverage (%)" in list(table.columns) for table in calls["tables"])
-    assert any("ranked band of edges" in text.lower() for text in calls["notes"])
-    assert any("Most frequent edge" == metric[0] for metric in calls["metrics"])
-    assert any("Frequency" in list(table.columns) for table in calls["tables"])
+    assert any("ranked band of directly-follows edges" in text.lower() for text in calls["captions"])
+    assert any("Most frequent edge" in text for text in calls["markdown"])
+    assert any("Events" in list(table.columns) for table in calls["tables"])
     assert any("crpm-dfg-vector" in text for text in calls["markdown"])
+    assert calls["markdown"].index("#### Directly-follows map") < calls["markdown"].index("#### Ranked edge detail")
     assert calls["charts"] == 0
 
 
@@ -214,6 +237,12 @@ def test_render_dfg_page_supports_performance_mode(monkeypatch):
     calls = {"labels": [], "variant": None, "metrics": [], "tables": [], "markdown": []}
 
     class _Column:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
         def selectbox(self, label, options, **kwargs):
             calls["labels"].append(label)
             return "Performance"
@@ -228,6 +257,16 @@ def test_render_dfg_page_supports_performance_mode(monkeypatch):
 
         def dataframe(self, df, **kwargs):
             calls["tables"].append(df)
+            return None
+
+        def markdown(self, text, **kwargs):
+            calls["markdown"].append(text)
+            return None
+
+        def image(self, *args, **kwargs):
+            return None
+
+        def warning(self, *args, **kwargs):
             return None
 
     class _Spinner:
@@ -255,6 +294,11 @@ def test_render_dfg_page_supports_performance_mode(monkeypatch):
     monkeypatch.setattr(dfg_page.st, "markdown", lambda text, **kwargs: calls["markdown"].append(text))
     monkeypatch.setattr(dfg_page, "render_quiet_note", lambda *args, **kwargs: None)
     monkeypatch.setattr(dfg_page, "render_inline_empty", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        dfg_page,
+        "render_html_ranked_table",
+        lambda df, **kwargs: calls["tables"].append(df),
+    )
     monkeypatch.setattr(dfg_page, "discover_dfg_frequency", lambda log: ({("A", "B"): 10}, {"A": 1}, {"B": 1}))
     monkeypatch.setattr(dfg_page, "discover_dfg_performance", lambda log: ({("A", "B"): 10}, {"A": 1}, {"B": 1}))
     monkeypatch.setattr(
@@ -267,8 +311,9 @@ def test_render_dfg_page_supports_performance_mode(monkeypatch):
     dfg_page.render_dfg_page(snapshot)
 
     assert "DFG type" in calls["labels"]
-    assert any("Slowest edge" == metric[0] for metric in calls["metrics"])
-    assert any("Median delay (days)" in list(table.columns) for table in calls["tables"])
+    assert any("Slowest edge" in text for text in calls["markdown"])
+    assert any("Median delay" in list(table.columns) for table in calls["tables"])
+    assert any("10 s" in table.to_string() for table in calls["tables"])
     assert calls["variant"] == "performance"
     assert any("crpm-dfg-vector" in text for text in calls["markdown"])
 
@@ -277,6 +322,12 @@ def test_render_dfg_page_falls_back_to_png_when_svg_fails(monkeypatch):
     calls = {"image": [], "warnings": [], "variant": None}
 
     class _Column:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
         def selectbox(self, label, options, **kwargs):
             return "Frequency"
 
@@ -287,6 +338,17 @@ def test_render_dfg_page_falls_back_to_png_when_svg_fails(monkeypatch):
             return None
 
         def dataframe(self, *args, **kwargs):
+            return None
+
+        def markdown(self, text, **kwargs):
+            return None
+
+        def image(self, *args, **kwargs):
+            calls["image"].append(args[0])
+            return None
+
+        def warning(self, text, **kwargs):
+            calls["warnings"].append(text)
             return None
 
     class _Spinner:

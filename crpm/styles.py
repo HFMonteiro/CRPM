@@ -8,7 +8,13 @@ def get_custom_css() -> str:
     :root {
         --crpm-bg: #f5f3f8;
         --crpm-bg-soft: #efecf4;
-        --crpm-sidebar: #f2eef6;
+        --crpm-sidebar: #1b2127;
+        --crpm-sidebar-soft: #242b33;
+        --crpm-sidebar-panel: #10161b;
+        --crpm-sidebar-border: rgba(173, 191, 214, 0.16);
+        --crpm-sidebar-text: #eef3f8;
+        --crpm-sidebar-text-soft: #b4c0cd;
+        --crpm-sidebar-accent: #6f88c6;
         --crpm-surface: #fcfbfd;
         --crpm-surface-alt: #f7f4fa;
         --crpm-forest: #365348;
@@ -46,7 +52,7 @@ def get_custom_css() -> str:
         background: rgba(245, 243, 248, 0.92) !important;
         color: var(--crpm-text) !important;
         border-bottom: 1px solid rgba(71, 88, 79, 0.12) !important;
-        padding: 0.55rem 1.15rem !important;
+        padding: 0.55rem 0.75rem !important;
         box-shadow: 0 8px 24px rgba(50, 41, 66, 0.07) !important;
         backdrop-filter: blur(14px) !important;
         position: sticky !important;
@@ -58,17 +64,13 @@ def get_custom_css() -> str:
         color: var(--crpm-text) !important;
     }
 
-    .main .block-container {
-        padding-top: 1rem !important;
-    }
-
     .block-container {
-        max-width: min(1460px, calc(100vw - 18.2rem)) !important;
+        max-width: min(1580px, calc(100vw - 17.4rem)) !important;
         margin: 0 auto !important;
-        padding-top: 1rem !important;
-        padding-bottom: 8.2rem !important;
-        padding-left: 1.6rem !important;
-        padding-right: 1.6rem !important;
+        padding-top: 0.2rem !important;
+        padding-bottom: 7rem !important;
+        padding-left: 0.9rem !important;
+        padding-right: 0.9rem !important;
         color: var(--crpm-text) !important;
     }
 
@@ -89,19 +91,19 @@ def get_custom_css() -> str:
 
     h1 {
         font-size: 1.92rem !important;
-        margin-bottom: 0.85rem !important;
+        margin-bottom: 0.52rem !important;
     }
 
     h2 {
         font-size: 1.45rem !important;
-        margin-top: 1rem !important;
-        margin-bottom: 0.65rem !important;
+        margin-top: 0.44rem !important;
+        margin-bottom: 0.28rem !important;
     }
 
     h3 {
         font-size: 1.18rem !important;
-        margin-top: 0.9rem !important;
-        margin-bottom: 0.45rem !important;
+        margin-top: 0.3rem !important;
+        margin-bottom: 0.16rem !important;
     }
 
     .stTabs [data-baseweb="tab-list"] {
@@ -158,14 +160,15 @@ def get_custom_css() -> str:
 
     div[role="radiogroup"][aria-label="button group"] > button {
         min-height: 2.25rem !important;
-        padding: 0.38rem 0.82rem !important;
+        padding: 0.34rem 0.68rem !important;
         border-radius: 12px !important;
-        border: 1px solid transparent !important;
-        background: transparent !important;
+        border: 1px solid rgba(142, 122, 168, 0.12) !important;
+        background: rgba(255, 255, 255, 0.62) !important;
         color: var(--crpm-text-soft) !important;
         font-weight: 700 !important;
+        font-size: 0.82rem !important;
         letter-spacing: 0.01em !important;
-        box-shadow: none !important;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.76) !important;
         transition: transform 0.16s ease, background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease !important;
     }
 
@@ -193,10 +196,11 @@ def get_custom_css() -> str:
     }
 
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, var(--crpm-sidebar) 0%, #f6f2f8 100%) !important;
-        border-right: 1px solid rgba(71, 88, 79, 0.14) !important;
+        background: linear-gradient(180deg, #1a2026 0%, #151b21 100%) !important;
+        border-right: 1px solid var(--crpm-sidebar-border) !important;
         min-width: 17rem !important;
         max-width: 17rem !important;
+        box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.03) !important;
     }
 
     [data-testid="stSidebar"] > div:first-child {
@@ -209,19 +213,29 @@ def get_custom_css() -> str:
         padding-top: 0.4rem !important;
         padding-left: 0.8rem !important;
         padding-right: 0.8rem !important;
-        color: var(--crpm-text) !important;
+        color: var(--crpm-sidebar-text) !important;
     }
 
     [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] p,
     [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] label,
     [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] span {
-        color: var(--crpm-text) !important;
+        color: var(--crpm-sidebar-text) !important;
     }
 
-    [data-testid="stSidebar"] h1 {
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3,
+    [data-testid="stSidebar"] h4 {
         font-size: 1.35rem !important;
-        color: var(--crpm-forest-strong) !important;
+        color: var(--crpm-sidebar-text) !important;
         line-height: 1.2 !important;
+    }
+
+    [data-testid="stSidebar"] .stCaption,
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p,
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] span {
+        color: var(--crpm-sidebar-text-soft) !important;
     }
 
     .stButton button,
@@ -229,6 +243,7 @@ def get_custom_css() -> str:
         font-weight: 600 !important;
         border-radius: 12px !important;
         padding: 0.52rem 0.95rem !important;
+        white-space: nowrap !important;
         transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease !important;
     }
 
@@ -283,6 +298,12 @@ def get_custom_css() -> str:
         background: rgba(255, 255, 255, 0.76) !important;
         color: var(--crpm-forest-strong) !important;
         border: 1px solid rgba(142, 122, 168, 0.22) !important;
+        width: auto !important;
+        min-width: 4.8rem !important;
+        min-height: 1.95rem !important;
+        padding: 0.24rem 0.48rem !important;
+        font-size: 0.72rem !important;
+        line-height: 1 !important;
     }
 
     .stAlert {
@@ -329,6 +350,15 @@ def get_custom_css() -> str:
         color: #5c4931 !important;
     }
 
+    .stWarning [data-testid="stMarkdownContainer"],
+    .stWarning [data-testid="stMarkdownContainer"] p,
+    .stWarning [data-testid="stMarkdownContainer"] span,
+    .stWarning [data-testid="stMarkdownContainer"] div,
+    .stWarning [data-testid="stMarkdownContainer"] li {
+        color: #4b3825 !important;
+        opacity: 1 !important;
+    }
+
     [data-testid="stSidebar"] .stWarning {
         background: rgba(247, 242, 233, 0.98) !important;
         border-color: rgba(143, 118, 83, 0.28) !important;
@@ -368,17 +398,41 @@ def get_custom_css() -> str:
     .crpm-workflow-board {
         background: rgba(252, 251, 253, 0.78);
         border: 1px solid rgba(71, 88, 79, 0.12);
-        border-radius: 26px;
+        border-radius: 22px;
         box-shadow: var(--crpm-shadow-soft);
-        margin: 0.25rem 0 0.9rem 0;
+        margin: 0.08rem 0 0.42rem 0;
         overflow: hidden;
-        padding: 0.18rem;
+        padding: 0.12rem;
     }
 
     .crpm-workflow-board svg {
         display: block;
         height: auto;
         width: 100%;
+    }
+
+    .crpm-workflow-board--horizontal {
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 0.08rem 0.12rem;
+        width: 100%;
+        max-width: 100%;
+        margin-left: 0;
+        margin-right: 0;
+    }
+
+    .crpm-workflow-board--horizontal svg {
+        display: block;
+        min-width: 100%;
+        width: auto;
+    }
+
+    @media (max-width: 1180px) {
+        .crpm-workflow-board--horizontal {
+            width: 100%;
+            margin-left: 0;
+            margin-right: 0;
+        }
     }
 
     .streamlit-expanderHeader,
@@ -393,6 +447,59 @@ def get_custom_css() -> str:
     [data-testid="stFileUploader"]:hover {
         background: rgba(244, 239, 248, 0.98) !important;
         border-color: rgba(142, 122, 168, 0.24) !important;
+    }
+
+    [data-testid="stSidebar"] .streamlit-expanderHeader,
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] {
+        background: linear-gradient(180deg, rgba(19, 26, 32, 0.96) 0%, rgba(16, 22, 27, 0.96) 100%) !important;
+        border: 1px solid rgba(154, 171, 196, 0.18) !important;
+        box-shadow: none !important;
+    }
+
+    [data-testid="stSidebar"] .streamlit-expanderHeader:hover,
+    [data-testid="stSidebar"] [data-testid="stFileUploader"]:hover {
+        background: linear-gradient(180deg, rgba(26, 34, 42, 0.98) 0%, rgba(18, 25, 31, 0.98) 100%) !important;
+        border-color: rgba(111, 136, 198, 0.32) !important;
+    }
+
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {
+        background: rgba(252, 251, 253, 0.98) !important;
+        border: 1px solid rgba(71, 88, 79, 0.16) !important;
+        border-radius: 12px !important;
+    }
+
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"],
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] span,
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] small,
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] p,
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] p {
+        color: #2c3742 !important;
+    }
+
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] p:first-child,
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] div:first-child,
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] strong {
+        color: #24313d !important;
+        font-weight: 700 !important;
+    }
+
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] small,
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] p:not(:first-child) {
+        color: #5d6874 !important;
+    }
+
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] button {
+        background: #ffffff !important;
+        color: #3d4651 !important;
+        border: 1px solid rgba(71, 88, 79, 0.18) !important;
+        box-shadow: 0 2px 8px rgba(50, 41, 66, 0.08) !important;
+    }
+
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] button:hover {
+        background: #f6f7fb !important;
+        color: #273440 !important;
+        border-color: rgba(95, 121, 165, 0.28) !important;
+        box-shadow: 0 6px 14px rgba(50, 41, 66, 0.12) !important;
     }
 
     .stTextInput input,
@@ -412,6 +519,28 @@ def get_custom_css() -> str:
         border-radius: 10px !important;
     }
 
+    [data-testid="stSidebar"] .stTextInput input,
+    [data-testid="stSidebar"] .stTextArea textarea,
+    [data-testid="stSidebar"] .stNumberInput input,
+    [data-testid="stSidebar"] .stDateInput input {
+        background: rgba(12, 17, 22, 0.98) !important;
+        color: var(--crpm-sidebar-text) !important;
+        border: 1px solid rgba(154, 171, 196, 0.2) !important;
+    }
+
+    [data-testid="stSidebar"] [data-baseweb="select"] > div,
+    [data-testid="stSidebar"] [data-baseweb="base-input"] > div {
+        background: rgba(12, 17, 22, 0.98) !important;
+        color: var(--crpm-sidebar-text) !important;
+        border: 1px solid rgba(154, 171, 196, 0.2) !important;
+        box-shadow: none !important;
+    }
+
+    [data-testid="stSidebar"] [data-baseweb="select"] svg,
+    [data-testid="stSidebar"] [data-baseweb="base-input"] svg {
+        fill: var(--crpm-sidebar-text-soft) !important;
+    }
+
     [data-baseweb="popover"] {
         color: var(--crpm-text) !important;
     }
@@ -422,9 +551,22 @@ def get_custom_css() -> str:
         font-weight: 600 !important;
     }
 
+    [data-testid="stSidebar"] .stSelectbox label,
+    [data-testid="stSidebar"] .stTextInput label,
+    [data-testid="stSidebar"] .stNumberInput label,
+    [data-testid="stSidebar"] .stTextArea label,
+    [data-testid="stSidebar"] .stDateInput label {
+        color: var(--crpm-sidebar-text-soft) !important;
+    }
+
     .stCheckbox label, .stRadio label {
         color: var(--crpm-text) !important;
         font-weight: 600 !important;
+    }
+
+    [data-testid="stSidebar"] .stCheckbox label,
+    [data-testid="stSidebar"] .stRadio label {
+        color: var(--crpm-sidebar-text) !important;
     }
 
     [data-testid="stWidgetLabel"] p,
@@ -432,6 +574,12 @@ def get_custom_css() -> str:
     [data-testid="stWidgetLabel"] label {
         color: var(--crpm-text) !important;
         opacity: 1 !important;
+    }
+
+    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] span,
+    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] label {
+        color: var(--crpm-sidebar-text-soft) !important;
     }
 
     [data-testid="stRadio"] label,
@@ -444,6 +592,17 @@ def get_custom_css() -> str:
     [data-testid="stSlider"] [data-testid="stWidgetLabel"] span {
         color: var(--crpm-text) !important;
         opacity: 1 !important;
+    }
+
+    [data-testid="stSidebar"] [data-testid="stRadio"] label,
+    [data-testid="stSidebar"] [data-testid="stRadio"] label span,
+    [data-testid="stSidebar"] [data-testid="stRadio"] label p,
+    [data-testid="stSidebar"] [data-testid="stCheckbox"] label,
+    [data-testid="stSidebar"] [data-testid="stCheckbox"] label span,
+    [data-testid="stSidebar"] [data-testid="stCheckbox"] label p,
+    [data-testid="stSidebar"] [data-testid="stSlider"] [data-testid="stWidgetLabel"] p,
+    [data-testid="stSidebar"] [data-testid="stSlider"] [data-testid="stWidgetLabel"] span {
+        color: var(--crpm-sidebar-text) !important;
     }
 
     [data-baseweb="radio"] label,
@@ -464,6 +623,36 @@ def get_custom_css() -> str:
         font-weight: 700 !important;
     }
 
+    [data-testid="stSidebar"] [data-testid="stRadio"] label[data-checked="true"] span,
+    [data-testid="stSidebar"] [data-testid="stCheckbox"] label[data-checked="true"] span {
+        color: #ffffff !important;
+    }
+
+    [data-testid="stSidebar"] [data-baseweb="tag"] {
+        background: rgba(177, 84, 73, 0.96) !important;
+        border-radius: 8px !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    }
+
+    [data-testid="stSidebar"] [data-baseweb="tag"] * {
+        color: #fff4f0 !important;
+        fill: #fff4f0 !important;
+    }
+
+    [data-testid="stSidebar"] .stButton button:not([kind="primary"]) {
+        background: rgba(15, 21, 27, 0.96) !important;
+        color: var(--crpm-sidebar-text) !important;
+        border: 1px solid rgba(154, 171, 196, 0.18) !important;
+        box-shadow: none !important;
+    }
+
+    [data-testid="stSidebar"] .stButton button[kind="primary"],
+    [data-testid="stSidebar"] [data-testid="stBaseButton-primary"] {
+        background: linear-gradient(135deg, #24463b 0%, #485da5 100%) !important;
+        border: 1px solid rgba(130, 151, 214, 0.22) !important;
+        box-shadow: 0 12px 22px rgba(10, 13, 19, 0.42) !important;
+    }
+
     .stProgress > div > div > div {
         background: linear-gradient(90deg, var(--crpm-forest), var(--crpm-lavender)) !important;
     }
@@ -471,10 +660,11 @@ def get_custom_css() -> str:
     .stCaption {
         color: var(--crpm-muted) !important;
         font-size: 0.84rem !important;
+        margin-bottom: 0.2rem !important;
     }
 
     .crpm-note {
-        margin: 0.25rem 0 0.75rem 0 !important;
+        margin: 0.16rem 0 0.48rem 0 !important;
         padding: 0.68rem 0.82rem !important;
         border-radius: 12px !important;
         border: 1px solid rgba(71, 88, 79, 0.12) !important;
@@ -498,7 +688,7 @@ def get_custom_css() -> str:
     }
 
     .crpm-legend-note {
-        margin: 0.2rem 0 0.7rem 0 !important;
+        margin: 0.14rem 0 0.46rem 0 !important;
         padding: 0.58rem 0.76rem !important;
         border-radius: 12px !important;
         border: 1px solid rgba(71, 88, 79, 0.12) !important;
@@ -518,8 +708,8 @@ def get_custom_css() -> str:
     }
 
     .crpm-mode-banner {
-        margin: 0.16rem 0 0.65rem 0;
-        padding: 0.66rem 0.82rem;
+        margin: 0.08rem 0 0.34rem 0;
+        padding: 0.6rem 0.78rem;
         border-radius: 14px;
         border: 1px solid rgba(71, 88, 79, 0.14);
         background: rgba(252, 251, 253, 0.96);
@@ -550,7 +740,7 @@ def get_custom_css() -> str:
     }
 
     .crpm-selection-card {
-        margin: 0.35rem 0 0.8rem 0;
+        margin: 0.2rem 0 0.52rem 0;
         padding: 0.82rem 0.92rem;
         border-radius: 16px;
         border: 1px solid rgba(71, 88, 79, 0.12);
@@ -599,9 +789,9 @@ def get_custom_css() -> str:
 
     .crpm-detail-card {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
         gap: 0.55rem;
-        margin: 0.2rem 0 0.75rem 0;
+        margin: 0.14rem 0 0.5rem 0;
         padding: 0.8rem;
         border-radius: 16px;
         border: 1px solid rgba(71, 88, 79, 0.1);
@@ -674,7 +864,7 @@ def get_custom_css() -> str:
 
     .crpm-model-card__grid {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 0.55rem;
     }
 
@@ -705,7 +895,7 @@ def get_custom_css() -> str:
     }
 
     .crpm-mini-note {
-        margin-bottom: 0.55rem;
+        margin-bottom: 0.36rem;
         padding: 0.65rem 0.78rem;
         border-radius: 12px;
         border: 1px solid rgba(71, 88, 79, 0.1);
@@ -724,13 +914,13 @@ def get_custom_css() -> str:
 
     .crpm-ranked-table__title {
         padding: 0.62rem 0.78rem 0.44rem 0.78rem;
-        font-size: 0.84rem;
+        font-size: 0.88rem;
         font-weight: 700;
         color: var(--crpm-forest-strong);
     }
 
     .crpm-ranked-table__scroller {
-        max-height: 292px;
+        max-height: 360px;
         overflow: auto;
         border-top: 1px solid rgba(71, 88, 79, 0.08);
     }
@@ -739,7 +929,7 @@ def get_custom_css() -> str:
         width: 100%;
         border-collapse: separate;
         border-spacing: 0;
-        font-size: 0.79rem;
+        font-size: 0.83rem;
     }
 
     .crpm-ranked-table thead th {
@@ -750,7 +940,7 @@ def get_custom_css() -> str:
         background: #f4eff8;
         color: var(--crpm-forest-strong);
         text-align: left;
-        font-size: 0.72rem;
+        font-size: 0.74rem;
         font-weight: 700;
         letter-spacing: 0.02em;
         border-bottom: 1px solid rgba(71, 88, 79, 0.12);
@@ -763,6 +953,158 @@ def get_custom_css() -> str:
 
     .crpm-ranked-table tbody tr:hover {
         background: rgba(232, 224, 240, 0.38);
+    }
+
+    .crpm-conformance-inspector-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(242px, 1fr));
+        gap: 0.42rem;
+        margin: 0.04rem 0 0.22rem 0;
+    }
+
+    .crpm-conformance-inspector-grid .crpm-bi-card {
+        min-height: 82px;
+        padding: 0.6rem 0.7rem;
+        border-radius: 16px;
+        border: 1px solid rgba(71, 88, 79, 0.12);
+        background: rgba(252, 251, 253, 0.98);
+        box-shadow: var(--crpm-shadow-soft);
+    }
+
+    .crpm-conformance-inspector-grid .crpm-bi-card__eyebrow {
+        font-size: 0.63rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--crpm-muted);
+        margin-bottom: 0.12rem;
+    }
+
+    .crpm-conformance-inspector-grid .crpm-bi-card__title {
+        font-size: 0.83rem;
+        font-weight: 700;
+        line-height: 1.14;
+        color: var(--crpm-forest-strong);
+        margin-bottom: 0.16rem;
+    }
+
+    .crpm-conformance-inspector-grid .crpm-bi-card__value {
+        font-size: 1.7rem;
+        font-weight: 800;
+        line-height: 1.05;
+        color: #102e41;
+    }
+
+    .crpm-conformance-inspector-grid .crpm-bi-card__body {
+        display: none;
+    }
+
+    .crpm-conformance-panel {
+        margin: 0.03rem 0 0.18rem 0;
+        padding: 0.48rem 0.58rem;
+        border-radius: 13px;
+        border: 1px solid rgba(71, 88, 79, 0.12);
+        background: rgba(252, 251, 253, 0.98);
+        box-shadow: var(--crpm-shadow-soft);
+    }
+
+    .crpm-conformance-panel--muted {
+        background: rgba(249, 248, 251, 0.98);
+    }
+
+    .crpm-conformance-panel__eyebrow {
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--crpm-muted);
+        margin-bottom: 0.16rem;
+    }
+
+    .crpm-conformance-panel__title {
+        font-size: 0.97rem;
+        font-weight: 800;
+        line-height: 1.16;
+        color: var(--crpm-forest-strong);
+    }
+
+    .crpm-conformance-panel__body {
+        font-size: 0.69rem;
+        line-height: 1.22;
+        color: var(--crpm-text-soft);
+    }
+
+    .crpm-conformance-hero,
+    .crpm-conformance-stage-header,
+    .crpm-conformance-report-band,
+    .crpm-conformance-evidence-band {
+        margin: 0 0 0.12rem 0;
+        padding: 0.4rem 0.56rem;
+        border-radius: 15px;
+        border: 1px solid rgba(71, 88, 79, 0.12);
+        background: linear-gradient(180deg, rgba(252, 251, 253, 0.98) 0%, rgba(247, 249, 252, 0.98) 100%);
+        box-shadow: var(--crpm-shadow-soft);
+    }
+
+    .crpm-conformance-hero__eyebrow,
+    .crpm-conformance-stage-header__eyebrow,
+    .crpm-conformance-report-band__label {
+        font-size: 0.62rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--crpm-muted);
+        margin-bottom: 0.12rem;
+    }
+
+    .crpm-conformance-hero__row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.38rem;
+        flex-wrap: wrap;
+    }
+
+    .crpm-conformance-hero__title,
+    .crpm-conformance-stage-header__title {
+        font-size: 0.88rem;
+        font-weight: 800;
+        line-height: 1.08;
+        color: var(--crpm-forest-strong);
+        margin-bottom: 0.04rem;
+    }
+
+    .crpm-conformance-hero__body,
+    .crpm-conformance-stage-header__body,
+    .crpm-conformance-report-band__body,
+    .crpm-conformance-evidence-band {
+        font-size: 0.7rem;
+        line-height: 1.2;
+        color: var(--crpm-text-soft);
+    }
+
+    .crpm-conformance-hero__badge {
+        display: inline-grid;
+        gap: 0.14rem;
+        min-width: 12rem;
+        padding: 0.34rem 0.48rem;
+        border-radius: 13px;
+        border: 1px solid rgba(103, 128, 168, 0.14);
+        background: rgba(245, 248, 252, 0.96);
+        color: var(--crpm-forest-strong);
+    }
+
+    .crpm-conformance-hero__badge span {
+        font-size: 0.58rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--crpm-muted);
+    }
+
+    .crpm-conformance-hero__badge strong {
+        font-size: 0.8rem;
+        font-weight: 800;
+        line-height: 1.12;
     }
 
     .crpm-table__cell {
@@ -915,7 +1257,7 @@ def get_custom_css() -> str:
     }
 
     .crpm-empty-state {
-        margin: 0.5rem 0 0.85rem 0 !important;
+        margin: 0.3rem 0 0.54rem 0 !important;
         padding: 0.9rem 1rem !important;
         box-shadow: none !important;
     }
@@ -926,9 +1268,24 @@ def get_custom_css() -> str:
         font-size: 0.9rem !important;
     }
 
+    .crpm-dfg-vector {
+        margin: 0.12rem 0 0.56rem 0;
+        padding: 0.72rem 0.82rem;
+        border-radius: 18px;
+        border: 1px solid rgba(71, 88, 79, 0.12);
+        background: rgba(252, 251, 253, 0.98);
+        box-shadow: var(--crpm-shadow-soft);
+        overflow: auto;
+    }
+
+    .crpm-dfg-vector svg {
+        min-width: 100%;
+        height: auto;
+    }
+
     .stMarkdown ul, .stMarkdown ol {
         margin-left: 1.3rem !important;
-        margin-bottom: 0.6rem !important;
+        margin-bottom: 0.42rem !important;
     }
 
     .stMarkdown strong {
@@ -936,7 +1293,7 @@ def get_custom_css() -> str:
     }
 
     hr {
-        margin: 0.55rem 0 0.8rem 0 !important;
+        margin: 0.36rem 0 0.56rem 0 !important;
         border: none !important;
         height: 1px !important;
         background: linear-gradient(90deg, rgba(54, 83, 72, 0), rgba(54, 83, 72, 0.12), rgba(142, 122, 168, 0.12), rgba(54, 83, 72, 0)) !important;
@@ -1065,20 +1422,25 @@ def get_custom_css() -> str:
 
     .crpm-shell-hero {
         border: 1px solid rgba(71, 88, 79, 0.12);
-        border-radius: 22px;
-        padding: 1.1rem 1.25rem 1.2rem 1.25rem;
-        margin-bottom: 1rem;
+        border-radius: 18px;
+        padding: 0.72rem 0.88rem 0.74rem 0.88rem;
+        margin-bottom: 0.56rem;
         background: linear-gradient(135deg, rgba(252, 251, 253, 0.98), rgba(238, 242, 248, 0.96));
-        box-shadow: var(--crpm-shadow);
+        box-shadow: var(--crpm-shadow-soft);
+    }
+
+    .crpm-shell-hero--compact {
+        display: grid;
+        gap: 0.18rem;
     }
 
     .crpm-shell-hero__eyebrow {
-        font-size: 0.78rem;
+        font-size: 0.66rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.08em;
         color: var(--crpm-lavender);
-        margin-bottom: 0.4rem;
+        margin-bottom: 0;
     }
 
     .crpm-shell-hero__title {
@@ -1091,10 +1453,16 @@ def get_custom_css() -> str:
     }
 
     .crpm-shell-hero__body {
-        font-size: 0.98rem;
-        line-height: 1.55;
+        font-size: 0.82rem;
+        line-height: 1.38;
         color: var(--crpm-text-soft);
-        max-width: 52rem;
+        max-width: 56rem;
+    }
+
+    .crpm-shell-hero__meta {
+        font-size: 0.72rem;
+        line-height: 1.32;
+        color: var(--crpm-muted);
     }
 
     .crpm-shell-panel {
@@ -1127,8 +1495,8 @@ def get_custom_css() -> str:
     }
 
     .crpm-shell-section-intro {
-        margin: 0.1rem 0 0.9rem 0;
-        padding: 0.9rem 1rem;
+        margin: 0.04rem 0 0.42rem 0;
+        padding: 0.58rem 0.72rem;
         border-left: 4px solid rgba(85, 120, 99, 0.35);
         border-radius: 0 14px 14px 0;
         background: rgba(252, 251, 253, 0.86);
@@ -1136,8 +1504,8 @@ def get_custom_css() -> str:
     }
 
     .crpm-overview-hero {
-        margin: 0.15rem 0 0.95rem 0;
-        padding: 1.15rem 1.2rem 1.1rem 1.2rem;
+        margin: 0.1rem 0 0.62rem 0;
+        padding: 0.92rem 1rem 0.92rem 1rem;
         border-radius: 24px;
         border: 1px solid rgba(71, 88, 79, 0.12);
         background:
@@ -1153,7 +1521,7 @@ def get_custom_css() -> str:
         text-transform: uppercase;
         letter-spacing: 0.08em;
         color: var(--crpm-lavender);
-        margin-bottom: 0.35rem;
+        margin-bottom: 0.22rem;
     }
 
     .crpm-overview-hero__title {
@@ -1161,7 +1529,7 @@ def get_custom_css() -> str:
         font-weight: 700;
         line-height: 1.18;
         color: var(--crpm-forest-strong);
-        margin-bottom: 0.42rem;
+        margin-bottom: 0.26rem;
         max-width: 48rem;
     }
 
@@ -1176,7 +1544,7 @@ def get_custom_css() -> str:
         display: flex;
         flex-wrap: wrap;
         gap: 0.45rem;
-        margin-top: 0.8rem;
+        margin-top: 0.56rem;
     }
 
     .crpm-overview-hero__chip {
@@ -1206,17 +1574,101 @@ def get_custom_css() -> str:
     .crpm-bi-card-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-        gap: 0.75rem;
-        margin-bottom: 0.85rem;
+        gap: 0.58rem;
+        margin-bottom: 0.16rem;
+    }
+
+    .crpm-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+        gap: 0.5rem;
+        margin-bottom: 0.14rem;
+    }
+
+    .crpm-kpi-grid .crpm-bi-card {
+        padding: 0.68rem 0.74rem;
+        border-radius: 13px;
+    }
+
+    .crpm-kpi-grid .crpm-bi-card__header {
+        margin: -0.14rem -0.18rem 0.32rem -0.18rem;
+        padding: 0.22rem 0.28rem 0.28rem 0.28rem;
+        border-radius: 12px;
+        background: linear-gradient(180deg, rgba(246, 244, 249, 0.92), rgba(251, 249, 252, 0.45));
+    }
+
+    .crpm-kpi-grid .crpm-bi-card__value {
+        font-size: 1.14rem;
+    }
+
+    .crpm-conformance-kpi-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.34rem;
+        margin: 0.04rem 0 0.1rem 0;
+    }
+
+    .crpm-conformance-kpi-strip--rail {
+        grid-template-columns: 1fr;
+        margin: 0.04rem 0 0.22rem 0;
+    }
+
+    .crpm-conformance-kpi-strip .crpm-bi-card {
+        min-width: 0;
+        padding: 0.42rem 0.5rem;
+        border-radius: 12px;
+        box-shadow: 0 6px 14px rgba(50, 41, 66, 0.045);
+    }
+
+    .crpm-conformance-kpi-strip .crpm-bi-card__header {
+        margin: -0.1rem -0.14rem 0.26rem -0.14rem;
+        padding: 0.18rem 0.24rem 0.2rem 0.24rem;
+        border-radius: 10px;
+    }
+
+    .crpm-conformance-kpi-strip .crpm-bi-card__eyebrow {
+        font-size: 0.64rem;
+        margin-bottom: 0.1rem;
+    }
+
+    .crpm-conformance-kpi-strip .crpm-bi-card__title {
+        font-size: 0.84rem;
+        margin-bottom: 0;
+        line-height: 1.12;
+    }
+
+    .crpm-conformance-kpi-strip .crpm-bi-card__value {
+        font-size: 0.9rem;
+        font-weight: 800;
+        line-height: 1.05;
+        margin-bottom: 0;
+    }
+
+    .crpm-conformance-kpi-strip .crpm-bi-card__body {
+        display: none;
+    }
+
+    @media (max-width: 1100px) {
+        .crpm-conformance-kpi-strip {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
     }
 
     .crpm-bi-card {
         min-width: 0;
-        padding: 0.95rem 1rem;
-        border-radius: 18px;
-        border: 1px solid rgba(71, 88, 79, 0.11);
-        background: rgba(252, 251, 253, 0.98);
-        box-shadow: var(--crpm-shadow-soft);
+        padding: 0.75rem 0.8rem;
+        border-radius: 15px;
+        border: 1px solid rgba(71, 88, 79, 0.13);
+        background: linear-gradient(180deg, rgba(253, 252, 254, 0.99), rgba(248, 246, 250, 0.98));
+        box-shadow: 0 10px 22px rgba(50, 41, 66, 0.065);
+    }
+
+    .crpm-bi-card__header {
+        margin: -0.14rem -0.18rem 0.38rem -0.18rem;
+        padding: 0.27rem 0.32rem 0.31rem 0.32rem;
+        border-radius: 11px;
+        background: linear-gradient(180deg, rgba(245, 242, 248, 0.9), rgba(252, 251, 253, 0.38));
+        border: 1px solid rgba(142, 122, 168, 0.08);
     }
 
     .crpm-bi-card__eyebrow {
@@ -1229,25 +1681,25 @@ def get_custom_css() -> str:
     }
 
     .crpm-bi-card__title {
-        font-size: 0.98rem;
+        font-size: 0.92rem;
         font-weight: 700;
         line-height: 1.25;
         color: var(--crpm-forest-strong);
-        margin-bottom: 0.38rem;
+        margin-bottom: 0.26rem;
     }
 
     .crpm-bi-card__value {
-        font-size: 1.18rem;
+        font-size: 1.08rem;
         font-weight: 700;
         line-height: 1.15;
         color: var(--crpm-forest-strong);
-        margin-bottom: 0.28rem;
+        margin-bottom: 0.18rem;
         word-break: break-word;
     }
 
     .crpm-bi-card__body {
-        font-size: 0.87rem;
-        line-height: 1.45;
+        font-size: 0.82rem;
+        line-height: 1.4;
         color: var(--crpm-text-soft);
     }
 
@@ -1255,24 +1707,34 @@ def get_custom_css() -> str:
         background: linear-gradient(180deg, rgba(238, 242, 248, 0.98), rgba(252, 251, 253, 0.98));
     }
 
+    .crpm-bi-card--accent .crpm-bi-card__header {
+        background: linear-gradient(180deg, rgba(234, 240, 247, 0.94), rgba(250, 251, 253, 0.44));
+        border-color: rgba(113, 128, 168, 0.1);
+    }
+
     .crpm-bi-card--success {
         background: linear-gradient(180deg, rgba(237, 244, 239, 0.98), rgba(252, 251, 253, 0.98));
+    }
+
+    .crpm-bi-card--success .crpm-bi-card__header {
+        background: linear-gradient(180deg, rgba(235, 244, 237, 0.95), rgba(251, 252, 251, 0.46));
+        border-color: rgba(85, 120, 99, 0.11);
     }
 
     .crpm-page-card-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 0.7rem;
-        margin-bottom: 0.7rem;
+        gap: 0.56rem;
+        margin-bottom: 0.16rem;
     }
 
     .crpm-page-card {
         min-width: 0;
-        padding: 0.95rem 1rem;
-        border-radius: 18px;
-        border: 1px solid rgba(71, 88, 79, 0.11);
-        background: linear-gradient(180deg, rgba(252, 251, 253, 0.98), rgba(247, 244, 250, 0.96));
-        box-shadow: var(--crpm-shadow-soft);
+        padding: 0.75rem 0.8rem;
+        border-radius: 15px;
+        border: 1px solid rgba(71, 88, 79, 0.13);
+        background: linear-gradient(180deg, rgba(252, 251, 253, 0.99), rgba(247, 244, 250, 0.97));
+        box-shadow: 0 10px 22px rgba(50, 41, 66, 0.065);
     }
 
     .crpm-page-card__order {
@@ -1281,21 +1743,25 @@ def get_custom_css() -> str:
         text-transform: uppercase;
         letter-spacing: 0.08em;
         color: var(--crpm-lavender);
-        margin-bottom: 0.22rem;
+        margin: -0.14rem -0.18rem 0.32rem -0.18rem;
+        padding: 0.24rem 0.31rem 0.22rem 0.31rem;
+        border-radius: 12px;
+        background: linear-gradient(180deg, rgba(245, 242, 248, 0.9), rgba(252, 251, 253, 0.4));
+        border: 1px solid rgba(142, 122, 168, 0.08);
     }
 
     .crpm-page-card__title {
-        font-size: 1rem;
+        font-size: 0.92rem;
         font-weight: 700;
         color: var(--crpm-forest-strong);
-        margin-bottom: 0.32rem;
+        margin-bottom: 0.22rem;
     }
 
     .crpm-page-card__body {
-        font-size: 0.87rem;
-        line-height: 1.48;
+        font-size: 0.82rem;
+        line-height: 1.42;
         color: var(--crpm-text-soft);
-        margin-bottom: 0.55rem;
+        margin-bottom: 0.42rem;
     }
 
     .crpm-page-card__meta {
@@ -1304,11 +1770,45 @@ def get_custom_css() -> str:
         color: var(--crpm-muted);
     }
 
+    .crpm-reading-order-band {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        flex-wrap: wrap;
+        margin: 0.18rem 0 0.26rem 0;
+        padding: 0.72rem 0.88rem;
+        border-radius: 16px;
+        border: 1px solid rgba(113, 128, 168, 0.18);
+        border-left: 4px solid rgba(93, 132, 193, 0.62);
+        background: linear-gradient(180deg, rgba(241, 245, 251, 0.96), rgba(249, 248, 252, 0.98));
+        box-shadow: 0 8px 18px rgba(50, 41, 66, 0.055);
+    }
+
+    .crpm-reading-order-band__eyebrow {
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--crpm-lavender);
+    }
+
+    .crpm-reading-order-band__title {
+        font-size: 0.95rem;
+        font-weight: 800;
+        color: var(--crpm-forest-strong);
+    }
+
+    .crpm-reading-order-band__body {
+        font-size: 0.84rem;
+        line-height: 1.42;
+        color: var(--crpm-text-soft);
+    }
+
     .crpm-inline-notice {
         border-radius: 16px;
         border: 1px solid rgba(71, 88, 79, 0.11);
         padding: 0.8rem 1rem;
-        margin: 0.18rem 0 0.65rem 0;
+        margin: 0.12rem 0 0.4rem 0;
         background: rgba(252, 251, 253, 0.97);
         box-shadow: var(--crpm-shadow);
     }
@@ -1352,13 +1852,14 @@ def get_custom_css() -> str:
     }
 
     .crpm-header-badges {
-        position: fixed;
+        position: sticky;
         top: 0.52rem;
-        left: calc(17rem + 1.05rem);
         z-index: 108;
         display: flex;
         align-items: center;
         gap: 0.62rem;
+        width: fit-content;
+        margin: 0.02rem 0 0.34rem 0;
     }
 
     .crpm-up-badge,
@@ -1386,18 +1887,37 @@ def get_custom_css() -> str:
 
     .crpm-up-badge,
     .crpm-fmup-badge {
-        width: 3.15rem;
+        min-width: 4.1rem;
         height: 3.15rem;
-        padding: 0.25rem;
+        padding: 0.25rem 0.5rem;
     }
 
     .crpm-up-badge img,
     .crpm-fmup-badge img {
-        max-width: 2rem;
-        max-height: 2rem;
+        max-width: none;
+        max-height: 2.18rem;
         width: auto;
         height: auto;
         display: block;
+    }
+
+    .crpm-badge-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.55rem;
+        height: 1.55rem;
+        border-radius: 999px;
+        background: linear-gradient(135deg, rgba(35, 67, 57, 0.1), rgba(73, 93, 166, 0.16));
+        color: var(--crpm-forest-strong);
+        font-size: 0.64rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        flex: 0 0 auto;
+    }
+
+    .crpm-badge-icon--up {
+        background: linear-gradient(135deg, rgba(73, 93, 166, 0.14), rgba(255, 255, 255, 0.98));
     }
 
     .crpm-up-badge span,
@@ -1530,6 +2050,11 @@ def get_custom_css() -> str:
         opacity: 0.98;
     }
 
+    .crpm-footer__logo-link {
+        display: inline-flex;
+        align-items: center;
+    }
+
     .crpm-footer__logo-fallback {
         display: inline-flex;
         align-items: center;
@@ -1552,21 +2077,20 @@ def get_custom_css() -> str:
     }
 
     .crpm-legal-bar {
-        position: fixed;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: 140;
+        position: relative;
+        z-index: 10;
         display: flex;
         justify-content: center;
         align-items: center;
         gap: 0.5rem;
         min-height: 2rem;
         padding: 0.38rem 1rem;
+        margin: 0.82rem 0 0 0;
         background: rgba(39, 66, 57, 0.94);
         color: rgba(250, 247, 252, 0.94);
         border-top: 1px solid rgba(232, 224, 240, 0.18);
-        box-shadow: 0 -8px 18px rgba(34, 29, 43, 0.16);
+        border-radius: 16px;
+        box-shadow: 0 10px 18px rgba(34, 29, 43, 0.12);
         backdrop-filter: blur(10px);
         font-size: 0.79rem;
         text-align: center;
