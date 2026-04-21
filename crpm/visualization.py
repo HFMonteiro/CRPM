@@ -1061,33 +1061,33 @@ def render_workflow_conformance_svg(
             max_bottom_branches = max(max_bottom_branches, bottom_count)
 
         simple_mainline_mode = step_count <= 7 and max_top_branches == 0 and max_bottom_branches == 0
-        preferred_shelf_width = 1540.0
-        left_margin = 28.0
-        right_margin = 28.0
-        min_inter_step_gap = 24.0 if step_count > 1 else 0.0
-        max_inter_step_gap = 56.0
-        preferred_mainline_width = 236.0 if simple_mainline_mode else 220.0
-        min_mainline_width = 184.0 if simple_mainline_mode else 176.0
-        max_mainline_width = 248.0 if simple_mainline_mode else 232.0
+        preferred_shelf_width = 1720.0
+        left_margin = 36.0
+        right_margin = 36.0
+        min_inter_step_gap = 32.0 if step_count > 1 else 0.0
+        max_inter_step_gap = 74.0
+        preferred_mainline_width = 252.0 if simple_mainline_mode else 224.0
+        min_mainline_width = 200.0 if simple_mainline_mode else 184.0
+        max_mainline_width = 286.0 if simple_mainline_mode else 238.0
         per_step_slot = max(1.0, (preferred_shelf_width - left_margin - right_margin) / float(step_count))
         mainline_width = min(max_mainline_width, max(min_mainline_width, per_step_slot * 0.82))
         inter_step_gap = max(min_inter_step_gap, min(max_inter_step_gap, per_step_slot - mainline_width))
         required_mainline_span = (step_count * mainline_width) + (max(0, step_count - 1) * inter_step_gap)
         board_width = int(math.ceil(max(preferred_shelf_width, left_margin + right_margin + required_mainline_span)))
         side_margin = max(left_margin, (board_width - required_mainline_span) / 2.0)
-        branch_width = max(156.0, min(184.0, mainline_width * 0.82))
+        branch_width = max(160.0, min(190.0, mainline_width * 0.82))
         if simple_mainline_mode:
-            mainline_height = 96.0
-            branch_height = 56.0
-            lane_gap_y = 60.0
-            top_margin = 52.0
-            bottom_margin = 46.0
+            mainline_height = 112.0
+            branch_height = 60.0
+            lane_gap_y = 62.0
+            top_margin = 60.0
+            bottom_margin = 64.0
         else:
-            mainline_height = 104.0
-            branch_height = 64.0
-            lane_gap_y = 66.0
-            top_margin = 58.0
-            bottom_margin = 56.0
+            mainline_height = 100.0
+            branch_height = 66.0
+            lane_gap_y = 72.0
+            top_margin = 50.0
+            bottom_margin = 58.0
 
         upper_stack_height = max_top_branches * (branch_height + lane_gap_y) if max_top_branches else 0.0
         lower_stack_height = max_bottom_branches * (branch_height + lane_gap_y) if max_bottom_branches else 0.0
@@ -1164,7 +1164,7 @@ def render_workflow_conformance_svg(
         if nodes_layout:
             content_max_y = max(float(item["y"]) + float(item["height"]) for item in nodes_layout)
             if simple_mainline_mode:
-                board_height = max(320, int(math.ceil(content_max_y + bottom_margin)))
+                board_height = max(356, int(math.ceil(content_max_y + bottom_margin)))
                 mainline_items = [
                     item for item in nodes_layout if str(item["row"].get("branch_role", "mainline")) == "mainline"
                 ]
@@ -1178,9 +1178,9 @@ def render_workflow_conformance_svg(
                         for item in nodes_layout:
                             item["y"] = float(item["y"]) + shift_y
             else:
-                board_height = max(352, int(math.ceil(content_max_y + bottom_margin)))
+                board_height = max(328, int(math.ceil(content_max_y + bottom_margin)))
         else:
-            board_height = 320 if simple_mainline_mode else 352
+            board_height = 356 if simple_mainline_mode else 328
 
         node_positions = {str(item["activity"]): item for item in nodes_layout}
         edge_groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -1846,15 +1846,15 @@ def create_workflow_interactive_payload(
             "edges": [],
             "legend": legend_df,
             "height": 520,
-            "frame_height": 640,
+            "frame_height": 648,
             "width": 760,
             "content_offset_x": 0.0,
             "content_offset_y": 0.0,
             "overall_median_delay_days": overall_median,
             "content_bounds": {"min_x": 0.0, "min_y": 0.0, "max_x": 760.0, "max_y": 520.0},
             "anchor_bounds": {"min_x": 0.0, "min_y": 0.0, "max_x": 0.0, "max_y": 0.0},
-            "fit_padding": {"top": 16.0, "right": 14.0, "bottom": 36.0, "left": 14.0},
-            "toolbar_height_hint": 120,
+            "fit_padding": {"top": 14.0, "right": 12.0, "bottom": 30.0, "left": 12.0},
+            "toolbar_height_hint": 116,
         }
     if ordered_nodes.empty and not normalized_edges.empty:
         ordered_nodes = _derive_nodes_from_edges(normalized_edges)
@@ -1874,15 +1874,15 @@ def create_workflow_interactive_payload(
     lens_value = str(payload.get("conformance_lens", "% of paths")) if isinstance(payload, Mapping) else "% of paths"
     lens_is_activity = "activit" in lens_value.lower()
     lens_is_paths = not lens_is_activity
-    step_gap = 78.0 if len(sorted_steps) >= 6 else 88.0
-    top_margin = 34.0
-    side_margin = 52.0
-    mainline_width = 152.0 if detail_level != "executive" else 142.0
-    branch_width = 124.0 if detail_level != "executive" else 116.0
-    mainline_height = 56.0 if detail_level != "executive" else 50.0
-    branch_height = 38.0 if detail_level != "executive" else 34.0
-    vertical_gap = 8.0 if detail_level != "research" else 10.0
-    lane_gap = 42.0 if detail_level != "executive" else 38.0
+    step_gap = 72.0 if len(sorted_steps) >= 6 else 82.0
+    top_margin = 28.0
+    side_margin = 40.0
+    mainline_width = 138.0 if detail_level != "executive" else 128.0
+    branch_width = 112.0 if detail_level != "executive" else 104.0
+    mainline_height = 50.0 if detail_level != "executive" else 46.0
+    branch_height = 34.0 if detail_level != "executive" else 30.0
+    vertical_gap = 6.0 if detail_level != "research" else 8.0
+    lane_gap = 26.0 if detail_level != "executive" else 22.0
 
     max_top_branches = 0
     max_bottom_branches = 0
@@ -1903,7 +1903,7 @@ def create_workflow_interactive_payload(
 
     has_top_branches = max_top_branches > 0
     has_bottom_branches = max_bottom_branches > 0
-    min_canvas_width = 760.0 if (has_top_branches or has_bottom_branches) else 520.0
+    min_canvas_width = 680.0 if (has_top_branches or has_bottom_branches) else 500.0
     canvas_width = int(
         max(
             min_canvas_width,
@@ -1915,7 +1915,7 @@ def create_workflow_interactive_payload(
         + max(1, len(sorted_steps) - 1) * step_gap
         + mainline_height
         + max(max_top_branches, max_bottom_branches) * (branch_height + vertical_gap * 0.6)
-        + 96.0
+        + 72.0
     )
     center_x = canvas_width / 2.0
 
@@ -1923,9 +1923,9 @@ def create_workflow_interactive_payload(
     node_map: dict[str, dict[str, Any]] = {}
     for step_index, step_rank in enumerate(sorted_steps):
         y_center = top_margin + step_index * step_gap
-        wobble = math.sin(step_index * 1.08) * (24.0 if lens_is_paths else 18.0)
-        sway = math.cos(step_index * 0.66) * (6.0 if lens_is_paths else 4.0)
-        drift = (step_index - ((len(sorted_steps) - 1) / 2.0)) * (0.8 if lens_is_paths else 0.45)
+        wobble = math.sin(step_index * 1.04) * (12.0 if lens_is_paths else 8.0)
+        sway = math.cos(step_index * 0.62) * (3.4 if lens_is_paths else 2.4)
+        drift = (step_index - ((len(sorted_steps) - 1) / 2.0)) * (0.35 if lens_is_paths else 0.2)
         x_center = center_x + wobble + sway + drift
         rows = sorted(
             step_groups[step_rank],
@@ -2032,8 +2032,8 @@ def create_workflow_interactive_payload(
                 node_map[activity] = node_item
 
     if node_items:
-        bounds_pad_x = 20.0
-        bounds_pad_y = 24.0
+        bounds_pad_x = 14.0
+        bounds_pad_y = 18.0
         min_x = min(float(node["x"]) for node in node_items)
         min_y = min(float(node["y"]) for node in node_items)
         max_x = max(float(node["x"]) + float(node["width"]) for node in node_items)
@@ -2178,18 +2178,18 @@ def create_workflow_interactive_payload(
         if last_layout_node
         else top_reference_y + mainline_height
     )
-    mainline_band_y = max(12.0, top_reference_y - 12.0)
-    top_band_y = max(12.0, top_reference_y - (42.0 if has_top_branches else 12.0))
-    bottom_band_y = bottom_reference_y + 12.0
-    start_anchor_y = max(16.0, top_reference_y - 18.0)
-    end_anchor_y = bottom_reference_y + 28.0
-    top_band_height = max(16.0 if not has_top_branches else 44.0, mainline_band_y - top_band_y - (10.0 if has_top_branches else 4.0))
+    mainline_band_y = max(18.0, top_reference_y - 14.0)
+    top_band_y = max(16.0, top_reference_y - (42.0 if has_top_branches else 14.0))
+    bottom_band_y = bottom_reference_y + 14.0
+    start_anchor_y = max(20.0, top_reference_y - 24.0)
+    end_anchor_y = bottom_reference_y + 26.0
+    top_band_height = max(16.0 if not has_top_branches else 44.0, mainline_band_y - top_band_y - (12.0 if has_top_branches else 6.0))
     mainline_band_height = (
-        max(94.0, (end_anchor_y + 18.0) - mainline_band_y)
+        max(92.0, (end_anchor_y + 20.0) - mainline_band_y)
         if not has_bottom_branches
-        else max(76.0, bottom_band_y - mainline_band_y - 8.0)
+        else max(84.0, bottom_band_y - mainline_band_y - 10.0)
     )
-    bottom_band_height = max(16.0 if not has_bottom_branches else 48.0, (end_anchor_y + 18.0) - bottom_band_y)
+    bottom_band_height = max(18.0 if not has_bottom_branches else 48.0, (end_anchor_y + 22.0) - bottom_band_y)
     first_anchor_x = float(first_layout_node.get("center_x", center_x)) if first_layout_node else float(center_x)
     last_anchor_x = float(last_layout_node.get("center_x", center_x)) if last_layout_node else float(center_x)
 
@@ -2232,10 +2232,10 @@ def create_workflow_interactive_payload(
             )
 
     anchor_bounds = {
-        "min_x": min(first_anchor_x - 40.0, last_anchor_x - 40.0),
-        "min_y": min(start_anchor_y - 26.0, end_anchor_y - 32.0),
-        "max_x": max(first_anchor_x + 40.0, last_anchor_x + 40.0),
-        "max_y": max(start_anchor_y + 26.0, end_anchor_y + 32.0),
+        "min_x": min(first_anchor_x - 36.0, last_anchor_x - 36.0),
+        "min_y": min(start_anchor_y - 20.0, end_anchor_y - 18.0),
+        "max_x": max(first_anchor_x + 36.0, last_anchor_x + 36.0),
+        "max_y": max(start_anchor_y + 20.0, end_anchor_y + 40.0),
     }
     _include_fit_bounds(
         anchor_bounds["min_x"],
@@ -2243,6 +2243,11 @@ def create_workflow_interactive_payload(
         anchor_bounds["max_x"],
         anchor_bounds["max_y"],
     )
+    _include_fit_bounds(6.0, mainline_band_y - 4.0, float(canvas_width) - 6.0, mainline_band_y + mainline_band_height + 4.0)
+    if has_top_branches:
+        _include_fit_bounds(6.0, top_band_y - 16.0, float(canvas_width) - 6.0, top_band_y + top_band_height + 4.0)
+    if has_bottom_branches:
+        _include_fit_bounds(6.0, bottom_band_y - 4.0, float(canvas_width) - 6.0, bottom_band_y + bottom_band_height + 4.0)
 
     if not all(math.isfinite(value) for value in (fit_min_x, fit_min_y, fit_max_x, fit_max_y)):
         fit_min_x = 10.0
@@ -2251,43 +2256,25 @@ def create_workflow_interactive_payload(
         fit_max_y = float(canvas_height - 10.0)
 
     fit_padding = {
-        "top": 16.0,
-        "right": 14.0,
-        "bottom": 36.0,
-        "left": 14.0,
+        "top": 14.0,
+        "right": 12.0,
+        "bottom": 30.0,
+        "left": 12.0,
     }
     fit_width = max(1.0, fit_max_x - fit_min_x)
     fit_height = max(1.0, fit_max_y - fit_min_y)
     fit_width_with_padding = fit_width + fit_padding["left"] + fit_padding["right"]
     fit_height_with_padding = fit_height + fit_padding["top"] + fit_padding["bottom"]
-    preferred_aspect_ratio = 0.68 if not (has_top_branches or has_bottom_branches) else 0.74
-    base_view_width = 920.0 if not (has_top_branches or has_bottom_branches) else 980.0
-    base_view_height = 500.0 if not (has_top_branches or has_bottom_branches) else 560.0
-    target_width = int(
-        math.ceil(
-            max(
-                base_view_width,
-                fit_width_with_padding,
-                fit_height_with_padding / preferred_aspect_ratio,
-            )
-        )
-    )
-    target_height = int(math.ceil(max(base_view_height, fit_height_with_padding)))
-    toolbar_height_hint = 126 + (22 if detail_level == "research" else 0) + (14 if has_top_branches or has_bottom_branches else 0)
-    responsive_scale_hint = max(
-        1.0,
-        min(
-            1.18,
-            (980.0 if has_top_branches or has_bottom_branches else 960.0) / max(float(target_width), 1.0),
-        ),
-    )
+    target_width = int(math.ceil(max(520.0, fit_width_with_padding)))
+    target_height = int(math.ceil(max(340.0, fit_height_with_padding)))
+    toolbar_height_hint = 112 + (18 if detail_level == "research" else 0) + (10 if has_top_branches or has_bottom_branches else 0)
 
     return {
         "nodes": node_items,
         "edges": edge_items,
         "legend": legend_df,
         "height": max(320, target_height),
-        "frame_height": max(420, int(math.ceil(target_height * responsive_scale_hint)) + toolbar_height_hint + 16),
+        "frame_height": max(430, int(math.ceil(target_height)) + toolbar_height_hint + 14),
         "width": max(520, target_width),
         "content_offset_x": 0.0,
         "content_offset_y": 0.0,
@@ -2340,7 +2327,7 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
     top_band_y = float(lane_bands.get("top_y", 14.0))
     mainline_band_y = float(lane_bands.get("mainline_y", 14.0))
     bottom_band_y = float(lane_bands.get("bottom_y", mainline_band_y + 156.0))
-    top_band_height = max(18.0 if not has_top_branches else 50.0, mainline_band_y - top_band_y - (12.0 if has_top_branches else 6.0))
+    top_band_height = max(18.0 if not has_top_branches else 44.0, mainline_band_y - top_band_y - (12.0 if has_top_branches else 6.0))
     primary_path_nodes = _workflow_primary_path_nodes(node_items)
     mainline_nodes = primary_path_nodes or [node for node in node_items if str(node.get("branch_role", "mainline")) == "mainline"]
     anchor_nodes = primary_path_nodes or node_items
@@ -2354,14 +2341,14 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
         last_node = ordered_anchor_nodes[-1]
         first_anchor_x = float(first_node.get("center_x", drawable_width / 2.0))
         last_anchor_x = float(last_node.get("center_x", drawable_width / 2.0))
-        start_anchor_y = max(18.0, float(first_node.get("y", 60.0)) - 24.0)
-        end_anchor_y = float(last_node.get("y", 60.0)) + float(last_node.get("height", 84.0)) + 40.0
+        start_anchor_y = max(20.0, float(first_node.get("y", 60.0)) - 24.0)
+        end_anchor_y = float(last_node.get("y", 60.0)) + float(last_node.get("height", 84.0)) + 26.0
     mainline_band_height = (
-        max(104.0, (end_anchor_y + 22.0) - mainline_band_y)
+        max(92.0, (end_anchor_y + 20.0) - mainline_band_y)
         if not has_bottom_branches
-        else max(86.0, bottom_band_y - mainline_band_y - 10.0)
+        else max(84.0, bottom_band_y - mainline_band_y - 10.0)
     )
-    bottom_band_height = max(18.0 if not has_bottom_branches else 56.0, (end_anchor_y + 22.0) - bottom_band_y)
+    bottom_band_height = max(18.0 if not has_bottom_branches else 48.0, (end_anchor_y + 22.0) - bottom_band_y)
     anchor_y = mainline_band_y + (mainline_band_height / 2.0)
     if not node_items and not edge_items:
         return (
@@ -2462,8 +2449,8 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
         '<filter id="workflow-explorer-glow" x="-24%" y="-24%" width="168%" height="168%">',
         '<feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#7e9dc4" flood-opacity="0.18"/>',
         "</filter>",
-        '<marker id="workflow-explorer-arrow" markerWidth="10" markerHeight="10" refX="9.2" refY="5" orient="auto" markerUnits="strokeWidth">',
-        '<path d="M 1 1.4 L 10 5 L 1 8.6 z" fill="#24313a"/>',
+        '<marker id="workflow-explorer-arrow" markerWidth="8" markerHeight="8" refX="7.1" refY="4" orient="auto" markerUnits="strokeWidth">',
+        '<path d="M 0.9 1.0 L 7.2 4.0 L 0.9 7.0 z" fill="#24313a"/>',
         "</marker>",
         "</defs>",
         '<g id="crpm-workflow-viewport">',
@@ -2789,7 +2776,7 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             "  edgeEl.addEventListener('click', (event) => { event.stopPropagation(); focusEdge(edgeEl); });",
             "});",
             "svg.addEventListener('click', () => { resetFocusClasses(); setOverview(); });",
-            "const zoomBy = (factor) => { zoomFactor = Math.max(0.72, Math.min(1.6, zoomFactor * factor)); apply(); };",
+            "const zoomBy = (factor) => { zoomFactor = Math.max(0.56, Math.min(1.7, zoomFactor * factor)); apply(); };",
             "const clearFocus = () => { resetFocusClasses(); setOverview(); };",
             "const resetView = () => { zoomFactor = 1.0; computeBaselineFit(); apply(); clearFocus(); notifyFrameHeight(); };",
             "if (zoomInButton) zoomInButton.addEventListener('click', (event) => { event.stopPropagation(); zoomBy(1.14); });",

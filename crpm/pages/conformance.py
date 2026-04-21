@@ -176,8 +176,12 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
         selected_workflow_edge_id=pinned_id if pinned_kind == "edge" else None,
     )
     if has_workflow:
-        _render_workflow_feedback(filtered_workflow, filtered_nodes_df, filtered_edges_df, workflow_mode="interactive")
-        _render_board_export_view(filtered_workflow, model_summary_df=model_summary_df)
+        _render_board_export_view(
+            filtered_workflow,
+            model_summary_df=model_summary_df,
+            nodes_df=filtered_nodes_df,
+            edges_df=filtered_edges_df,
+        )
 
 def _render_workflow_board_or_graph(
     *,
@@ -1108,13 +1112,81 @@ def _render_compact_filter_summary(controls: dict[str, Any]) -> None:
     )
 
 
-def _render_board_export_view(workflow: dict[str, Any], *, model_summary_df: pd.DataFrame) -> None:
-    with st.expander("Board export view", expanded=False):
-        _render_board_summary(workflow=workflow, model_summary_df=model_summary_df)
-        st.markdown(
-            render_workflow_conformance_svg(workflow, layout_mode="horizontal", detail_level="executive"),
-            unsafe_allow_html=True,
-        )
+def _workflow_feedback_text(
+    workflow: dict[str, Any],
+    nodes_df: pd.DataFrame,
+    edges_df: pd.DataFrame,
+) -> str:
+    summary = workflow.get("summary", {}) if isinstance(workflow, dict) else {}
+    requested_coverage_view = str(workflow.get("requested_coverage_view", "")).lower() if isinstance(workflow, dict) else ""
+    applied_coverage_view = str(workflow.get("applied_coverage_view", requested_coverage_view)).lower() if isinstance(workflow, dict) else requested_coverage_view
+    covered_cases = _coerce_int(summary.get("cases_covered"))
+    log_deviation_share = _coerce_float(summary.get("log_deviation_share"))
+    model_deviation_share = _coerce_float(summary.get("model_deviation_share"))
+    deviation_bits = []
+    if log_deviation_share is not None:
+        deviation_bits.append(f"log deviation {log_deviation_share:.1f}%")
+    if model_deviation_share is not None:
+        deviation_bits.append(f"model deviation {model_deviation_share:.1f}%")
+    coverage_suffix = ""
+    if requested_coverage_view and applied_coverage_view and requested_coverage_view != applied_coverage_view:
+        coverage_suffix = f" · requested {requested_coverage_view.title()} view, showing {applied_coverage_view.title()} because the requested slice was empty"
+    return (
+        f"Visible subset: {covered_cases:,} cases · {len(nodes_df):,} nodes · {len(edges_df):,} edges"
+        + (f" · {' · '.join(deviation_bits)}" if deviation_bits else "")
+        + coverage_suffix
+    )
+
+
+def _board_export_story_text(*, workflow: dict[str, Any], model_summary_df: pd.DataFrame) -> str:
+    summary = workflow.get("summary", {}) if isinstance(workflow, dict) else {}
+    dominant_share = _coerce_float(summary.get("dominant_path_share"))
+    deviation_share = _coerce_float(summary.get("deviation_share"))
+    throughput = _coerce_float(summary.get("median_throughput_days"))
+    top_model = _top_model_name(model_summary_df)
+    story_bits = []
+    if dominant_share is not None:
+        story_bits.append(f"dominant path covers {dominant_share:.1f}% of visible cases")
+    if deviation_share is not None:
+        story_bits.append(f"deviation share is {deviation_share:.1f}%")
+    if throughput is not None:
+        story_bits.append(f"median throughput is {throughput:.1f} d")
+    if top_model:
+        story_bits.append(f"best current model is {top_model}")
+    if story_bits:
+        return "Board readout: " + " · ".join(story_bits) + "."
+    return (
+        "Board readout: use the dominant pathway on the left as the canonical story, "
+        "then read the rare-path excursions above and below it."
+    )
+
+
+def _render_board_export_view(
+    workflow: dict[str, Any],
+    *,
+    model_summary_df: pd.DataFrame,
+    nodes_df: pd.DataFrame,
+    edges_df: pd.DataFrame,
+) -> None:
+    subset_text = _workflow_feedback_text(workflow, nodes_df, edges_df)
+    story_text = _board_export_story_text(workflow=workflow, model_summary_df=model_summary_df)
+    board_markup = render_workflow_conformance_svg(workflow, layout_mode="horizontal", detail_level="executive")
+    st.markdown(
+        (
+            "<div class='crpm-conformance-board-shelf'>"
+            "<div class='crpm-conformance-board-shelf__eyebrow'>Board export view</div>"
+            "<div class='crpm-conformance-board-shelf__title'>Horizontal pathway shelf</div>"
+            "<div class='crpm-conformance-board-shelf__body'>"
+            "A publication-friendly horizontal surface for the current visible subset. "
+            "The explorer stays vertical above; this shelf uses the full report width."
+            "</div>"
+            f"<div class='crpm-conformance-board-shelf__meta'>{html.escape(subset_text)}</div>"
+            f"<div class='crpm-conformance-board-shelf__summary'>{html.escape(story_text)}</div>"
+            f"{board_markup}"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 def _workflow_insight(summary: dict[str, Any], controls: dict[str, Any]) -> str:

@@ -427,6 +427,59 @@ def get_custom_css() -> str:
         width: auto;
     }
 
+    .crpm-conformance-board-shelf {
+        margin: 0.22rem 0 0.54rem 0;
+        padding: 0.54rem 0.58rem 0.46rem 0.58rem;
+        border-radius: 20px;
+        border: 1px solid rgba(71, 88, 79, 0.11);
+        background:
+            radial-gradient(circle at top right, rgba(95, 121, 165, 0.08), transparent 28%),
+            linear-gradient(180deg, rgba(252, 251, 253, 0.98), rgba(246, 243, 249, 0.98));
+        box-shadow: var(--crpm-shadow-soft);
+    }
+
+    .crpm-conformance-board-shelf__eyebrow {
+        font-size: 0.66rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--crpm-lavender);
+        margin-bottom: 0.12rem;
+    }
+
+    .crpm-conformance-board-shelf__title {
+        font-size: 0.98rem;
+        font-weight: 800;
+        line-height: 1.08;
+        color: var(--crpm-forest-strong);
+        margin-bottom: 0.12rem;
+    }
+
+    .crpm-conformance-board-shelf__body {
+        font-size: 0.76rem;
+        line-height: 1.28;
+        color: var(--crpm-text-soft);
+        margin-bottom: 0.18rem;
+        max-width: 58rem;
+    }
+
+    .crpm-conformance-board-shelf__meta,
+    .crpm-conformance-board-shelf__summary {
+        margin: 0 0 0.18rem 0;
+        padding: 0.38rem 0.5rem;
+        border-radius: 12px;
+        border: 1px solid rgba(113, 128, 168, 0.12);
+        background: rgba(251, 250, 253, 0.92);
+        font-size: 0.74rem;
+        line-height: 1.24;
+        color: var(--crpm-text-soft);
+    }
+
+    .crpm-conformance-board-shelf .crpm-workflow-board {
+        margin: 0.08rem 0 0 0;
+        background: rgba(255, 255, 255, 0.84);
+    }
+
     @media (max-width: 1180px) {
         .crpm-workflow-board--horizontal {
             width: 100%;

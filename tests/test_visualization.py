@@ -651,7 +651,7 @@ def test_workflow_interactive_html_uses_compact_shell_defaults():
     html = render_workflow_explorer_html(explorer)
     assert "const computeBaselineFit = () => {" in html
     assert "baselineScale = Math.min(availableWidth / boundsWidth, availableHeight / boundsHeight);" in html
-    assert "Math.max(0.72, Math.min(1.6, zoomFactor * factor))" in html
+    assert "Math.max(0.56, Math.min(1.7, zoomFactor * factor))" in html
     assert 'class="crpm-explorer-figure" style="width:100%;"' in html
     assert "max-width:760px" in html
     assert "type: 'streamlit:setFrameHeight'" in html
@@ -940,8 +940,8 @@ def test_workflow_explorer_html_uses_lighter_arrowheads():
 
     html = render_workflow_explorer_html(payload)
 
-    assert 'markerWidth="10"' in html
-    assert 'markerHeight="10"' in html
+    assert 'markerWidth="8"' in html
+    assert 'markerHeight="8"' in html
     assert 'preserveAspectRatio="xMidYMin meet"' in html
     assert "aspect-ratio:900/420" in html
     assert 'class="crpm-explorer-figure" style="width:100%;"' in html
