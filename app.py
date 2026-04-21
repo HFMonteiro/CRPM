@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import streamlit as st
 
+from crpm.runtime_compat import install_pm4py_import_guard
+
+install_pm4py_import_guard()
+
 from crpm.preflight import format_preflight_messages, validate_runtime_environment
 
 
