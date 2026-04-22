@@ -19,6 +19,7 @@ from pm4py.objects.log.obj import EventLog
 from crpm.app_state import CRPMState, bounded_cache_get, bounded_cache_put
 from crpm.conformance import compute_alignments, compute_token_replay, filter_date_range, filter_start_event, load_log, summarize_metrics
 from crpm.discovery import AVAILABLE_ALGORITHMS, DiscoveryResult, compute_model_complexity, discover_all_algorithms
+from crpm.formatting import format_decimal
 from crpm.interpretations import assess_balanced_quality, assess_bottleneck_severity, assess_fitness, assess_precision, get_executive_summary, get_model_quadrant
 from crpm.pipeline import csv_to_event_log, split_log_random
 from crpm.screening import describe_followup_window, filter_log_by_incident_period, humanize_activity_label
@@ -508,7 +509,11 @@ def build_conformance_workspace_payload(
     model_summary_df = _build_model_summary_table(discovery_results, conformance_results, comparison_df)
     deviation_summary_df = _build_deviation_summary_table(conformance_results)
     trace_deviation_df = _build_trace_deviation_table(conformance_results)
-    workflow_payload = _build_workflow_payload(log)
+    workflow_payload = _build_workflow_payload(
+        log,
+        conformance_results=conformance_results,
+        comparison_df=comparison_df,
+    )
 
     return {
         "model_summary_df": model_summary_df,
@@ -628,7 +633,12 @@ def _build_trace_deviation_table(conformance_results: Mapping[str, Any]) -> pd.D
     return df
 
 
-def _build_workflow_payload(log: EventLog | None) -> dict[str, Any]:
+def _build_workflow_payload(
+    log: EventLog | None,
+    *,
+    conformance_results: Mapping[str, Any] | None = None,
+    comparison_df: pd.DataFrame | None = None,
+) -> dict[str, Any]:
     from crpm.screening import STEP_LABELS, STEP_ORDER, classify_activity_steps, humanize_activity_label
 
     empty_nodes = pd.DataFrame(
@@ -652,6 +662,13 @@ def _build_workflow_payload(log: EventLog | None) -> dict[str, Any]:
             "coverage_pct",
             "coverage_rank",
             "coverage_group",
+            "sync_cases",
+            "log_move_cases",
+            "model_move_cases",
+            "sync_pct",
+            "log_move_pct",
+            "model_move_pct",
+            "conformance_mix_total_cases",
             "neighbor_ids",
             "related_variant_ids",
             "top_variant_signatures",
@@ -714,7 +731,11 @@ def _build_workflow_payload(log: EventLog | None) -> dict[str, Any]:
             "renderer_capabilities": {"svg": True, "html_explorer": True, "cytoscape": True},
         }
 
-    activity_names = sorted({str(event.get("concept:name")) for trace in log for event in trace if event.get("concept:name")})
+    alignment_visible_activities = _workflow_alignment_visible_activities(conformance_results, comparison_df)
+    activity_names = sorted(
+        {str(event.get("concept:name")) for trace in log for event in trace if event.get("concept:name")}
+        | alignment_visible_activities
+    )
     activity_step_lookup = classify_activity_steps(activity_names)
     step_rank_lookup = {step: rank for rank, step in enumerate(STEP_ORDER)}
 
@@ -732,6 +753,13 @@ def _build_workflow_payload(log: EventLog | None) -> dict[str, Any]:
 
     def _node_label(node_id: str) -> str:
         return STEP_LABELS.get(node_id, humanize_activity_label(node_id))
+
+    alignment_mix = _workflow_alignment_mix_by_node(
+        log,
+        conformance_results=conformance_results,
+        comparison_df=comparison_df,
+        canonicalize_activity=_canonical_node_id,
+    )
 
     node_case_counts: Counter[str] = Counter()
     node_occurrences: Counter[str] = Counter()
@@ -847,6 +875,7 @@ def _build_workflow_payload(log: EventLog | None) -> dict[str, Any]:
 
     node_rows = []
     max_cases = max(node_case_counts.values()) if node_case_counts else 0
+    max_occurrences = max(node_occurrences.values()) if node_occurrences else 0
     for node_id in ordered_nodes:
         step = node_id if node_id in step_rank_lookup else None
         display_label = _node_label(node_id)
@@ -855,10 +884,31 @@ def _build_workflow_payload(log: EventLog | None) -> dict[str, Any]:
         cases = int(node_case_counts.get(node_id, 0))
         occurrences = int(node_occurrences.get(node_id, 0))
         coverage_pct = round((cases / max_cases) * 100, 1) if max_cases else 0.0
+        activity_pct = round((occurrences / max_occurrences) * 100, 1) if max_occurrences else 0.0
         node_variants = node_variant_counts.get(node_id, Counter())
         raw_activities = [activity for activity, _ in node_raw_activity_counts.get(node_id, Counter()).most_common()]
         branch_family = _workflow_branch_family(raw_activities[0] if raw_activities else node_id, step)
         node_type = _workflow_node_type(step=step, step_rank=step_rank_lookup.get(step), total_steps=len(STEP_ORDER))
+        mix_stats = alignment_mix.get(node_id, {})
+        sync_cases = _safe_int(mix_stats.get("sync_cases"))
+        log_move_cases = _safe_int(mix_stats.get("log_move_cases"))
+        model_move_cases = _safe_int(mix_stats.get("model_move_cases"))
+        mix_total_cases = _safe_int(mix_stats.get("conformance_mix_total_cases"))
+        if mix_total_cases <= 0:
+            fallback_cases = max(cases, occurrences, 0)
+            bucket_value = "Model deviation" if step is None else "Conformant"
+            if bucket_value == "Conformant":
+                sync_cases = fallback_cases
+                log_move_cases = 0
+                model_move_cases = 0
+            elif bucket_value == "Model deviation":
+                sync_cases = 0
+                log_move_cases = fallback_cases if step is None else 0
+                model_move_cases = 0 if step is None else fallback_cases
+            mix_total_cases = sync_cases + log_move_cases + model_move_cases
+        sync_pct = round(sync_cases / mix_total_cases * 100, 1) if mix_total_cases else 0.0
+        log_move_pct = round(log_move_cases / mix_total_cases * 100, 1) if mix_total_cases else 0.0
+        model_move_pct = round(model_move_cases / mix_total_cases * 100, 1) if mix_total_cases else 0.0
         node_rows.append(
             {
                 "step": step or "unmapped",
@@ -878,8 +928,16 @@ def _build_workflow_payload(log: EventLog | None) -> dict[str, Any]:
                 "branch_family": branch_family,
                 "parent_branch": None if step is not None else "mainline",
                 "coverage_pct": coverage_pct,
+                "activity_pct": activity_pct,
                 "coverage_rank": 0,
                 "coverage_group": _coverage_group(coverage_pct),
+                "sync_cases": sync_cases,
+                "log_move_cases": log_move_cases,
+                "model_move_cases": model_move_cases,
+                "sync_pct": sync_pct,
+                "log_move_pct": log_move_pct,
+                "model_move_pct": model_move_pct,
+                "conformance_mix_total_cases": mix_total_cases,
                 "raw_activities": raw_activities,
                 "related_variant_ids": [signature for signature, _ in node_variants.most_common(3)],
                 "top_variant_signatures": [signature for signature, _ in node_variants.most_common(3)],
@@ -893,9 +951,17 @@ def _build_workflow_payload(log: EventLog | None) -> dict[str, Any]:
                     "business_label": display_label,
                     "cases": cases,
                     "occurrences": occurrences,
+                    "coverage_pct": coverage_pct,
+                    "activity_pct": activity_pct,
                     "median_days": _median_or_none(outgoing_delays),
                     "p90_days": _percentile_or_none(outgoing_delays, 90),
                     "raw_activities": raw_activities[:5],
+                    "sync_cases": sync_cases,
+                    "log_move_cases": log_move_cases,
+                    "model_move_cases": model_move_cases,
+                    "sync_pct": sync_pct,
+                    "log_move_pct": log_move_pct,
+                    "model_move_pct": model_move_pct,
                 },
             }
         )
@@ -1075,6 +1141,160 @@ def _build_workflow_payload(log: EventLog | None) -> dict[str, Any]:
     }
 
 
+def _workflow_alignment_mix_by_node(
+    log: EventLog | None,
+    *,
+    conformance_results: Mapping[str, Any] | None,
+    comparison_df: pd.DataFrame | None,
+    canonicalize_activity,
+) -> dict[str, dict[str, float]]:
+    if log is None or not conformance_results:
+        return {}
+
+    reference_model = _workflow_reference_alignment_model(conformance_results, comparison_df)
+    if not reference_model:
+        return {}
+
+    model_payload = conformance_results.get(reference_model, {})
+    alignments_payload = model_payload.get("alignments", {}) if isinstance(model_payload, Mapping) else {}
+    aligned_traces = alignments_payload.get("aligned_traces", []) if isinstance(alignments_payload, Mapping) else []
+    if not isinstance(aligned_traces, list) or not aligned_traces:
+        return {}
+
+    node_case_sets: defaultdict[str, dict[str, set[str]]] = defaultdict(
+        lambda: {"sync": set(), "log": set(), "model": set()}
+    )
+    for trace, aligned_trace in zip(log, aligned_traces):
+        if not isinstance(aligned_trace, Mapping):
+            continue
+        case_id = str(
+            trace.attributes.get("concept:name")
+            or trace.attributes.get("case_id")
+            or f"case-{len(node_case_sets) + 1}"
+        )
+        for alignment_move in aligned_trace.get("alignment", []) or []:
+            if not isinstance(alignment_move, (list, tuple)) or len(alignment_move) != 2:
+                continue
+            log_label = _workflow_alignment_activity_label(alignment_move[0])
+            model_label = _workflow_alignment_activity_label(alignment_move[1])
+            if log_label and model_label:
+                if log_label == model_label:
+                    node_case_sets[canonicalize_activity(log_label)]["sync"].add(case_id)
+                else:
+                    node_case_sets[canonicalize_activity(log_label)]["log"].add(case_id)
+                    node_case_sets[canonicalize_activity(model_label)]["model"].add(case_id)
+            elif log_label:
+                node_case_sets[canonicalize_activity(log_label)]["log"].add(case_id)
+            elif model_label:
+                node_case_sets[canonicalize_activity(model_label)]["model"].add(case_id)
+
+    node_case_counts: dict[str, dict[str, float]] = {}
+    for node_id, buckets in node_case_sets.items():
+        sync_cases = len(buckets["sync"])
+        log_move_cases = len(buckets["log"])
+        model_move_cases = len(buckets["model"])
+        total = sync_cases + log_move_cases + model_move_cases
+        node_case_counts[str(node_id)] = {
+            "sync_cases": float(sync_cases),
+            "log_move_cases": float(log_move_cases),
+            "model_move_cases": float(model_move_cases),
+            "conformance_mix_total_cases": float(total),
+        }
+    return node_case_counts
+
+
+def _workflow_alignment_visible_activities(
+    conformance_results: Mapping[str, Any] | None,
+    comparison_df: pd.DataFrame | None,
+) -> set[str]:
+    if not conformance_results:
+        return set()
+    reference_model = _workflow_reference_alignment_model(conformance_results, comparison_df)
+    if not reference_model:
+        return set()
+    model_payload = conformance_results.get(reference_model, {})
+    alignments_payload = model_payload.get("alignments", {}) if isinstance(model_payload, Mapping) else {}
+    aligned_traces = alignments_payload.get("aligned_traces", []) if isinstance(alignments_payload, Mapping) else []
+    if not isinstance(aligned_traces, list) or not aligned_traces:
+        return set()
+    activities: set[str] = set()
+    for aligned_trace in aligned_traces:
+        if not isinstance(aligned_trace, Mapping):
+            continue
+        for alignment_move in aligned_trace.get("alignment", []) or []:
+            if not isinstance(alignment_move, (list, tuple)) or len(alignment_move) != 2:
+                continue
+            log_label = _workflow_alignment_activity_label(alignment_move[0])
+            model_label = _workflow_alignment_activity_label(alignment_move[1])
+            if log_label:
+                activities.add(log_label)
+            if model_label:
+                activities.add(model_label)
+    return activities
+
+
+def _workflow_reference_alignment_model(
+    conformance_results: Mapping[str, Any],
+    comparison_df: pd.DataFrame | None,
+) -> Optional[str]:
+    if comparison_df is not None and not comparison_df.empty and "model_name" in comparison_df.columns:
+        working = comparison_df.copy()
+        for column in ("alignment_fitness", "precision"):
+            if column not in working.columns:
+                working[column] = 0.0
+            working[column] = pd.to_numeric(working[column], errors="coerce").fillna(0.0)
+        working = working.assign(_workflow_rank=working["alignment_fitness"] + working["precision"])
+        working = working.sort_values(
+            by=["_workflow_rank", "alignment_fitness", "precision", "model_name"],
+            ascending=[False, False, False, True],
+        )
+        for _, row in working.iterrows():
+            model_name = str(row.get("model_name", "")).strip()
+            if not model_name:
+                continue
+            model_payload = conformance_results.get(model_name, {})
+            alignments_payload = model_payload.get("alignments", {}) if isinstance(model_payload, Mapping) else {}
+            aligned_traces = alignments_payload.get("aligned_traces", []) if isinstance(alignments_payload, Mapping) else []
+            if isinstance(aligned_traces, list) and aligned_traces:
+                return model_name
+
+    if "Heuristics (Classic)" in conformance_results:
+        model_payload = conformance_results.get("Heuristics (Classic)", {})
+        alignments_payload = model_payload.get("alignments", {}) if isinstance(model_payload, Mapping) else {}
+        aligned_traces = alignments_payload.get("aligned_traces", []) if isinstance(alignments_payload, Mapping) else []
+        if isinstance(aligned_traces, list) and aligned_traces:
+            return "Heuristics (Classic)"
+
+    for model_name, model_payload in conformance_results.items():
+        alignments_payload = model_payload.get("alignments", {}) if isinstance(model_payload, Mapping) else {}
+        aligned_traces = alignments_payload.get("aligned_traces", []) if isinstance(alignments_payload, Mapping) else []
+        if isinstance(aligned_traces, list) and aligned_traces:
+            return str(model_name)
+    return None
+
+
+def _workflow_alignment_activity_label(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text or text == ">>" or text.lower() in {"none", "tau"}:
+            return None
+        return text
+    if isinstance(value, (list, tuple)):
+        for candidate in reversed(value):
+            label = _workflow_alignment_activity_label(candidate)
+            if label:
+                return label
+        return None
+    if hasattr(value, "label"):
+        return _workflow_alignment_activity_label(getattr(value, "label"))
+    text = str(value).strip()
+    if not text or text == ">>" or text.lower() in {"none", "tau"}:
+        return None
+    return text
+
+
 def _workflow_branch_family(activity: str, step: Optional[str]) -> str:
     activity_key = str(activity or "").lower()
     if "review" in activity_key:
@@ -1144,28 +1364,63 @@ def _build_deviation_note(conf: Mapping[str, Any]) -> str:
 def _summarize_metric_bundle(bundle: Any) -> str:
     if not isinstance(bundle, Mapping) or not bundle:
         return "N/A"
-    preferred_keys = (
-        "log_fitness",
-        "average_cost",
-        "perc_fit_traces",
-        "percentage_of_fitting_traces",
-        "average_trace_fitness",
-    )
+    if any(key in bundle for key in ("alignment_fitness", "token_fitness")):
+        nested_parts: list[str] = []
+        alignment_summary = _summarize_metric_bundle(bundle.get("alignment_fitness"))
+        token_summary = _summarize_metric_bundle(bundle.get("token_fitness"))
+        if alignment_summary != "N/A":
+            nested_parts.append(f"Alignment {alignment_summary}")
+        if token_summary != "N/A":
+            nested_parts.append(f"Token {token_summary}")
+        return " · ".join(nested_parts) if nested_parts else "N/A"
+
+    log_fitness = _safe_float(bundle.get("log_fitness"))
+    average_cost = _safe_float(bundle.get("average_cost"))
+    fit_pct = _format_percent_value(bundle.get("perc_fit_traces"))
+    if fit_pct is None:
+        fit_pct = _format_percent_value(bundle.get("percentage_of_fitting_traces"))
+    average_trace_fitness = _safe_float(bundle.get("average_trace_fitness"))
+
     parts: list[str] = []
-    for key in preferred_keys:
-        value = bundle.get(key)
-        if value is not None:
-            parts.append(f"{key}={_format_value(value)}")
+    if log_fitness is not None:
+        parts.append(f"log fit {_format_value(log_fitness)}")
+    if fit_pct is not None:
+        parts.append(f"{fit_pct} fitting traces")
+    if average_trace_fitness is not None and (log_fitness is None or abs(average_trace_fitness - log_fitness) > 0.001):
+        parts.append(f"avg trace {_format_value(average_trace_fitness)}")
+    if average_cost is not None and average_cost > 0:
+        parts.append(f"avg cost {_format_value(average_cost)}")
     if parts:
-        return "; ".join(parts)
+        return " · ".join(parts)
+
     sample_items = list(bundle.items())[:3]
-    return "; ".join(f"{key}={_format_value(value)}" for key, value in sample_items)
+    label_map = {
+        "perc_fit_traces": "fitting traces",
+        "percentage_of_fitting_traces": "fitting traces",
+        "average_trace_fitness": "avg trace",
+        "average_cost": "avg cost",
+    }
+    return " · ".join(
+        f"{label_map.get(str(key), str(key).replace('_', ' '))} {_format_value(value)}"
+        for key, value in sample_items
+        if value is not None
+    ) or "N/A"
 
 
 def _format_value(value: Any) -> str:
-    if isinstance(value, float):
-        return f"{value:.4f}"
+    numeric = _safe_float(value)
+    if numeric is not None:
+        return format_decimal(numeric, decimals=3, thousands=True)
     return str(value)
+
+
+def _format_percent_value(value: Any) -> str | None:
+    numeric = _safe_float(value)
+    if numeric is None:
+        return None
+    if 0.0 <= numeric <= 1.0:
+        numeric *= 100.0
+    return f"{format_decimal(numeric, decimals=3, thousands=True)}%"
 
 
 def _safe_float(value: Any) -> Optional[float]:
@@ -1175,6 +1430,15 @@ def _safe_float(value: Any) -> Optional[float]:
         return float(value)
     except Exception:
         return None
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        if value is None or pd.isna(value):
+            return default
+        return int(round(float(value)))
+    except Exception:
+        return default
 
 
 def _first_value(row: Any, column: str, *, fallback: Any) -> Any:

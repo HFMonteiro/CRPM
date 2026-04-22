@@ -22,6 +22,10 @@ outputs/
 logs/
 tmp/
 temp/
+.playwright-cli/
+.playwright-mcp/
+streamlit-out.log
+streamlit-err.log
 
 # Operating system files
 .DS_Store

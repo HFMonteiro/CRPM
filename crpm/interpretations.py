@@ -9,6 +9,8 @@ from __future__ import annotations
 from typing import Tuple, Dict, Any
 import pandas as pd
 
+from crpm.formatting import format_decimal
+
 
 # ---------------------------------------------------------------------------
 # Conformance Metric Assessments
@@ -339,7 +341,7 @@ def format_metric_with_assessment(
         return f"{metric_name}: N/A {get_quality_badge_html('Unknown', 'gray')}"
 
     badge = get_quality_badge_html(quality, color)
-    return f"{metric_name}: {value:.4f} {badge} - {message}"
+    return f"{metric_name}: {format_decimal(value)} {badge} - {message}"
 
 
 def get_executive_summary(

@@ -65,7 +65,7 @@ def get_custom_css() -> str:
     }
 
     .block-container {
-        max-width: min(1580px, calc(100vw - 17.4rem)) !important;
+        max-width: min(1580px, calc(100vw - 15.7rem)) !important;
         margin: 0 auto !important;
         padding-top: 0.2rem !important;
         padding-bottom: 7rem !important;
@@ -198,15 +198,15 @@ def get_custom_css() -> str:
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #1a2026 0%, #151b21 100%) !important;
         border-right: 1px solid var(--crpm-sidebar-border) !important;
-        min-width: 17rem !important;
-        max-width: 17rem !important;
+        min-width: 15.3rem !important;
+        max-width: 15.3rem !important;
         box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.03) !important;
     }
 
     [data-testid="stSidebar"] > div:first-child {
-        width: 17rem !important;
-        min-width: 17rem !important;
-        max-width: 17rem !important;
+        width: 15.3rem !important;
+        min-width: 15.3rem !important;
+        max-width: 15.3rem !important;
     }
 
     [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
@@ -220,13 +220,14 @@ def get_custom_css() -> str:
     [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] label,
     [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] span {
         color: var(--crpm-sidebar-text) !important;
+        font-size: 0.78rem !important;
     }
 
     [data-testid="stSidebar"] h1,
     [data-testid="stSidebar"] h2,
     [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] h4 {
-        font-size: 1.35rem !important;
+        font-size: 1.18rem !important;
         color: var(--crpm-sidebar-text) !important;
         line-height: 1.2 !important;
     }
@@ -236,6 +237,7 @@ def get_custom_css() -> str:
     [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p,
     [data-testid="stSidebar"] [data-testid="stCaptionContainer"] span {
         color: var(--crpm-sidebar-text-soft) !important;
+        font-size: 0.68rem !important;
     }
 
     .stButton button,
@@ -400,9 +402,9 @@ def get_custom_css() -> str:
         border: 1px solid rgba(71, 88, 79, 0.12);
         border-radius: 22px;
         box-shadow: var(--crpm-shadow-soft);
-        margin: 0.08rem 0 0.42rem 0;
+        margin: 0.04rem 0 0.24rem 0;
         overflow: hidden;
-        padding: 0.12rem;
+        padding: 0.02rem;
     }
 
     .crpm-workflow-board svg {
@@ -413,8 +415,8 @@ def get_custom_css() -> str:
 
     .crpm-workflow-board--horizontal {
         overflow-x: auto;
-        overflow-y: hidden;
-        padding: 0.08rem 0.12rem;
+        overflow-y: visible;
+        padding: 0;
         width: 100%;
         max-width: 100%;
         margin-left: 0;
@@ -425,6 +427,69 @@ def get_custom_css() -> str:
         display: block;
         min-width: 100%;
         width: auto;
+    }
+
+    .crpm-workflow-board--horizontal[data-fit-mode="shelf"] {
+        overflow-x: visible;
+    }
+
+    .crpm-workflow-board--horizontal[data-fit-mode="shelf"] svg {
+        min-width: 0;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .crpm-conformance-board-shelf {
+        margin: 0.12rem 0 0.28rem 0;
+        padding: 0.22rem 0.34rem 0.16rem 0.34rem;
+        border-radius: 20px;
+        border: 1px solid rgba(71, 88, 79, 0.11);
+        background:
+            radial-gradient(circle at top right, rgba(95, 121, 165, 0.08), transparent 28%),
+            linear-gradient(180deg, rgba(252, 251, 253, 0.98), rgba(246, 243, 249, 0.98));
+        box-shadow: var(--crpm-shadow-soft);
+    }
+
+    .crpm-conformance-board-shelf__eyebrow {
+        font-size: 0.66rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--crpm-lavender);
+        margin-bottom: 0.12rem;
+    }
+
+    .crpm-conformance-board-shelf__title {
+        font-size: 0.98rem;
+        font-weight: 800;
+        line-height: 1.08;
+        color: var(--crpm-forest-strong);
+        margin-bottom: 0.12rem;
+    }
+
+    .crpm-conformance-board-shelf__body {
+        font-size: 0.76rem;
+        line-height: 1.28;
+        color: var(--crpm-text-soft);
+        margin-bottom: 0.06rem;
+        max-width: 58rem;
+    }
+
+    .crpm-conformance-board-shelf__meta,
+    .crpm-conformance-board-shelf__summary {
+        margin: 0 0 0.06rem 0;
+        padding: 0.22rem 0.38rem;
+        border-radius: 12px;
+        border: 1px solid rgba(113, 128, 168, 0.12);
+        background: rgba(251, 250, 253, 0.92);
+        font-size: 0.74rem;
+        line-height: 1.18;
+        color: var(--crpm-text-soft);
+    }
+
+    .crpm-conformance-board-shelf .crpm-workflow-board {
+        margin: 0;
+        background: rgba(255, 255, 255, 0.84);
     }
 
     @media (max-width: 1180px) {
@@ -474,6 +539,7 @@ def get_custom_css() -> str:
     [data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] p,
     [data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] p {
         color: #2c3742 !important;
+        font-size: 0.68rem !important;
     }
 
     [data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] p:first-child,
@@ -493,6 +559,7 @@ def get_custom_css() -> str:
         color: #3d4651 !important;
         border: 1px solid rgba(71, 88, 79, 0.18) !important;
         box-shadow: 0 2px 8px rgba(50, 41, 66, 0.08) !important;
+        font-size: 0.76rem !important;
     }
 
     [data-testid="stSidebar"] [data-testid="stFileUploader"] button:hover {
@@ -557,6 +624,7 @@ def get_custom_css() -> str:
     [data-testid="stSidebar"] .stTextArea label,
     [data-testid="stSidebar"] .stDateInput label {
         color: var(--crpm-sidebar-text-soft) !important;
+        font-size: 0.78rem !important;
     }
 
     .stCheckbox label, .stRadio label {
@@ -580,6 +648,7 @@ def get_custom_css() -> str:
     [data-testid="stSidebar"] [data-testid="stWidgetLabel"] span,
     [data-testid="stSidebar"] [data-testid="stWidgetLabel"] label {
         color: var(--crpm-sidebar-text-soft) !important;
+        font-size: 0.78rem !important;
     }
 
     [data-testid="stRadio"] label,
@@ -603,6 +672,7 @@ def get_custom_css() -> str:
     [data-testid="stSidebar"] [data-testid="stSlider"] [data-testid="stWidgetLabel"] p,
     [data-testid="stSidebar"] [data-testid="stSlider"] [data-testid="stWidgetLabel"] span {
         color: var(--crpm-sidebar-text) !important;
+        font-size: 0.78rem !important;
     }
 
     [data-baseweb="radio"] label,
@@ -637,6 +707,7 @@ def get_custom_css() -> str:
     [data-testid="stSidebar"] [data-baseweb="tag"] * {
         color: #fff4f0 !important;
         fill: #fff4f0 !important;
+        font-size: 0.76rem !important;
     }
 
     [data-testid="stSidebar"] .stButton button:not([kind="primary"]) {
@@ -644,6 +715,7 @@ def get_custom_css() -> str:
         color: var(--crpm-sidebar-text) !important;
         border: 1px solid rgba(154, 171, 196, 0.18) !important;
         box-shadow: none !important;
+        font-size: 0.76rem !important;
     }
 
     [data-testid="stSidebar"] .stButton button[kind="primary"],
@@ -765,7 +837,7 @@ def get_custom_css() -> str:
     }
 
     .crpm-selection-card__eyebrow {
-        font-size: 0.76rem;
+        font-size: 0.61rem;
         font-weight: 700;
         letter-spacing: 0.03em;
         text-transform: uppercase;
@@ -774,17 +846,17 @@ def get_custom_css() -> str:
     }
 
     .crpm-selection-card__title {
-        font-size: 1rem;
+        font-size: 0.8rem;
         font-weight: 700;
         color: var(--crpm-forest-strong);
-        line-height: 1.25;
+        line-height: 1.18;
     }
 
     .crpm-selection-card__meta {
         margin-top: 0.35rem;
-        font-size: 0.85rem;
+        font-size: 0.68rem;
         color: var(--crpm-text-soft);
-        line-height: 1.42;
+        line-height: 1.3;
     }
 
     .crpm-detail-card {
@@ -816,7 +888,7 @@ def get_custom_css() -> str:
     }
 
     .crpm-detail-card__label {
-        font-size: 0.72rem;
+        font-size: 0.58rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.03em;
@@ -825,10 +897,10 @@ def get_custom_css() -> str:
     }
 
     .crpm-detail-card__value {
-        font-size: 0.92rem;
+        font-size: 0.74rem;
         font-weight: 600;
         color: var(--crpm-forest-strong);
-        line-height: 1.3;
+        line-height: 1.18;
         word-break: break-word;
     }
 
@@ -848,18 +920,18 @@ def get_custom_css() -> str:
     }
 
     .crpm-model-card__rank {
-        font-size: 0.76rem;
+        font-size: 0.61rem;
         font-weight: 700;
         color: var(--crpm-muted);
         margin-bottom: 0.2rem;
     }
 
     .crpm-model-card__title {
-        font-size: 0.96rem;
+        font-size: 0.77rem;
         font-weight: 700;
         color: var(--crpm-forest-strong);
         margin-bottom: 0.55rem;
-        line-height: 1.25;
+        line-height: 1.18;
     }
 
     .crpm-model-card__grid {
@@ -878,7 +950,7 @@ def get_custom_css() -> str:
 
     .crpm-model-card__grid span {
         display: block;
-        font-size: 0.72rem;
+        font-size: 0.58rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.03em;
@@ -888,9 +960,9 @@ def get_custom_css() -> str:
 
     .crpm-model-card__grid strong {
         display: block;
-        font-size: 0.84rem;
+        font-size: 0.67rem;
         color: var(--crpm-forest-strong);
-        line-height: 1.3;
+        line-height: 1.18;
         word-break: break-word;
     }
 
@@ -909,27 +981,29 @@ def get_custom_css() -> str:
         border-radius: 16px;
         background: rgba(252, 251, 253, 0.98);
         box-shadow: var(--crpm-shadow-soft);
-        overflow: hidden;
+        overflow: visible;
     }
 
     .crpm-ranked-table__title {
         padding: 0.62rem 0.78rem 0.44rem 0.78rem;
-        font-size: 0.88rem;
+        font-size: 0.7rem;
         font-weight: 700;
         color: var(--crpm-forest-strong);
     }
 
     .crpm-ranked-table__scroller {
         max-height: 360px;
-        overflow: auto;
+        overflow-x: auto;
+        overflow-y: auto;
         border-top: 1px solid rgba(71, 88, 79, 0.08);
     }
 
     .crpm-ranked-table table {
-        width: 100%;
+        width: max-content;
+        min-width: 100%;
         border-collapse: separate;
         border-spacing: 0;
-        font-size: 0.83rem;
+        font-size: 0.66rem;
     }
 
     .crpm-ranked-table thead th {
@@ -940,7 +1014,7 @@ def get_custom_css() -> str:
         background: #f4eff8;
         color: var(--crpm-forest-strong);
         text-align: left;
-        font-size: 0.74rem;
+        font-size: 0.59rem;
         font-weight: 700;
         letter-spacing: 0.02em;
         border-bottom: 1px solid rgba(71, 88, 79, 0.12);
@@ -972,7 +1046,7 @@ def get_custom_css() -> str:
     }
 
     .crpm-conformance-inspector-grid .crpm-bi-card__eyebrow {
-        font-size: 0.63rem;
+        font-size: 0.5rem;
         letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--crpm-muted);
@@ -980,15 +1054,15 @@ def get_custom_css() -> str:
     }
 
     .crpm-conformance-inspector-grid .crpm-bi-card__title {
-        font-size: 0.83rem;
+        font-size: 0.66rem;
         font-weight: 700;
-        line-height: 1.14;
+        line-height: 1.06;
         color: var(--crpm-forest-strong);
         margin-bottom: 0.16rem;
     }
 
     .crpm-conformance-inspector-grid .crpm-bi-card__value {
-        font-size: 1.7rem;
+        font-size: 1.36rem;
         font-weight: 800;
         line-height: 1.05;
         color: #102e41;
@@ -999,8 +1073,8 @@ def get_custom_css() -> str:
     }
 
     .crpm-conformance-panel {
-        margin: 0.03rem 0 0.18rem 0;
-        padding: 0.48rem 0.58rem;
+        margin: 0.03rem 0 0.14rem 0;
+        padding: 0.44rem 0.54rem;
         border-radius: 13px;
         border: 1px solid rgba(71, 88, 79, 0.12);
         background: rgba(252, 251, 253, 0.98);
@@ -1012,7 +1086,7 @@ def get_custom_css() -> str:
     }
 
     .crpm-conformance-panel__eyebrow {
-        font-size: 0.65rem;
+        font-size: 0.52rem;
         font-weight: 700;
         letter-spacing: 0.06em;
         text-transform: uppercase;
@@ -1021,16 +1095,76 @@ def get_custom_css() -> str:
     }
 
     .crpm-conformance-panel__title {
-        font-size: 0.97rem;
+        font-size: 0.78rem;
         font-weight: 800;
-        line-height: 1.16;
+        line-height: 1.08;
         color: var(--crpm-forest-strong);
     }
 
     .crpm-conformance-panel__body {
-        font-size: 0.69rem;
+        font-size: 0.55rem;
+        line-height: 1.12;
+        color: var(--crpm-text-soft);
+    }
+
+    .crpm-conformance-panel--rail {
+        border-color: rgba(71, 88, 79, 0.09);
+        background: linear-gradient(180deg, rgba(251, 250, 253, 0.98) 0%, rgba(247, 244, 250, 0.98) 100%);
+        box-shadow: 0 5px 12px rgba(50, 41, 66, 0.045);
+    }
+
+    .crpm-conformance-side-title {
+        margin: 0.02rem 0 0.16rem 0;
+        font-size: 0.82rem;
+        font-weight: 800;
+        line-height: 1.05;
+        color: var(--crpm-forest-strong);
+        letter-spacing: -0.01em;
+    }
+
+    .crpm-conformance-side-title--rail {
+        font-size: 0.76rem;
+    }
+
+    .crpm-conformance-side-title--inspector {
+        font-size: 0.76rem;
+    }
+
+    .crpm-conformance-side-subtitle {
+        margin: 0.12rem 0 0.16rem 0;
+        font-size: 0.66rem;
+        font-weight: 800;
+        line-height: 1.04;
+        color: var(--crpm-forest-strong);
+        letter-spacing: 0.01em;
+        text-transform: uppercase;
+    }
+
+    .crpm-conformance-side-rail {
+        margin: 0 0 0.06rem 0;
+        padding: 0.42rem 0.5rem 0.34rem 0.5rem;
+        border-radius: 18px;
+        border: 1px solid rgba(71, 88, 79, 0.1);
+        background:
+            radial-gradient(circle at top right, rgba(95, 121, 165, 0.06), transparent 30%),
+            linear-gradient(180deg, rgba(252, 251, 253, 0.99) 0%, rgba(247, 244, 250, 0.98) 100%);
+        box-shadow: 0 6px 14px rgba(50, 41, 66, 0.05);
+    }
+
+    .crpm-conformance-side-rail--filters {
+        border-left: 4px solid rgba(85, 124, 147, 0.26);
+    }
+
+    .crpm-conformance-side-rail--inspector {
+        border-left: 4px solid rgba(100, 89, 148, 0.2);
+    }
+
+    .crpm-conformance-side-lead {
+        font-size: 0.63rem;
         line-height: 1.22;
         color: var(--crpm-text-soft);
+        margin-top: -0.02rem;
+        max-width: 23rem;
     }
 
     .crpm-conformance-hero,
@@ -1038,7 +1172,7 @@ def get_custom_css() -> str:
     .crpm-conformance-report-band,
     .crpm-conformance-evidence-band {
         margin: 0 0 0.12rem 0;
-        padding: 0.4rem 0.56rem;
+        padding: 0.38rem 0.54rem;
         border-radius: 15px;
         border: 1px solid rgba(71, 88, 79, 0.12);
         background: linear-gradient(180deg, rgba(252, 251, 253, 0.98) 0%, rgba(247, 249, 252, 0.98) 100%);
@@ -1077,8 +1211,8 @@ def get_custom_css() -> str:
     .crpm-conformance-stage-header__body,
     .crpm-conformance-report-band__body,
     .crpm-conformance-evidence-band {
-        font-size: 0.7rem;
-        line-height: 1.2;
+        font-size: 0.68rem;
+        line-height: 1.16;
         color: var(--crpm-text-soft);
     }
 
@@ -1126,10 +1260,11 @@ def get_custom_css() -> str:
     }
 
     .crpm-table__cell--label {
-        max-width: 0;
-        min-width: 0;
+        max-width: 22rem;
+        min-width: 11rem;
         line-height: 1.35;
         font-weight: 600;
+        white-space: normal;
     }
 
     .crpm-table__cell--chip {
@@ -1610,7 +1745,7 @@ def get_custom_css() -> str:
 
     .crpm-conformance-kpi-strip--rail {
         grid-template-columns: 1fr;
-        margin: 0.04rem 0 0.22rem 0;
+        margin: 0.02rem 0 0.12rem 0;
     }
 
     .crpm-conformance-kpi-strip .crpm-bi-card {
@@ -1646,6 +1781,25 @@ def get_custom_css() -> str:
 
     .crpm-conformance-kpi-strip .crpm-bi-card__body {
         display: none;
+    }
+
+    .crpm-conformance-kpi-strip--rail .crpm-bi-card {
+        padding: 0.36rem 0.4rem;
+        border-color: rgba(71, 88, 79, 0.08);
+        box-shadow: 0 4px 10px rgba(50, 41, 66, 0.032);
+    }
+
+    .crpm-conformance-kpi-strip--rail .crpm-bi-card__eyebrow {
+        font-size: 0.51rem;
+    }
+
+    .crpm-conformance-kpi-strip--rail .crpm-bi-card__title {
+        font-size: 0.67rem;
+        line-height: 1.04;
+    }
+
+    .crpm-conformance-kpi-strip--rail .crpm-bi-card__value {
+        font-size: 0.72rem;
     }
 
     @media (max-width: 1100px) {

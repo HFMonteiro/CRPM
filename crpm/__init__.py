@@ -1,17 +1,11 @@
 """CRPM - Process mining workbench for colorectal cancer screening programs."""
 
-__version__ = "0.3.0"
+from __future__ import annotations
 
-from . import analytics
-from . import conformance
-from . import dfg_utils
-from . import discovery
-from . import interpretations
-from . import pipeline
-from . import queue_flow
-from . import screening
-from . import variants
-from . import visualization
+from importlib import import_module
+from typing import Any
+
+__version__ = "0.3.0"
 
 __all__ = [
     "analytics",
@@ -20,8 +14,22 @@ __all__ = [
     "discovery",
     "interpretations",
     "pipeline",
+    "preflight",
     "queue_flow",
+    "runtime_compat",
     "screening",
     "variants",
     "visualization",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    if name not in __all__:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module = import_module(f".{name}", __name__)
+    globals()[name] = module
+    return module
+
+
+def __dir__() -> list[str]:
+    return sorted(list(globals().keys()) + __all__)

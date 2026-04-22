@@ -11,6 +11,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from crpm.app_state import AnalysisSnapshot, CRPMState, bounded_cache_get, bounded_cache_put, get_crpm_state
+from crpm.formatting import format_decimal as format_display_decimal
+from crpm.formatting import format_metric_value as format_display_metric
 from crpm.interpretations import assess_balanced_quality, assess_fitness, assess_precision
 from crpm.pages.common import (
     render_empty_state,
@@ -67,7 +69,7 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
         render_quiet_note("No workflow graph could be derived for this selection. The model and deviation tables remain available.")
 
     st.subheader("Conformance Analytics")
-    _render_conformance_header(model_summary_df=model_summary_df)
+    _render_conformance_header(workflow=workflow, model_summary_df=model_summary_df)
 
     if has_workflow:
         controls = _workflow_controls_from_state(snapshot)
@@ -112,8 +114,7 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
         current_selection_kind = "none"
         current_selection_id = None
 
-    _render_conformance_report_band(workflow=filtered_workflow, model_summary_df=model_summary_df)
-    filter_col, main_col, detail_col = st.columns([0.46, 2.56, 0.98], gap="small")
+    filter_col, main_col, detail_col = st.columns([0.72, 2.0, 1.12], gap="small")
 
     with filter_col:
         _render_conformance_filter_rail(
@@ -154,7 +155,11 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
             selection_id = None
             render_inline_empty("No workflow graph is available for this selection. Use the model and deviation summaries in the inspector.")
     with detail_col:
-        st.markdown("#### Inspector")
+        _render_conformance_side_intro(
+            title="Inspector",
+            lead="Pin exact metrics only after the reference backbone reads clearly.",
+            variant="inspector",
+        )
         pinned_kind, pinned_id = _render_right_panel(
             snapshot=snapshot,
             model_summary_df=model_summary_df,
@@ -176,8 +181,12 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
         selected_workflow_edge_id=pinned_id if pinned_kind == "edge" else None,
     )
     if has_workflow:
-        _render_workflow_feedback(filtered_workflow, filtered_nodes_df, filtered_edges_df, workflow_mode="interactive")
-        _render_board_export_view(filtered_workflow, model_summary_df=model_summary_df)
+        _render_board_export_view(
+            filtered_workflow,
+            model_summary_df=model_summary_df,
+            nodes_df=filtered_nodes_df,
+            edges_df=filtered_edges_df,
+        )
 
 def _render_workflow_board_or_graph(
     *,
@@ -240,9 +249,10 @@ def _render_interactive_workflow_graph(
             selected_edge_id=selected_edge_id,
         )
         explorer_payload["instance_id"] = f"{_widget_key(snapshot, 'workflow_explorer_html')}_{viewport_nonce}"
+        initial_frame_height = int(explorer_payload.get("frame_height", int(explorer_payload.get("height", 520)) + 116)) + 56
         components.html(
             render_workflow_explorer_html(explorer_payload),
-            height=int(explorer_payload.get("frame_height", int(explorer_payload.get("height", 520)) + 116)),
+            height=initial_frame_height,
             scrolling=False,
         )
         return True, selection_kind, selection_id, None
@@ -291,7 +301,7 @@ def _render_right_panel(
     selection_kind: str,
     selection_id: Optional[str],
 ) -> tuple[str, Optional[str]]:
-    st.markdown("##### Selection focus")
+    st.markdown("<div class='crpm-conformance-side-subtitle'>Selection focus</div>", unsafe_allow_html=True)
     selected_kind, selected_id, node_row, edge_row = _render_selection_focus(
         snapshot=snapshot,
         nodes_df=nodes_df,
@@ -300,7 +310,7 @@ def _render_right_panel(
         selection_kind=selection_kind,
         selection_id=selection_id,
     )
-    st.markdown("##### Pinned exact metrics")
+    st.markdown("<div class='crpm-conformance-side-subtitle'>Pinned exact metrics</div>", unsafe_allow_html=True)
     if selected_id:
         _render_event_process_details(
             model_summary_df=model_summary_df,
@@ -314,7 +324,7 @@ def _render_right_panel(
     else:
         render_legend_note("Overview mode is active. Pin a node or transition from this rail when you need exact metrics.")
 
-    st.markdown("##### Context")
+    st.markdown("<div class='crpm-conformance-side-subtitle'>Context</div>", unsafe_allow_html=True)
     _render_insight_action_panel(workflow, controls)
 
     with st.expander("Drilldown", expanded=False):
@@ -478,26 +488,28 @@ def _render_supporting_detail_tabs(
         if deviation_summary_df.empty:
             render_inline_empty("No model-level deviation summary was extracted for the current selection.")
         else:
+            render_legend_note("Alignment replay summarizes strict replay fit. Token replay highlights how much of the observed log replays cleanly against the model.")
             deviation_display = _format_deviation_summary(deviation_summary_df).rename(
                 columns={
                     "model": "Model",
                     "precision": "Precision",
-                    "alignment_summary": "Alignment summary",
-                    "token_summary": "Token summary",
-                    "deviation_note": "Deviation note",
+                    "alignment_summary": "Alignment replay",
+                    "token_summary": "Token replay",
+                    "deviation_note": "Interpretation",
                 }
             )
-            preferred_columns = [column for column in ("Model", "Precision", "Alignment summary", "Token summary", "Deviation note") if column in deviation_display.columns]
+            preferred_columns = [column for column in ("Model", "Precision", "Alignment replay", "Token replay", "Interpretation") if column in deviation_display.columns]
             render_html_ranked_table(
                 deviation_display[preferred_columns],
                 title="Deviation summary",
-                label_column="Deviation note" if "Deviation note" in deviation_display.columns else preferred_columns[0],
+                label_column="Interpretation" if "Interpretation" in deviation_display.columns else preferred_columns[0],
             )
 
     with support_tabs[2]:
         if trace_deviation_df.empty:
             render_inline_empty("No trace-level deviations were extracted for the current selection.")
         else:
+            render_legend_note("Lower fitness and higher replay cost usually indicate traces that diverge more strongly from the selected reference model.")
             trace_display = _format_trace_deviations(trace_deviation_df).rename(
                 columns={
                     "model": "Model",
@@ -623,10 +635,10 @@ def _render_workflow_controls(
     elif layout == "rail":
         st.markdown(
             (
-                "<div class='crpm-conformance-panel crpm-conformance-panel--muted'>"
+                "<div class='crpm-conformance-panel crpm-conformance-panel--muted crpm-conformance-panel--rail'>"
                 "<div class='crpm-conformance-panel__eyebrow'>Cases, pathway & deviation</div>"
-                "<div class='crpm-conformance-panel__body'>Use this left rail for subset filters and figure lenses. "
-                "The active process flow stays centered, with the inspector reserved for exact pins.</div>"
+                "<div class='crpm-conformance-panel__body'>Subset and lens controls live here. "
+                "The reference flow stays centered; the inspector is reserved for exact pins.</div>"
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -720,7 +732,11 @@ def _render_conformance_filter_rail(
     *,
     model_summary_df: pd.DataFrame,
 ) -> None:
-    st.markdown("#### Filters")
+    _render_conformance_side_intro(
+        title="Filters",
+        lead="Trim the visible subset and lens settings before reading the pathway.",
+        variant="filters",
+    )
     _render_workflow_kpi_strip(
         snapshot,
         workflow,
@@ -731,16 +747,31 @@ def _render_conformance_filter_rail(
     _render_workflow_controls(snapshot, controls=controls, layout="rail")
 
 
+def _render_conformance_side_intro(*, title: str, lead: str, variant: str) -> None:
+    title_modifier = "crpm-conformance-side-title--inspector" if variant == "inspector" else "crpm-conformance-side-title--rail"
+    st.markdown(
+        (
+            f"<div class='crpm-conformance-panel crpm-conformance-panel--muted crpm-conformance-panel--rail "
+            f"crpm-conformance-side-rail crpm-conformance-side-rail--{html.escape(variant)}'>"
+            f"<div class='crpm-conformance-side-title {title_modifier}'>{html.escape(title)}</div>"
+            f"<div class='crpm-conformance-side-lead'>{html.escape(lead)}</div>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
 def _render_workflow_stage_toolbar(snapshot: AnalysisSnapshot) -> dict[str, bool]:
-    header_col, clear_col, reset_col = st.columns([0.78, 0.11, 0.11], gap="small")
+    header_col, clear_col, reset_col = st.columns([0.82, 0.09, 0.09], gap="small")
     with header_col:
         st.markdown(
             (
                 "<div class='crpm-conformance-stage-header'>"
                 "<div class='crpm-conformance-stage-header__eyebrow'>Active process flow</div>"
                 "<div class='crpm-conformance-stage-header__title'>Interactive workflow explorer</div>"
-                "<div class='crpm-conformance-stage-header__body'>Read the reference pathway first. "
-                "Workflow lenses sit above the figure; use the right rail for exact pins and ranked detail.</div>"
+                "<div class='crpm-conformance-stage-header__body'>"
+                "Read the pathway first; use the right rail only when the backbone looks suspicious."
+                "</div>"
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -766,8 +797,20 @@ def _render_workflow_stage_toolbar(snapshot: AnalysisSnapshot) -> dict[str, bool
     }
 
 
-def _render_conformance_header(*, model_summary_df: pd.DataFrame) -> None:
+def _render_conformance_header(*, workflow: dict[str, Any], model_summary_df: pd.DataFrame) -> None:
     reference_model = _top_model_name(model_summary_df) or "No reference model"
+    summary = workflow.get("summary", {}) if isinstance(workflow, dict) else {}
+    dominant_share = _coerce_float(summary.get("dominant_path_share"))
+    deviation_share = _coerce_float(summary.get("deviation_share"))
+    throughput = _coerce_float(summary.get("median_throughput_days"))
+    summary_bits = []
+    if dominant_share is not None:
+        summary_bits.append(f"dominant path {dominant_share:.1f}%")
+    if deviation_share is not None:
+        summary_bits.append(f"deviation share {deviation_share:.1f}%")
+    if throughput is not None:
+        summary_bits.append(f"median throughput {throughput:.1f} d")
+    summary_text = " · ".join(summary_bits) if summary_bits else "Read the pathway first, then isolate deviations only where the backbone or delay story breaks."
     st.markdown(
         (
             "<div class='crpm-conformance-page-marker' aria-hidden='true'></div>"
@@ -777,7 +820,7 @@ def _render_conformance_header(*, model_summary_df: pd.DataFrame) -> None:
             "<div>"
             "<div class='crpm-conformance-hero__title'>Interactive pathway investigation</div>"
             "<div class='crpm-conformance-hero__body'>"
-            "A graph-first surface for reading the reference pathway, isolating deviations, and inspecting timing burden without dashboard clutter."
+            f"{html.escape(summary_text)}"
             "</div>"
             "</div>"
             f"<div class='crpm-conformance-hero__badge'><span>Reference model</span><strong>{html.escape(reference_model)}</strong></div>"
@@ -1108,13 +1151,80 @@ def _render_compact_filter_summary(controls: dict[str, Any]) -> None:
     )
 
 
-def _render_board_export_view(workflow: dict[str, Any], *, model_summary_df: pd.DataFrame) -> None:
-    with st.expander("Board export view", expanded=False):
-        _render_board_summary(workflow=workflow, model_summary_df=model_summary_df)
-        st.markdown(
-            render_workflow_conformance_svg(workflow, layout_mode="horizontal", detail_level="executive"),
-            unsafe_allow_html=True,
-        )
+def _workflow_feedback_text(
+    workflow: dict[str, Any],
+    nodes_df: pd.DataFrame,
+    edges_df: pd.DataFrame,
+) -> str:
+    summary = workflow.get("summary", {}) if isinstance(workflow, dict) else {}
+    requested_coverage_view = str(workflow.get("requested_coverage_view", "")).lower() if isinstance(workflow, dict) else ""
+    applied_coverage_view = str(workflow.get("applied_coverage_view", requested_coverage_view)).lower() if isinstance(workflow, dict) else requested_coverage_view
+    covered_cases = _coerce_int(summary.get("cases_covered"))
+    log_deviation_share = _coerce_float(summary.get("log_deviation_share"))
+    model_deviation_share = _coerce_float(summary.get("model_deviation_share"))
+    deviation_bits = []
+    if log_deviation_share is not None:
+        deviation_bits.append(f"log deviation {log_deviation_share:.1f}%")
+    if model_deviation_share is not None:
+        deviation_bits.append(f"model deviation {model_deviation_share:.1f}%")
+    coverage_suffix = ""
+    if requested_coverage_view and applied_coverage_view and requested_coverage_view != applied_coverage_view:
+        coverage_suffix = f" · requested {requested_coverage_view.title()} view, showing {applied_coverage_view.title()} because the requested slice was empty"
+    return (
+        f"Visible subset: {covered_cases:,} cases · {len(nodes_df):,} nodes · {len(edges_df):,} edges"
+        + (f" · {' · '.join(deviation_bits)}" if deviation_bits else "")
+        + coverage_suffix
+    )
+
+
+def _board_export_story_text(*, workflow: dict[str, Any], model_summary_df: pd.DataFrame) -> str:
+    summary = workflow.get("summary", {}) if isinstance(workflow, dict) else {}
+    dominant_share = _coerce_float(summary.get("dominant_path_share"))
+    deviation_share = _coerce_float(summary.get("deviation_share"))
+    throughput = _coerce_float(summary.get("median_throughput_days"))
+    top_model = _top_model_name(model_summary_df)
+    story_bits = []
+    if dominant_share is not None:
+        story_bits.append(f"dominant path covers {dominant_share:.1f}% of visible cases")
+    if deviation_share is not None:
+        story_bits.append(f"deviation share is {deviation_share:.1f}%")
+    if throughput is not None:
+        story_bits.append(f"median throughput is {throughput:.1f} d")
+    if top_model:
+        story_bits.append(f"best current model is {top_model}")
+    if story_bits:
+        return "Board readout: " + " · ".join(story_bits) + "."
+    return (
+        "Board readout: use the dominant pathway on the left as the canonical story, "
+        "then read the rare-path excursions above and below it."
+    )
+
+
+def _render_board_export_view(
+    workflow: dict[str, Any],
+    *,
+    model_summary_df: pd.DataFrame,
+    nodes_df: pd.DataFrame,
+    edges_df: pd.DataFrame,
+) -> None:
+    subset_text = _workflow_feedback_text(workflow, nodes_df, edges_df)
+    story_text = _board_export_story_text(workflow=workflow, model_summary_df=model_summary_df)
+    board_markup = render_workflow_conformance_svg(workflow, layout_mode="horizontal", detail_level="executive")
+    st.markdown(
+        (
+            "<div class='crpm-conformance-board-shelf'>"
+            "<div class='crpm-conformance-board-shelf__eyebrow'>Board export view</div>"
+            "<div class='crpm-conformance-board-shelf__title'>Horizontal pathway shelf</div>"
+            "<div class='crpm-conformance-board-shelf__body'>"
+            "A compact report shelf for the current visible subset."
+            "</div>"
+            f"<div class='crpm-conformance-board-shelf__meta'>{html.escape(subset_text)}</div>"
+            f"<div class='crpm-conformance-board-shelf__summary'>{html.escape(story_text)}</div>"
+            f"{board_markup}"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 def _workflow_insight(summary: dict[str, Any], controls: dict[str, Any]) -> str:
@@ -1793,7 +1903,7 @@ def _format_balance_value(row: pd.Series) -> str:
     precision = _coerce_float(row.get("Precision"))
     if fitness is None or precision is None:
         return "N/A"
-    return f"{(fitness + precision) / 2:.4f}"
+    return format_display_decimal((fitness + precision) / 2)
 
 
 def _short_label(value: str, *, max_chars: int) -> str:
@@ -1838,24 +1948,11 @@ def _row_label(row: pd.Series) -> str:
 
 
 def _format_metric_value(value: Any) -> str:
-    try:
-        if value is None or pd.isna(value):
-            return "N/A"
-        return f"{float(value):.4f}"
-    except Exception:
-        return str(value)
+    return format_display_metric(value, kind="score")
 
 
 def _format_number(value: Any) -> str:
-    try:
-        if value is None or pd.isna(value):
-            return "N/A"
-        numeric = float(value)
-        if numeric.is_integer():
-            return f"{int(numeric):,}"
-        return f"{numeric:,.1f}"
-    except Exception:
-        return str(value)
+    return format_display_metric(value)
 
 
 def _format_numberish(value: Any) -> Any:
@@ -1866,7 +1963,7 @@ def _format_numberish(value: Any) -> Any:
         pass
     if isinstance(value, str):
         return value
-    return _format_number(value)
+    return format_display_metric(value)
 
 
 def _coerce_int(value: Any) -> int:
@@ -1920,6 +2017,6 @@ def _format_decimal(value: object) -> object:
     try:
         if pd.isna(value):
             return "N/A"
-        return f"{float(value):.4f}"
+        return format_display_decimal(value)
     except Exception:
         return value
