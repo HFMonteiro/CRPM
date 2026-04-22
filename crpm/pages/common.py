@@ -10,6 +10,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from crpm.formatting import format_metric_value as shared_format_metric_value
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,29 +39,7 @@ def short_label(value: str, *, max_chars: int = 32) -> str:
 
 
 def format_metric_value(value: Any, *, kind: str = "generic") -> str:
-    try:
-        if value is None or pd.isna(value):
-            return "N/A"
-    except Exception:
-        if value is None:
-            return "N/A"
-
-    try:
-        numeric = float(value)
-    except Exception:
-        return str(value)
-
-    if kind == "count":
-        return f"{int(round(numeric)):,}"
-    if kind == "percent":
-        return f"{numeric:,.1f}%"
-    if kind in {"days", "hours"}:
-        return f"{numeric:,.1f} {kind}"
-    if kind == "score":
-        return f"{numeric:.4f}"
-    if numeric.is_integer():
-        return f"{int(numeric):,}"
-    return f"{numeric:,.1f}"
+    return shared_format_metric_value(value, kind=kind)
 
 
 def render_html_card_grid(cards: list[Mapping[str, Any]], *, grid_class: str = "crpm-bi-card-grid") -> None:

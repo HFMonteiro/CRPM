@@ -8,6 +8,8 @@ from typing import Dict, List, Any
 import pandas as pd
 from fpdf import FPDF
 
+from crpm.formatting import format_decimal
+
 
 class ProcessMiningReport(FPDF):
     """Custom PDF report for process mining analysis."""
@@ -132,9 +134,9 @@ def generate_pdf_report(
                 f"{best_model['algorithm']} - {best_model['variant']}"
             )
             pdf.ln(2)
-            pdf.add_metric("Alignment Fitness", f"{best_model['alignment_fitness']:.4f}")
-            pdf.add_metric("Precision", f"{best_model['precision']:.4f}")
-            pdf.add_metric("Overall Score", f"{best_model['score']:.4f}")
+            pdf.add_metric("Alignment Fitness", format_decimal(best_model["alignment_fitness"]))
+            pdf.add_metric("Precision", format_decimal(best_model["precision"]))
+            pdf.add_metric("Overall Score", format_decimal(best_model["score"]))
         else:
             pdf.body_text("Conformance metrics not available for model recommendation.")
     else:
@@ -189,10 +191,10 @@ def generate_pdf_report(
                 model_name = model_name[:32] + "..."
 
             pdf.cell(col_widths[0], 6, model_name, 1, 0, 'L')
-            pdf.cell(col_widths[1], 6, f"{row.get('alignment_fitness', 0):.4f}", 1, 0, 'C')
-            pdf.cell(col_widths[2], 6, f"{row.get('precision', 0):.4f}", 1, 0, 'C')
-            pdf.cell(col_widths[3], 6, f"{row.get('simplicity', 0):.4f}", 1, 0, 'C')
-            pdf.cell(col_widths[4], 6, f"{row.get('generalization', 0):.4f}", 1, 0, 'C')
+            pdf.cell(col_widths[1], 6, format_decimal(row.get("alignment_fitness", 0)), 1, 0, 'C')
+            pdf.cell(col_widths[2], 6, format_decimal(row.get("precision", 0)), 1, 0, 'C')
+            pdf.cell(col_widths[3], 6, format_decimal(row.get("simplicity", 0)), 1, 0, 'C')
+            pdf.cell(col_widths[4], 6, format_decimal(row.get("generalization", 0)), 1, 0, 'C')
             pdf.ln()
 
         pdf.ln(4)
@@ -207,11 +209,11 @@ def generate_pdf_report(
     pdf.section_title("3.1 Case Duration Statistics")
     if case_stats:
         pdf.add_metric("Total Cases", case_stats.get("total_cases", "N/A"))
-        pdf.add_metric("Median Duration", f"{case_stats.get('median_duration_s', 0) / 86400:.4f} days")
-        pdf.add_metric("Average Duration", f"{case_stats.get('avg_duration_s', 0) / 86400:.4f} days")
-        pdf.add_metric("P90 Duration", f"{case_stats.get('p90_duration_s', 0) / 86400:.4f} days")
-        pdf.add_metric("Max Duration", f"{case_stats.get('max_duration_s', 0) / 86400:.4f} days")
-        pdf.add_metric("Std Deviation", f"{case_stats.get('std_duration_s', 0) / 86400:.4f} days")
+        pdf.add_metric("Median Duration", f"{format_decimal(case_stats.get('median_duration_s', 0) / 86400)} days")
+        pdf.add_metric("Average Duration", f"{format_decimal(case_stats.get('avg_duration_s', 0) / 86400)} days")
+        pdf.add_metric("P90 Duration", f"{format_decimal(case_stats.get('p90_duration_s', 0) / 86400)} days")
+        pdf.add_metric("Max Duration", f"{format_decimal(case_stats.get('max_duration_s', 0) / 86400)} days")
+        pdf.add_metric("Std Deviation", f"{format_decimal(case_stats.get('std_duration_s', 0) / 86400)} days")
     else:
         pdf.body_text("No case duration statistics available.")
 
@@ -246,8 +248,8 @@ def generate_pdf_report(
             median_days = row.get("median_duration_s", 0) / 86400 if pd.notna(row.get("median_duration_s")) else 0
             p90_days = row.get("p90_duration_s", 0) / 86400 if pd.notna(row.get("p90_duration_s")) else 0
 
-            pdf.cell(col_widths[2], 6, f"{median_days:.4f}", 1, 0, 'C')
-            pdf.cell(col_widths[3], 6, f"{p90_days:.4f}", 1, 0, 'C')
+            pdf.cell(col_widths[2], 6, format_decimal(median_days), 1, 0, 'C')
+            pdf.cell(col_widths[3], 6, format_decimal(p90_days), 1, 0, 'C')
             pdf.ln()
 
         pdf.ln(4)
@@ -290,8 +292,8 @@ def generate_pdf_report(
             median_days = row.get("median_duration_s", 0) / 86400
             p90_days = row.get("p90_duration_s", 0) / 86400
 
-            pdf.cell(col_widths[2], 6, f"{median_days:.4f}", 1, 0, 'C')
-            pdf.cell(col_widths[3], 6, f"{p90_days:.4f}", 1, 0, 'C')
+            pdf.cell(col_widths[2], 6, format_decimal(median_days), 1, 0, 'C')
+            pdf.cell(col_widths[3], 6, format_decimal(p90_days), 1, 0, 'C')
             pdf.ln()
 
         pdf.ln(4)

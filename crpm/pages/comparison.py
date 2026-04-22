@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from crpm.app_state import AnalysisSnapshot
+from crpm.formatting import format_metric_value
 from crpm.interpretations import assess_balanced_quality, assess_fitness, assess_precision
 from crpm.pages.common import render_empty_state, render_html_ranked_table, render_metric_card_grid, render_plotly_chart, render_quiet_note
 from crpm.visualization import create_fitness_precision_scatter, create_model_comparison_heatmap
@@ -20,11 +21,8 @@ def render_comparison_page(snapshot: AnalysisSnapshot) -> None:
 
     comparison_df = snapshot.comparison_df.copy()
     display_df = comparison_df.copy()
-    for column in ("alignment_fitness", "token_fitness", "precision"):
-        if column in display_df.columns:
-            display_df[column] = display_df[column].map(lambda value: f"{value:.4f}" if pd.notna(value) else "N/A")
     if "discovery_time_s" in display_df.columns:
-        display_df["discovery_time_s"] = display_df["discovery_time_s"].map(lambda value: f"{value:.2f}s")
+        display_df["discovery_time_s"] = display_df["discovery_time_s"].map(lambda value: format_metric_value(value, kind="seconds"))
 
     best_fitness = comparison_df.loc[comparison_df["alignment_fitness"].idxmax()] if "alignment_fitness" in comparison_df.columns and comparison_df["alignment_fitness"].notna().any() else None
     best_precision = comparison_df.loc[comparison_df["precision"].idxmax()] if "precision" in comparison_df.columns and comparison_df["precision"].notna().any() else None
@@ -39,21 +37,24 @@ def render_comparison_page(snapshot: AnalysisSnapshot) -> None:
                 {
                     "eyebrow": "Fitness",
                     "title": str(best_fitness["model_name"]),
-                    "value": f"{best_fitness['alignment_fitness']:.4f}",
+                    "value": format_metric_value(best_fitness["alignment_fitness"], kind="score"),
                     "body": assess_fitness(best_fitness["alignment_fitness"])[2],
                     "tone": "accent",
                 },
                 {
                     "eyebrow": "Precision",
                     "title": str(best_precision["model_name"]),
-                    "value": f"{best_precision['precision']:.4f}",
+                    "value": format_metric_value(best_precision["precision"], kind="score"),
                     "body": assess_precision(best_precision["precision"])[2],
                     "tone": "neutral",
                 },
                 {
                     "eyebrow": "Balance",
                     "title": str(best_balanced["model_name"]),
-                    "value": f"{((best_balanced.get('alignment_fitness', 0) + best_balanced.get('precision', 0)) / 2):.4f}",
+                    "value": format_metric_value(
+                        (best_balanced.get("alignment_fitness", 0) + best_balanced.get("precision", 0)) / 2,
+                        kind="score",
+                    ),
                     "body": assess_balanced_quality(best_balanced.get("alignment_fitness", 0), best_balanced.get("precision", 0))[2],
                     "tone": "success",
                 },

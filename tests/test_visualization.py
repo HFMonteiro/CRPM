@@ -308,7 +308,7 @@ def test_workflow_board_svg_preserves_horizontal_layout_with_upper_and_lower_var
     assert "crpm-workflow-explorer" not in svg
 
 
-def test_workflow_board_svg_simple_mainline_export_uses_taller_centered_layout():
+def test_workflow_board_svg_simple_mainline_export_uses_compact_content_height():
     payload = {
         "nodes": pd.DataFrame(
             [
@@ -340,17 +340,35 @@ def test_workflow_board_svg_simple_mainline_export_uses_taller_centered_layout()
         svg,
         re.S,
     )
+    invitation_chip_match = re.search(
+        r'data-activity="Invitation_mail".*?<rect x="[^"]+" y="([^"]+)" width="([^"]+)" height="([^"]+)" rx="[^"]+" ry="[^"]+" fill="[^"]+" data-qa="workflow-board-chip" />'
+        r'.*?<text x="[^"]+" y="([^"]+)" font-family="Segoe UI, Arial, sans-serif" font-size="[^"]+" font-weight="700" fill="[^"]+" data-qa="workflow-board-title">Invitation</text>',
+        svg,
+        re.S,
+    )
 
     assert viewbox_match is not None
     assert invitation_match is not None
+    assert invitation_chip_match is not None
+    assert 'data-fit-mode="shelf"' in svg
+    assert 'style="display:block;width:100%;max-width:100%;height:auto;"' in svg
+    assert 'data-qa="workflow-board-card"' in svg
+    assert 'data-qa="workflow-board-chip"' in svg
     board_height = int(viewbox_match.group(2))
     node_y = float(invitation_match.group(1))
     node_height = float(invitation_match.group(3))
     node_center_y = node_y + (node_height / 2.0)
+    chip_y = float(invitation_chip_match.group(1))
+    chip_height = float(invitation_chip_match.group(3))
+    title_y = float(invitation_chip_match.group(4))
 
     assert int(viewbox_match.group(1)) > board_height
-    assert 300 <= board_height <= 360
-    assert abs(node_center_y - (board_height / 2.0)) <= 24.0
+    assert 110 <= board_height <= 190
+    assert node_height <= 96.0
+    assert node_y <= 24.0
+    assert board_height - (node_y + node_height) <= 56.0
+    assert title_y >= chip_y + chip_height + 6.0
+    assert "35.0 d me..." not in svg
     node_rects = re.findall(
         r'data-activity="([^\"]+)".*?<rect x="([^"]+)" y="[^"]+" width="([^"]+)" height="([^"]+)"',
         svg,
@@ -384,7 +402,8 @@ def test_workflow_board_svg_two_step_simple_export_does_not_collapse_into_strip(
     viewbox_match = re.search(r'viewBox="0 0 (\d+) (\d+)"', svg)
 
     assert viewbox_match is not None
-    assert int(viewbox_match.group(2)) >= 260
+    assert 'data-fit-mode="shelf"' in svg
+    assert int(viewbox_match.group(2)) >= 110
     assert int(viewbox_match.group(1)) > int(viewbox_match.group(2)) * 2
     assert "Upper variation" not in svg
     assert "Lower variation" not in svg
@@ -589,6 +608,7 @@ def test_workflow_interactive_payload_and_html_use_business_labels_only():
     assert explorer["content_offset_y"] == 0.0
     assert explorer["frame_height"] - explorer["height"] >= 120
     assert explorer["content_bounds"]["max_y"] > explorer["anchor_bounds"]["min_y"]
+    assert explorer["drawable_bounds"]["max_y"] > explorer["drawable_bounds"]["min_y"]
     assert explorer["fit_padding"]["bottom"] >= 24.0
     assert explorer["toolbar_height_hint"] >= 126
     assert "Active process flow" in html
@@ -653,7 +673,11 @@ def test_workflow_interactive_html_uses_compact_shell_defaults():
     assert "baselineScale = Math.min(availableWidth / boundsWidth, availableHeight / boundsHeight);" in html
     assert "Math.max(0.56, Math.min(1.7, zoomFactor * factor))" in html
     assert 'class="crpm-explorer-figure" style="width:100%;"' in html
-    assert "max-width:760px" in html
+    assert 'style="display:block;width:100%;height:auto;aspect-ratio:760/520;overflow:visible;margin:0 auto;"' in html
+    assert 'id="crpm-workflow-static-frame"' in html
+    assert 'id="crpm-workflow-content"' in html
+    assert 'data-drawable-min-x="' in html
+    assert "const drawableMinX = Number(svg.getAttribute('data-drawable-min-x') || '12');" in html
     assert "type: 'streamlit:setFrameHeight'" in html
     assert "requestAnimationFrame(() => notifyFrameHeight());" in html
     assert 'preserveAspectRatio="xMidYMin meet"' in html
@@ -755,7 +779,111 @@ def test_workflow_interactive_payload_keeps_mainline_nodes_spaced_apart():
     assert len(ordered) >= 2
     assert ordered[0]["display_name"] == "Invitation"
     for top, bottom in zip(ordered, ordered[1:]):
-        assert top["y"] + top["height"] + 32 <= bottom["y"]
+        gap = bottom["y"] - (top["y"] + top["height"])
+        assert gap >= 8.0
+        top_text_box = top.get("text_box", {})
+        bottom_text_box = bottom.get("text_box", {})
+        assert float(top_text_box.get("max_y", top["y"] + top["height"])) + 4.0 <= float(
+            bottom_text_box.get("min_y", bottom["y"])
+        )
+
+
+def test_workflow_interactive_payload_text_boxes_stay_inside_node_rectangles():
+    payload = {
+        "nodes": pd.DataFrame(
+            [
+                {
+                    "activity": "Invitation_mail",
+                    "display_name": "Invitation with a longer clinical title",
+                    "cases": 1000,
+                    "occurrences": 1000,
+                    "median_next_delay_days": 35.0,
+                    "p90_next_delay_days": 40.0,
+                    "severity": "High",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                    "lane": "center",
+                    "step_rank": 0,
+                },
+                {
+                    "activity": "PCC_observation",
+                    "display_name": "PCC observation with extended wording",
+                    "cases": 28,
+                    "occurrences": 28,
+                    "median_next_delay_days": 45.0,
+                    "p90_next_delay_days": 55.0,
+                    "severity": "Moderate",
+                    "conformance_bucket": "Model deviation",
+                    "coverage_group": "rare",
+                    "branch_role": "mainline",
+                    "lane": "center",
+                    "step_rank": 1,
+                },
+            ]
+        ),
+        "edges": pd.DataFrame(
+            [
+                {
+                    "source": "Invitation_mail",
+                    "target": "PCC_observation",
+                    "frequency": 28,
+                    "median_days": 45.0,
+                    "p90_days": 55.0,
+                    "severity": "Moderate",
+                    "conformance_bucket": "Model deviation",
+                    "branch_role": "mainline",
+                }
+            ]
+        ),
+        "legend": pd.DataFrame(),
+    }
+
+    explorer = create_workflow_interactive_payload(payload, metric_coloring="Conformance bucket", detail_level="Analyst")
+
+    for node in explorer["nodes"]:
+        text_box = node.get("text_box")
+        assert text_box is not None
+        assert float(text_box["min_x"]) >= float(node["x"]) + 8.0
+        assert float(text_box["max_x"]) <= float(node["x"]) + float(node["width"]) - 8.0
+        assert float(text_box["min_y"]) >= float(node["y"]) + 6.0
+        assert float(text_box["max_y"]) <= float(node["y"]) + float(node["height"]) - 4.0
+
+
+def test_workflow_interactive_payload_prefers_wider_single_line_mainline_cards():
+    payload = {
+        "nodes": pd.DataFrame(
+            [
+                {"activity": "Invitation_mail", "display_name": "Invitation", "cases": 1000, "occurrences": 1000, "median_next_delay_days": 35.0, "p90_next_delay_days": 40.0, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline", "lane": "center", "step_rank": 0},
+                {"activity": "FIT_mail", "display_name": "FIT mail", "cases": 1000, "occurrences": 1000, "median_next_delay_days": 15.0, "p90_next_delay_days": 15.0, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline", "lane": "center", "step_rank": 1},
+                {"activity": "FIT_return", "display_name": "FIT return", "cases": 662, "occurrences": 662, "median_next_delay_days": 7.0, "p90_next_delay_days": 7.0, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline", "lane": "center", "step_rank": 2},
+                {"activity": "Lab_result", "display_name": "Lab result", "cases": 662, "occurrences": 662, "median_next_delay_days": 2.0, "p90_next_delay_days": 4.0, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline", "lane": "center", "step_rank": 3},
+                {"activity": "PCC_observation", "display_name": "PCC observation", "cases": 28, "occurrences": 28, "median_next_delay_days": 45.0, "p90_next_delay_days": 55.0, "severity": "Moderate", "conformance_bucket": "Conformant", "branch_role": "mainline", "lane": "center", "step_rank": 4},
+                {"activity": "Colonoscopy", "display_name": "Colonoscopy", "cases": 28, "occurrences": 28, "median_next_delay_days": None, "p90_next_delay_days": None, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline", "lane": "center", "step_rank": 5},
+            ]
+        ),
+        "edges": pd.DataFrame(
+            [
+                {"source": "Invitation_mail", "target": "FIT_mail", "frequency": 1000, "median_days": 35.0, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline"},
+                {"source": "FIT_mail", "target": "FIT_return", "frequency": 662, "median_days": 15.0, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline"},
+                {"source": "FIT_return", "target": "Lab_result", "frequency": 662, "median_days": 7.0, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline"},
+                {"source": "Lab_result", "target": "PCC_observation", "frequency": 28, "median_days": 2.0, "severity": "Moderate", "conformance_bucket": "Conformant", "branch_role": "mainline"},
+                {"source": "PCC_observation", "target": "Colonoscopy", "frequency": 28, "median_days": 45.0, "severity": "Low", "conformance_bucket": "Conformant", "branch_role": "mainline"},
+            ]
+        ),
+        "legend": pd.DataFrame(),
+    }
+
+    explorer = create_workflow_interactive_payload(payload, metric_coloring="Conformance bucket", detail_level="Analyst")
+    mainline_nodes = [node for node in explorer["nodes"] if node.get("branch_role") == "mainline"]
+
+    assert mainline_nodes
+    assert max(float(node["width"]) for node in mainline_nodes) >= 300.0
+    assert all(len(node.get("title_lines_render", [])) == 1 for node in mainline_nodes)
+    assert all(len(node.get("timing_lines_render", [])) <= 1 for node in mainline_nodes)
+    assert all(len(node.get("footer_lines_render", [])) <= 1 for node in mainline_nodes)
+    assert all("path " in str(node.get("timing_lines_render", [""])[0]).lower() for node in mainline_nodes if node.get("timing_lines_render"))
+    assert all("activity " in str(node.get("timing_lines_render", [""])[0]).lower() for node in mainline_nodes if node.get("timing_lines_render"))
 
 
 def test_workflow_interactive_payload_bounds_cover_labels_and_anchors():
@@ -822,7 +950,7 @@ def test_workflow_interactive_payload_bounds_cover_labels_and_anchors():
     explorer = create_workflow_interactive_payload(payload, metric_coloring="Conformance bucket", detail_level="Research")
     drawable_height = explorer["height"] - explorer["content_offset_y"]
     max_node_bottom = max(node["y"] + node["height"] for node in explorer["nodes"])
-    max_label_extent = max(edge["label_y"] + 18.0 for edge in explorer["edges"] if edge.get("show_label"))
+    visible_labels = [edge for edge in explorer["edges"] if edge.get("show_label")]
     last_mainline_bottom = max(
         node["y"] + node["height"]
         for node in explorer["nodes"]
@@ -831,10 +959,21 @@ def test_workflow_interactive_payload_bounds_cover_labels_and_anchors():
     end_anchor_y = last_mainline_bottom + 30.0
 
     assert explorer["height"] > max_node_bottom + 24.0
-    assert explorer["height"] > max_label_extent + 24.0
+    if visible_labels:
+        max_label_extent = max(
+            edge["label_y"] + (float(edge.get("label_height", 18.0)) / 2.0)
+            for edge in visible_labels
+        )
+        assert explorer["height"] > max_label_extent + 24.0
+    else:
+        assert all(not edge.get("show_label") for edge in explorer["edges"])
     assert explorer["height"] >= end_anchor_y + 24.0
     assert drawable_height >= end_anchor_y + 24.0
+    assert explorer["fit_padding"]["bottom"] >= 24.0
+    assert explorer["anchor_bounds"]["max_y"] >= end_anchor_y + 20.0
+    assert explorer["content_bounds"]["max_y"] >= end_anchor_y + 24.0
     assert explorer["width"] > max(node["x"] + node["width"] for node in explorer["nodes"])
+    assert explorer["height"] >= explorer["width"] * 0.76
 
 
 def test_workflow_explorer_html_uses_lighter_arrowheads():
@@ -940,15 +1079,23 @@ def test_workflow_explorer_html_uses_lighter_arrowheads():
 
     html = render_workflow_explorer_html(payload)
 
-    assert 'markerWidth="8"' in html
-    assert 'markerHeight="8"' in html
+    assert re.search(r'markerWidth="6\.4"', html)
+    assert re.search(r'markerHeight="6\.4"', html)
+    assert 'id="workflow-explorer-arrow-mainline"' in html
+    assert 'id="workflow-explorer-arrow-log"' in html
+    assert 'id="workflow-explorer-arrow-model"' in html
+    assert 'id="workflow-explorer-arrow-neutral"' in html
+    assert 'marker-end="url(#workflow-explorer-arrow-mainline)"' in html
+    assert 'stroke="#c8d4d8" stroke-width="0.8"' in html
     assert 'preserveAspectRatio="xMidYMin meet"' in html
     assert "aspect-ratio:900/420" in html
     assert 'class="crpm-explorer-figure" style="width:100%;"' in html
-    assert "max-width:900px" in html
+    assert 'style="display:block;width:100%;height:auto;aspect-ratio:900/420;overflow:visible;margin:0 auto;"' in html
     assert 'data-content-min-x="' in html
+    assert 'data-drawable-min-x="' in html
     assert 'data-fit-pad-bottom="' in html
     assert "const computeBaselineFit = () => {" in html
+    assert "const drawableMaxY = Number(svg.getAttribute('data-drawable-max-y') || String((viewBox.height || 0) - 12));" in html
     assert "translate(${baselineTx} ${baselineTy}) scale(${baselineScale * zoomFactor})" in html
     assert "type: 'streamlit:setFrameHeight'" in html
     assert "window.setTimeout(notifyFrameHeight, 280);" in html

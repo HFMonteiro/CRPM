@@ -98,6 +98,9 @@ def test_build_conformance_workspace_payload_creates_structured_tables() -> None
     assert not payload["model_summary_df"].empty
     assert not payload["deviation_summary_df"].empty
     assert not payload["trace_deviation_df"].empty
+    assert payload["model_summary_df"].iloc[0]["summary"] == "Alignment log fit 0.91 · Token log fit 0.89"
+    assert payload["deviation_summary_df"].iloc[0]["alignment_summary"] == "log fit 0.91"
+    assert payload["deviation_summary_df"].iloc[0]["token_summary"] == "log fit 0.89"
     assert not payload["workflow"]["nodes"].empty
     assert not payload["workflow"]["edges"].empty
     assert {
@@ -105,6 +108,13 @@ def test_build_conformance_workspace_payload_creates_structured_tables() -> None
         "branch_role",
         "lane",
         "coverage_group",
+        "activity_pct",
+        "sync_cases",
+        "log_move_cases",
+        "model_move_cases",
+        "sync_pct",
+        "log_move_pct",
+        "model_move_pct",
         "neighbor_ids",
         "node_type",
         "branch_family",
@@ -124,6 +134,77 @@ def test_build_conformance_workspace_payload_creates_structured_tables() -> None
     }.issubset(payload["workflow"]["edges"].columns)
     assert payload["has_workflow"] is True
     assert {"deviation_share", "log_deviation_share", "model_deviation_share"}.issubset(payload["workflow"]["summary"].keys())
+
+
+def test_build_conformance_workspace_payload_derives_node_level_alignment_mix() -> None:
+    trace = Trace()
+    trace.attributes["concept:name"] = "case-1"
+    trace.append({"concept:name": "Invitation_mail", "time:timestamp": pd.Timestamp("2024-01-01")})
+    trace.append({"concept:name": "FIT_mail", "time:timestamp": pd.Timestamp("2024-01-02")})
+    trace.append({"concept:name": "FIT_return", "time:timestamp": pd.Timestamp("2024-01-05")})
+    log = EventLog([trace])
+
+    fake_net = SimpleNamespace(
+        transitions=[object(), object(), object()],
+        places=[_fake_place(1, 2), _fake_place(2, 1)],
+        arcs=[object(), object(), object(), object()],
+    )
+    discovery_results = {
+        "Heuristics (Classic)": SimpleNamespace(
+            algorithm="Heuristics Miner",
+            variant="Classic",
+            net=fake_net,
+            num_transitions=3,
+            discovery_time_s=0.42,
+        )
+    }
+    conformance_results = {
+        "Heuristics (Classic)": {
+            "precision": 1.0,
+            "summary": {
+                "alignment_fitness": {"log_fitness": 1.0},
+                "token_fitness": {"log_fitness": 1.0},
+            },
+            "alignments": {
+                "aligned_traces": [
+                    {
+                        "fitness": 0.75,
+                        "cost": 2.0,
+                        "alignment": [
+                            ("Invitation_mail", "Invitation_mail"),
+                            ("FIT_mail", "FIT_mail"),
+                            ("FIT_return", ">>"),
+                            (">>", "PCC_observation"),
+                        ],
+                    }
+                ]
+            },
+            "token": {"token_results": [{"trace_fitness": 0.75, "missing_tokens": 1, "remaining_tokens": 1}]},
+        }
+    }
+    comparison_df = build_model_comparison_dataframe(discovery_results, conformance_results)
+
+    payload = build_conformance_workspace_payload(
+        log=log,
+        discovery_results=discovery_results,
+        conformance_results=conformance_results,
+        comparison_df=comparison_df,
+    )
+
+    nodes = payload["workflow"]["nodes"].set_index("activity")
+    invitation = nodes.loc["invitation"]
+    fit_mail = nodes.loc["fit_mail"]
+    fit_return = nodes.loc["fit_return"]
+    pcc_observation = nodes.loc["pcc_observation"]
+
+    assert invitation["sync_cases"] == 1
+    assert invitation["sync_pct"] == 100.0
+    assert fit_mail["sync_cases"] == 1
+    assert fit_mail["sync_pct"] == 100.0
+    assert fit_return["log_move_cases"] == 1
+    assert fit_return["log_move_pct"] == 100.0
+    assert pcc_observation["model_move_cases"] == 1
+    assert pcc_observation["model_move_pct"] == 100.0
 
 
 def test_build_conformance_workspace_payload_humanizes_unmapped_activity_labels() -> None:

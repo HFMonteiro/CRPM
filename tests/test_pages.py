@@ -352,7 +352,7 @@ def test_render_operational_flow_page_uses_inline_placeholder_for_empty_aging(mo
 
 
 def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
-    calls = {"metrics": [], "captions": [], "markdown": [], "notes": [], "inline_empty": [], "workflow": [], "selectbox": [], "html": [], "tabs": [], "expanders": []}
+    calls = {"metrics": [], "captions": [], "markdown": [], "notes": [], "inline_empty": [], "workflow": [], "selectbox": [], "html": [], "tabs": [], "expanders": [], "columns": []}
     workspace = {
         "model_summary_df": pd.DataFrame(
             [
@@ -437,7 +437,11 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
     monkeypatch.setattr(conformance_page.st, "markdown", lambda text, **kwargs: calls["markdown"].append(text))
     monkeypatch.setattr(conformance_page.st, "dataframe", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("conformance inspector should not use st.dataframe")))
     monkeypatch.setattr(conformance_page.st, "metric", lambda *args, **kwargs: calls["metrics"].append(args))
-    monkeypatch.setattr(conformance_page.st, "columns", lambda n, **kwargs: [_DummyContext() for _ in range(n if isinstance(n, int) else len(n))])
+    monkeypatch.setattr(
+        conformance_page.st,
+        "columns",
+        lambda n, **kwargs: calls["columns"].append(tuple(n) if not isinstance(n, int) else n) or [_DummyContext() for _ in range(n if isinstance(n, int) else len(n))],
+    )
     monkeypatch.setattr(conformance_page.st, "container", lambda *args, **kwargs: _DummyContext())
     monkeypatch.setattr(conformance_page.st, "expander", lambda *args, **kwargs: _DummyContext())
     monkeypatch.setattr(conformance_page.st, "tabs", lambda labels: calls["tabs"].append(tuple(labels)) or [_DummyContext() for _ in labels])
@@ -497,7 +501,7 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
 
     assert calls["subheader"] == "Conformance Analytics"
     assert calls["html"][0]["html"] == "<div>interactive explorer</div>"
-    assert calls["html"][0]["kwargs"]["height"] == calls["explorer_payload"]["frame_height"]
+    assert calls["html"][0]["kwargs"]["height"] == calls["explorer_payload"]["frame_height"] + 56
     assert calls["workflow"]
     assert calls["notes"]
     assert ("Legend", "Deviations", "Trace") in calls["tabs"]
@@ -514,17 +518,31 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
     assert "Clear" in calls["buttons"]
     assert "Reset filters" in calls["buttons"]
     assert "Reset" in calls["buttons"]
+    assert (0.72, 2.0, 1.12) in calls["columns"]
     assert any("crpm-selection-card" in text for text in calls["markdown"])
     assert any("crpm-model-card-grid" in text for text in calls["markdown"])
     assert any("crpm-ranked-table" in text for text in calls["markdown"])
     assert not any("crpm-mode-banner" in text for text in calls["markdown"])
     assert any("overview mode is active" in note.lower() for note in calls["notes"])
-    inspector_index = next(idx for idx, text in enumerate(calls["markdown"]) if "#### Inspector" in str(text))
-    selection_index = next(idx for idx, text in enumerate(calls["markdown"]) if "##### Selection focus" in str(text))
-    pinned_index = next(idx for idx, text in enumerate(calls["markdown"]) if idx > selection_index and "##### Pinned exact metrics" in str(text))
-    context_index = next(idx for idx, text in enumerate(calls["markdown"]) if idx > pinned_index and "##### Context" in str(text))
+    assert any("crpm-conformance-hero" in str(text) for text in calls["markdown"])
+    assert not any("crpm-conformance-report-band" in str(text) for text in calls["markdown"])
+    assert any("crpm-conformance-side-rail--filters" in str(text) for text in calls["markdown"])
+    assert any("crpm-conformance-side-rail--inspector" in str(text) for text in calls["markdown"])
+    assert any("crpm-conformance-panel--rail" in str(text) for text in calls["markdown"])
+    inspector_index = next(
+        idx for idx, text in enumerate(calls["markdown"]) if "crpm-conformance-side-title--inspector" in str(text)
+    )
+    selection_index = next(
+        idx for idx, text in enumerate(calls["markdown"]) if "Selection focus</div>" in str(text)
+    )
+    pinned_index = next(
+        idx for idx, text in enumerate(calls["markdown"]) if idx > selection_index and "Pinned exact metrics</div>" in str(text)
+    )
+    context_index = next(
+        idx for idx, text in enumerate(calls["markdown"]) if idx > pinned_index and "Context</div>" in str(text)
+    )
     assert inspector_index < selection_index < pinned_index < context_index
-    assert not any("##### Filters" in str(text) for text in calls["markdown"])
+    assert any("crpm-conformance-side-title--rail" in str(text) for text in calls["markdown"])
 
 
 def test_conformance_label_helpers_humanize_raw_workflow_labels() -> None:
@@ -857,7 +875,7 @@ def test_render_conformance_page_renders_html_explorer_without_selection(monkeyp
     conformance_page.render_conformance_page(snapshot)
 
     assert calls["html"][0]["html"] == "<div>interactive explorer</div>"
-    assert calls["html"][0]["kwargs"]["height"] == 712
+    assert calls["html"][0]["kwargs"]["height"] == 768
     assert len(calls["fallback_svg"]) >= 1
     assert calls["fallback_svg"][0]["kwargs"]["layout_mode"] == "horizontal"
     assert calls["warnings"] == []
