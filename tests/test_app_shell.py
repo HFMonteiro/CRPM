@@ -77,6 +77,20 @@ class _DummyContext:
         return None
 
 
+def _dummy_streamlit(sidebar: _DummySidebar, session_state: dict) -> SimpleNamespace:
+    return SimpleNamespace(
+        sidebar=sidebar,
+        session_state=session_state,
+        caption=lambda *args, **kwargs: None,
+        text_input=sidebar.text_input,
+        checkbox=sidebar.checkbox,
+        selectbox=sidebar.selectbox,
+        date_input=sidebar.date_input,
+        multiselect=sidebar.multiselect,
+        number_input=sidebar.number_input,
+    )
+
+
 def _loaded_log() -> LoadedLog:
     return LoadedLog(
         log=[[{"concept:name": "Start", "time:timestamp": datetime(2024, 1, 1)}]],
@@ -97,7 +111,7 @@ def test_render_analysis_controls_invalidates_stale_results(monkeypatch) -> None
     state.results.comparison_df = pd.DataFrame([{"model_name": "Model"}])
     state.results.last_analysis_signature = "stale-signature"
 
-    monkeypatch.setattr(app_shell, "st", SimpleNamespace(sidebar=_DummySidebar(button_result=False), session_state=session_state, caption=lambda *args, **kwargs: None))
+    monkeypatch.setattr(app_shell, "st", _dummy_streamlit(_DummySidebar(button_result=False), session_state))
     monkeypatch.setattr(app_shell, "resolve_xes_log", lambda *args, **kwargs: _loaded_log())
     monkeypatch.setattr(
         app_shell,
@@ -137,7 +151,7 @@ def test_render_analysis_controls_failure_clears_previous_results(monkeypatch) -
         followup_days=None,
     )
 
-    monkeypatch.setattr(app_shell, "st", SimpleNamespace(sidebar=_DummySidebar(button_result=True), session_state=session_state, caption=lambda *args, **kwargs: None))
+    monkeypatch.setattr(app_shell, "st", _dummy_streamlit(_DummySidebar(button_result=True), session_state))
     monkeypatch.setattr(app_shell, "resolve_xes_log", lambda *args, **kwargs: _loaded_log())
     monkeypatch.setattr(
         app_shell,
@@ -169,7 +183,7 @@ def test_render_analysis_controls_shows_sidebar_messages(monkeypatch) -> None:
     sidebar.warning = lambda message, *args, **kwargs: calls["warning"].append(message)
     sidebar.error = lambda message, *args, **kwargs: calls["error"].append(message)
 
-    monkeypatch.setattr(app_shell, "st", SimpleNamespace(sidebar=sidebar, session_state=session_state, caption=lambda *args, **kwargs: None))
+    monkeypatch.setattr(app_shell, "st", _dummy_streamlit(sidebar, session_state))
     monkeypatch.setattr(app_shell, "resolve_xes_log", lambda *args, **kwargs: _loaded_log())
     monkeypatch.setattr(
         app_shell,
@@ -198,13 +212,17 @@ def test_render_header_prompts_rerun_with_note_and_toast(monkeypatch) -> None:
         filter_error_message=None,
     )
     calls = {"notes": [], "toast": [], "captions": []}
-    monkeypatch.setattr(app_shell, "st", SimpleNamespace(
-        markdown=lambda *args, **kwargs: None,
-        columns=lambda n: [SimpleNamespace(metric=lambda *args, **kwargs: None) for _ in range(n)],
-        caption=lambda text, **kwargs: calls["captions"].append(text),
-        error=lambda *args, **kwargs: None,
-        toast=lambda text, **kwargs: calls["toast"].append(text),
-    ))
+    monkeypatch.setattr(
+        app_shell,
+        "st",
+        SimpleNamespace(
+            markdown=lambda *args, **kwargs: None,
+            columns=lambda n: [SimpleNamespace(metric=lambda *args, **kwargs: None) for _ in range(n)],
+            caption=lambda text, **kwargs: calls["captions"].append(text),
+            error=lambda *args, **kwargs: None,
+            toast=lambda text, **kwargs: calls["toast"].append(text),
+        ),
+    )
     monkeypatch.setattr(app_shell, "render_quiet_note", lambda text: calls["notes"].append(text))
 
     app_shell._render_header(snapshot, page="Overview")
@@ -299,4 +317,5 @@ def test_render_header_brand_includes_author_site_badge(monkeypatch) -> None:
     assert "hfmonteiro.com" in rendered
     assert app_shell.FMUP_HOME_URL in rendered
     assert app_shell.UP_HOME_URL in rendered
+    assert 'rel="noopener noreferrer"' in rendered
     assert "data:image/svg+xml;base64" in rendered

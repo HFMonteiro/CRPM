@@ -10,17 +10,24 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-from crpm.app_state import AnalysisSnapshot, CRPMState, bounded_cache_get, bounded_cache_put, get_crpm_state
+from crpm.app_state import (
+    AnalysisSnapshot,
+    CRPMState,
+    bounded_cache_get,
+    bounded_cache_put,
+    get_crpm_state,
+)
 from crpm.formatting import format_decimal as format_display_decimal
 from crpm.formatting import format_metric_value as format_display_metric
-from crpm.interpretations import assess_balanced_quality, assess_fitness, assess_precision
+from crpm.interpretations import assess_fitness, assess_precision
 from crpm.pages.common import (
+    render_dashboard_bar_list,
+    render_dashboard_topbar,
     render_empty_state,
     render_html_card_grid,
     render_html_ranked_table,
     render_inline_empty,
     render_legend_note,
-    render_metric_card_grid,
     render_quiet_note,
 )
 from crpm.screening import humanize_activity_label
@@ -87,9 +94,15 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
 
     if has_workflow:
         workflow_mode = "interactive"
-        current_selection_kind = snapshot.workflow_selection_kind if snapshot.workflow_selection_kind in {"node", "edge", "none"} else "none"
+        current_selection_kind = (
+            snapshot.workflow_selection_kind if snapshot.workflow_selection_kind in {"node", "edge", "none"} else "none"
+        )
         current_selection_id = snapshot.workflow_selection_id
-        _store_workflow_state(snapshot, workflow_view_mode=workflow_mode, workflow_detail_level=controls["detail_level"])
+        _store_workflow_state(
+            snapshot,
+            workflow_view_mode=workflow_mode,
+            workflow_detail_level=controls["detail_level"],
+        )
         if controls["reset_filters"]:
             _reset_workflow_filters(snapshot)
             current_selection_kind = "none"
@@ -110,11 +123,24 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
         filtered_workflow = dict(workflow) if isinstance(workflow, dict) else workflow
         if isinstance(filtered_workflow, dict):
             filtered_workflow["conformance_lens"] = controls["conformance_lens"]
-        filtered_nodes_df, filtered_edges_df, filtered_legend_df = nodes_df, edges_df, legend_df
+        filtered_nodes_df, filtered_edges_df, filtered_legend_df = (
+            nodes_df,
+            edges_df,
+            legend_df,
+        )
         current_selection_kind = "none"
         current_selection_id = None
 
-    filter_col, main_col, detail_col = st.columns([0.72, 2.0, 1.12], gap="small")
+    if has_workflow:
+        _render_workflow_kpi_strip(
+            snapshot,
+            filtered_workflow,
+            controls,
+            model_summary_df=model_summary_df,
+            grid_class="crpm-conformance-kpi-strip crpm-conformance-kpi-strip--cockpit",
+        )
+
+    filter_col, main_col, detail_col = st.columns([0.64, 2.2, 1.0], gap="small")
 
     with filter_col:
         _render_conformance_filter_rail(
@@ -153,7 +179,9 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
         else:
             selection_kind = "none"
             selection_id = None
-            render_inline_empty("No workflow graph is available for this selection. Use the model and deviation summaries in the inspector.")
+            render_inline_empty(
+                "No workflow graph is available for this selection. Use the model and deviation summaries in the inspector."
+            )
     with detail_col:
         _render_conformance_side_intro(
             title="Inspector",
@@ -187,6 +215,7 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
             nodes_df=filtered_nodes_df,
             edges_df=filtered_edges_df,
         )
+
 
 def _render_workflow_board_or_graph(
     *,
@@ -253,7 +282,7 @@ def _render_interactive_workflow_graph(
         components.html(
             render_workflow_explorer_html(explorer_payload),
             height=initial_frame_height,
-            scrolling=False,
+            scrolling=True,
         )
         return True, selection_kind, selection_id, None
     except Exception:
@@ -271,7 +300,9 @@ def _render_interactive_workflow_graph(
                     key=f"{_widget_key(snapshot, 'workflow_sync_cytoscape')}_{viewport_nonce}",
                 )
                 selected_node, selected_edge = _coerce_graph_selection(selection)
-                render_legend_note("CRPM fell back to the technical workflow component because the primary process figure could not be rendered.")
+                render_legend_note(
+                    "CRPM fell back to the technical workflow component because the primary process figure could not be rendered."
+                )
                 if selected_edge:
                     return True, "edge", selected_edge, None
                 if selected_node:
@@ -301,7 +332,16 @@ def _render_right_panel(
     selection_kind: str,
     selection_id: Optional[str],
 ) -> tuple[str, Optional[str]]:
-    st.markdown("<div class='crpm-conformance-side-subtitle'>Selection focus</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='crpm-conformance-side-subtitle'>Evidence rail</div>",
+        unsafe_allow_html=True,
+    )
+    _render_workflow_evidence_rail(workflow=workflow, nodes_df=nodes_df, edges_df=edges_df)
+
+    st.markdown(
+        "<div class='crpm-conformance-side-subtitle'>Selection focus</div>",
+        unsafe_allow_html=True,
+    )
     selected_kind, selected_id, node_row, edge_row = _render_selection_focus(
         snapshot=snapshot,
         nodes_df=nodes_df,
@@ -310,7 +350,10 @@ def _render_right_panel(
         selection_kind=selection_kind,
         selection_id=selection_id,
     )
-    st.markdown("<div class='crpm-conformance-side-subtitle'>Pinned exact metrics</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='crpm-conformance-side-subtitle'>Pinned exact metrics</div>",
+        unsafe_allow_html=True,
+    )
     if selected_id:
         _render_event_process_details(
             model_summary_df=model_summary_df,
@@ -324,7 +367,10 @@ def _render_right_panel(
     else:
         render_legend_note("Overview mode is active. Pin a node or transition from this rail when you need exact metrics.")
 
-    st.markdown("<div class='crpm-conformance-side-subtitle'>Context</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='crpm-conformance-side-subtitle'>Context</div>",
+        unsafe_allow_html=True,
+    )
     _render_insight_action_panel(workflow, controls)
 
     with st.expander("Drilldown", expanded=False):
@@ -341,6 +387,62 @@ def _render_right_panel(
             controls=controls,
         )
     return selected_kind, selected_id
+
+
+def _render_workflow_evidence_rail(*, workflow: dict[str, Any], nodes_df: pd.DataFrame, edges_df: pd.DataFrame) -> None:
+    summary = workflow.get("summary", {}) if isinstance(workflow, dict) else {}
+    throughput = _coerce_float(summary.get("median_throughput_days"))
+    if throughput is not None:
+        render_dashboard_bar_list(
+            "Lead-time headline",
+            [
+                {
+                    "label": "Median throughput",
+                    "value": throughput,
+                    "display": f"{throughput:.1f} d",
+                    "tone": "neutral",
+                }
+            ],
+            value_label=" d",
+        )
+
+    if not edges_df.empty:
+        working = edges_df.copy()
+        ranking_column = "p90_days" if "p90_days" in working.columns else "median_days"
+        if ranking_column in working.columns:
+            working["_delay_rank"] = pd.to_numeric(working[ranking_column], errors="coerce").fillna(0)
+            working = working.sort_values(by=["_delay_rank"], ascending=False).head(4)
+            rows = []
+            for _, row in working.iterrows():
+                value = float(row.get("_delay_rank", 0) or 0)
+                rows.append(
+                    {
+                        "label": _edge_display_label(row),
+                        "value": value,
+                        "display": f"{value:.1f} d",
+                        "tone": row.get("severity", "neutral"),
+                    }
+                )
+            render_dashboard_bar_list("Lead-time watchlist", rows, value_label=" d")
+            return
+
+    if not nodes_df.empty and "cases" in nodes_df.columns:
+        working = nodes_df.copy()
+        working["_cases"] = pd.to_numeric(working["cases"], errors="coerce").fillna(0)
+        working = working.sort_values(by=["_cases"], ascending=False).head(4)
+        render_dashboard_bar_list(
+            "Activity evidence",
+            [
+                {
+                    "label": _node_display_label(row),
+                    "value": float(row.get("_cases", 0) or 0),
+                    "display": _format_number(row.get("_cases")),
+                    "tone": row.get("severity", "neutral"),
+                }
+                for _, row in working.iterrows()
+            ],
+            value_label="",
+        )
 
 
 def _render_selection_focus(
@@ -426,7 +528,10 @@ def _render_selection_focus_content(
     )
 
     selection_active = bool(next_id)
-    _render_selection_summary_card(node_row=node_row if next_kind == "node" else None, edge_row=edge_row if next_kind == "edge" else None)
+    _render_selection_summary_card(
+        node_row=node_row if next_kind == "node" else None,
+        edge_row=edge_row if next_kind == "edge" else None,
+    )
     if next_kind == "node" and node_row is not None:
         st.markdown("###### Node metrics")
         _render_detail_card(_format_node_detail(node_row), card_kind="node")
@@ -436,7 +541,7 @@ def _render_selection_focus_content(
         _render_detail_card(_format_edge_detail(edge_row), card_kind="edge")
 
     if selection_active:
-        with st.expander("Related variants and case context", expanded=False):
+        with st.expander("Related variants and case context", expanded=True):
             _render_related_trace_context(workflow, node_row=node_row, edge_row=edge_row)
 
     return next_kind, next_id, node_row, edge_row
@@ -488,7 +593,9 @@ def _render_supporting_detail_tabs(
         if deviation_summary_df.empty:
             render_inline_empty("No model-level deviation summary was extracted for the current selection.")
         else:
-            render_legend_note("Alignment replay summarizes strict replay fit. Token replay highlights how much of the observed log replays cleanly against the model.")
+            render_legend_note(
+                "Alignment replay summarizes strict replay fit. Token replay highlights how much of the observed log replays cleanly against the model."
+            )
             deviation_display = _format_deviation_summary(deviation_summary_df).rename(
                 columns={
                     "model": "Model",
@@ -498,18 +605,30 @@ def _render_supporting_detail_tabs(
                     "deviation_note": "Interpretation",
                 }
             )
-            preferred_columns = [column for column in ("Model", "Precision", "Alignment replay", "Token replay", "Interpretation") if column in deviation_display.columns]
+            preferred_columns = [
+                column
+                for column in (
+                    "Model",
+                    "Precision",
+                    "Alignment replay",
+                    "Token replay",
+                    "Interpretation",
+                )
+                if column in deviation_display.columns
+            ]
             render_html_ranked_table(
                 deviation_display[preferred_columns],
                 title="Deviation summary",
-                label_column="Interpretation" if "Interpretation" in deviation_display.columns else preferred_columns[0],
+                label_column=("Interpretation" if "Interpretation" in deviation_display.columns else preferred_columns[0]),
             )
 
     with support_tabs[2]:
         if trace_deviation_df.empty:
             render_inline_empty("No trace-level deviations were extracted for the current selection.")
         else:
-            render_legend_note("Lower fitness and higher replay cost usually indicate traces that diverge more strongly from the selected reference model.")
+            render_legend_note(
+                "Lower fitness and higher replay cost usually indicate traces that diverge more strongly from the selected reference model."
+            )
             trace_display = _format_trace_deviations(trace_deviation_df).rename(
                 columns={
                     "model": "Model",
@@ -522,14 +641,21 @@ def _render_supporting_detail_tabs(
             )
             preferred_columns = [
                 column
-                for column in ("Trace", "Trace status", "Alignment fitness", "Token fitness", "Alignment cost", "Model")
+                for column in (
+                    "Trace",
+                    "Trace status",
+                    "Alignment fitness",
+                    "Token fitness",
+                    "Alignment cost",
+                    "Model",
+                )
                 if column in trace_display.columns
             ]
             render_html_ranked_table(
                 trace_display[preferred_columns],
                 title="Trace deviations",
-                label_column="Trace" if "Trace" in trace_display.columns else preferred_columns[0],
-                chip_column="Trace status" if "Trace status" in trace_display.columns else None,
+                label_column=("Trace" if "Trace" in trace_display.columns else preferred_columns[0]),
+                chip_column=("Trace status" if "Trace status" in trace_display.columns else None),
             )
 
 
@@ -564,7 +690,7 @@ def _workflow_controls_from_state(snapshot: AnalysisSnapshot) -> dict[str, Any]:
         "deviation_view": current_deviation or "All",
         "metric_coloring": metric_default,
         "detail_level": current_detail.lower() if current_detail else "analyst",
-        "conformance_lens": current_lens if current_lens in {"% of activities", "% of paths"} else "% of paths",
+        "conformance_lens": (current_lens if current_lens in {"% of activities", "% of paths"} else "% of paths"),
         "reset_filters": reset_triggered,
         "reset_graph_viewport": False,
     }
@@ -733,18 +859,77 @@ def _render_conformance_filter_rail(
     model_summary_df: pd.DataFrame,
 ) -> None:
     _render_conformance_side_intro(
-        title="Filters",
-        lead="Trim the visible subset and lens settings before reading the pathway.",
+        title="Filter rail",
+        lead="Trim the visible subset and lens settings before reading the process map.",
         variant="filters",
     )
-    _render_workflow_kpi_strip(
-        snapshot,
-        workflow,
-        controls,
-        model_summary_df=model_summary_df,
-        grid_class="crpm-conformance-kpi-strip crpm-conformance-kpi-strip--rail",
-    )
+    _render_workflow_distribution_rail(workflow)
     _render_workflow_controls(snapshot, controls=controls, layout="rail")
+
+
+def _render_workflow_distribution_rail(workflow: dict[str, Any]) -> None:
+    summary = workflow.get("summary", {}) if isinstance(workflow, dict) else {}
+    render_dashboard_bar_list(
+        "Visible pathway mix",
+        [
+            {
+                "label": "Dominant path",
+                "value": _coerce_float(summary.get("dominant_path_share")) or 0.0,
+                "tone": "success",
+            },
+            {
+                "label": "Deviation share",
+                "value": _coerce_float(summary.get("deviation_share")) or 0.0,
+                "tone": "watch",
+            },
+            {
+                "label": "Log deviations",
+                "value": _coerce_float(summary.get("log_deviation_share")) or 0.0,
+                "tone": "accent",
+            },
+            {
+                "label": "Model deviations",
+                "value": _coerce_float(summary.get("model_deviation_share")) or 0.0,
+                "tone": "neutral",
+            },
+        ],
+    )
+
+    nodes_df, edges_df, _ = _workflow_dfs(workflow)
+    if not edges_df.empty and "frequency" in edges_df.columns:
+        top_edges = edges_df.copy()
+        top_edges["_frequency"] = pd.to_numeric(top_edges["frequency"], errors="coerce").fillna(0)
+        top_edges = top_edges.sort_values(by=["_frequency"], ascending=False).head(4)
+        render_dashboard_bar_list(
+            "Top transitions",
+            [
+                {
+                    "label": _edge_display_label(row),
+                    "value": float(row.get("_frequency", 0) or 0),
+                    "display": _format_number(row.get("_frequency")),
+                    "tone": row.get("severity", "neutral"),
+                }
+                for _, row in top_edges.iterrows()
+            ],
+            value_label="",
+        )
+    elif not nodes_df.empty and "cases" in nodes_df.columns:
+        top_nodes = nodes_df.copy()
+        top_nodes["_cases"] = pd.to_numeric(top_nodes["cases"], errors="coerce").fillna(0)
+        top_nodes = top_nodes.sort_values(by=["_cases"], ascending=False).head(4)
+        render_dashboard_bar_list(
+            "Top activities",
+            [
+                {
+                    "label": _node_display_label(row),
+                    "value": float(row.get("_cases", 0) or 0),
+                    "display": _format_number(row.get("_cases")),
+                    "tone": row.get("severity", "neutral"),
+                }
+                for _, row in top_nodes.iterrows()
+            ],
+            value_label="",
+        )
 
 
 def _render_conformance_side_intro(*, title: str, lead: str, variant: str) -> None:
@@ -762,15 +947,15 @@ def _render_conformance_side_intro(*, title: str, lead: str, variant: str) -> No
 
 
 def _render_workflow_stage_toolbar(snapshot: AnalysisSnapshot) -> dict[str, bool]:
-    header_col, clear_col, reset_col = st.columns([0.82, 0.09, 0.09], gap="small")
+    header_col, clear_col, reset_col = st.columns([0.76, 0.12, 0.12], gap="small")
     with header_col:
         st.markdown(
             (
-                "<div class='crpm-conformance-stage-header'>"
-                "<div class='crpm-conformance-stage-header__eyebrow'>Active process flow</div>"
+                "<div class='crpm-dashboard-map-toolbar crpm-conformance-stage-header'>"
+                "<div class='crpm-conformance-stage-header__eyebrow'>Process map</div>"
                 "<div class='crpm-conformance-stage-header__title'>Interactive workflow explorer</div>"
                 "<div class='crpm-conformance-stage-header__body'>"
-                "Read the pathway first; use the right rail only when the backbone looks suspicious."
+                "Graph clicks change local focus. Pin exact metrics from the right rail when needed."
                 "</div>"
                 "</div>"
             ),
@@ -810,24 +995,23 @@ def _render_conformance_header(*, workflow: dict[str, Any], model_summary_df: pd
         summary_bits.append(f"deviation share {deviation_share:.1f}%")
     if throughput is not None:
         summary_bits.append(f"median throughput {throughput:.1f} d")
-    summary_text = " · ".join(summary_bits) if summary_bits else "Read the pathway first, then isolate deviations only where the backbone or delay story breaks."
+    summary_text = (
+        " · ".join(summary_bits)
+        if summary_bits
+        else "Read the process map first, then isolate deviations only where the pathway or delay story breaks."
+    )
     st.markdown(
-        (
-            "<div class='crpm-conformance-page-marker' aria-hidden='true'></div>"
-            "<div class='crpm-conformance-hero'>"
-            "<div class='crpm-conformance-hero__eyebrow'>Process conformance workbench</div>"
-            "<div class='crpm-conformance-hero__row'>"
-            "<div>"
-            "<div class='crpm-conformance-hero__title'>Interactive pathway investigation</div>"
-            "<div class='crpm-conformance-hero__body'>"
-            f"{html.escape(summary_text)}"
-            "</div>"
-            "</div>"
-            f"<div class='crpm-conformance-hero__badge'><span>Reference model</span><strong>{html.escape(reference_model)}</strong></div>"
-            "</div>"
-            "</div>"
-        ),
+        "<div class='crpm-conformance-page-marker crpm-conformance-cockpit-marker' aria-hidden='true'></div>",
         unsafe_allow_html=True,
+    )
+    render_dashboard_topbar(
+        title="Conformance cockpit",
+        subtitle=summary_text,
+        badges=[
+            {"label": "Mode", "value": "Direct workflow mode", "tone": "accent"},
+            {"label": "Reference", "value": reference_model, "tone": "neutral"},
+        ],
+        meta=["First-event workflow gate", "Board/export view is report-only"],
     )
 
 
@@ -849,7 +1033,9 @@ def _render_board_summary(*, workflow: dict[str, Any], model_summary_df: pd.Data
     if story_bits:
         render_quiet_note("Board readout: " + " · ".join(story_bits) + ".")
     else:
-        render_quiet_note("Board readout: use the dominant pathway on the left as the canonical story, then open drilldown only when the backbone looks suspicious.")
+        render_quiet_note(
+            "Board readout: use the dominant pathway on the left as the canonical story, then open drilldown only when the backbone looks suspicious."
+        )
 
 
 def _top_model_name(model_summary_df: pd.DataFrame) -> Optional[str]:
@@ -959,7 +1145,11 @@ def _render_workflow_feedback(
 ) -> None:
     summary = workflow.get("summary", {}) if isinstance(workflow, dict) else {}
     requested_coverage_view = str(workflow.get("requested_coverage_view", "")).lower() if isinstance(workflow, dict) else ""
-    applied_coverage_view = str(workflow.get("applied_coverage_view", requested_coverage_view)).lower() if isinstance(workflow, dict) else requested_coverage_view
+    applied_coverage_view = (
+        str(workflow.get("applied_coverage_view", requested_coverage_view)).lower()
+        if isinstance(workflow, dict)
+        else requested_coverage_view
+    )
     covered_cases = _coerce_int(summary.get("cases_covered"))
     log_deviation_share = _coerce_float(summary.get("log_deviation_share"))
     model_deviation_share = _coerce_float(summary.get("model_deviation_share"))
@@ -1065,8 +1255,17 @@ def _render_related_trace_context(
             Deviation_rate=("has_deviation", "mean"),
         )
         .reset_index()
-        .rename(columns={"variant_signature": "Variant", "Median_throughput_days": "Median throughput (days)"})
-        .sort_values(by=["Cases", "Median throughput (days)", "Variant"], ascending=[False, False, True], na_position="last")
+        .rename(
+            columns={
+                "variant_signature": "Variant",
+                "Median_throughput_days": "Median throughput (days)",
+            }
+        )
+        .sort_values(
+            by=["Cases", "Median throughput (days)", "Variant"],
+            ascending=[False, False, True],
+            na_position="last",
+        )
         .head(6)
         .reset_index(drop=True)
     )
@@ -1119,7 +1318,7 @@ def _render_workflow_kpi_strip(
             {
                 "eyebrow": "Deviation",
                 "title": "Deviation share",
-                "value": "N/A" if deviation_share is None else f"{deviation_share:.1f}%",
+                "value": ("N/A" if deviation_share is None else f"{deviation_share:.1f}%"),
                 "body": "",
                 "tone": "neutral",
             },
@@ -1158,7 +1357,11 @@ def _workflow_feedback_text(
 ) -> str:
     summary = workflow.get("summary", {}) if isinstance(workflow, dict) else {}
     requested_coverage_view = str(workflow.get("requested_coverage_view", "")).lower() if isinstance(workflow, dict) else ""
-    applied_coverage_view = str(workflow.get("applied_coverage_view", requested_coverage_view)).lower() if isinstance(workflow, dict) else requested_coverage_view
+    applied_coverage_view = (
+        str(workflow.get("applied_coverage_view", requested_coverage_view)).lower()
+        if isinstance(workflow, dict)
+        else requested_coverage_view
+    )
     covered_cases = _coerce_int(summary.get("cases_covered"))
     log_deviation_share = _coerce_float(summary.get("log_deviation_share"))
     model_deviation_share = _coerce_float(summary.get("model_deviation_share"))
@@ -1195,8 +1398,7 @@ def _board_export_story_text(*, workflow: dict[str, Any], model_summary_df: pd.D
     if story_bits:
         return "Board readout: " + " · ".join(story_bits) + "."
     return (
-        "Board readout: use the dominant pathway on the left as the canonical story, "
-        "then read the rare-path excursions above and below it."
+        "Board readout: use the dominant pathway on the left as the canonical story, then read the rare-path excursions above and below it."
     )
 
 
@@ -1209,22 +1411,23 @@ def _render_board_export_view(
 ) -> None:
     subset_text = _workflow_feedback_text(workflow, nodes_df, edges_df)
     story_text = _board_export_story_text(workflow=workflow, model_summary_df=model_summary_df)
-    board_markup = render_workflow_conformance_svg(workflow, layout_mode="horizontal", detail_level="executive")
-    st.markdown(
-        (
-            "<div class='crpm-conformance-board-shelf'>"
-            "<div class='crpm-conformance-board-shelf__eyebrow'>Board export view</div>"
-            "<div class='crpm-conformance-board-shelf__title'>Horizontal pathway shelf</div>"
-            "<div class='crpm-conformance-board-shelf__body'>"
-            "A compact report shelf for the current visible subset."
-            "</div>"
-            f"<div class='crpm-conformance-board-shelf__meta'>{html.escape(subset_text)}</div>"
-            f"<div class='crpm-conformance-board-shelf__summary'>{html.escape(story_text)}</div>"
-            f"{board_markup}"
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
+    with st.expander("Report/export view", expanded=False):
+        board_markup = render_workflow_conformance_svg(workflow, layout_mode="horizontal", detail_level="executive")
+        st.markdown(
+            (
+                "<div class='crpm-conformance-board-shelf'>"
+                "<div class='crpm-conformance-board-shelf__eyebrow'>Board export view</div>"
+                "<div class='crpm-conformance-board-shelf__title'>Horizontal pathway shelf</div>"
+                "<div class='crpm-conformance-board-shelf__body'>"
+                "A compact report shelf for the current visible subset."
+                "</div>"
+                f"<div class='crpm-conformance-board-shelf__meta'>{html.escape(subset_text)}</div>"
+                f"<div class='crpm-conformance-board-shelf__summary'>{html.escape(story_text)}</div>"
+                f"{board_markup}"
+                "</div>"
+            ),
+            unsafe_allow_html=True,
+        )
 
 
 def _workflow_insight(summary: dict[str, Any], controls: dict[str, Any]) -> str:
@@ -1288,7 +1491,12 @@ def _render_event_process_details(
         render_inline_empty("No workflow items are available for event or process detail summaries.")
         return
 
-    conformance_order = {"Model deviation": 3, "Log deviation": 2, "Mixed": 1, "Conformant": 0}
+    conformance_order = {
+        "Model deviation": 3,
+        "Log deviation": 2,
+        "Mixed": 1,
+        "Conformant": 0,
+    }
     if metric_coloring == "Frequency":
         node_sort = ["cases", "occurrences", "display_name"]
         edge_sort = ["frequency", "share_pct", "business_label"]
@@ -1298,7 +1506,12 @@ def _render_event_process_details(
         edge_sort = ["p90_days", "median_days", "business_label"]
         metric_name = "P90 delay (days)"
     elif metric_coloring == "Conformance bucket":
-        conformance_order = {"Model deviation": 3, "Log deviation": 2, "Mixed": 1, "Conformant": 0}
+        conformance_order = {
+            "Model deviation": 3,
+            "Log deviation": 2,
+            "Mixed": 1,
+            "Conformant": 0,
+        }
         node_sort = ["_conformance_rank", "cases", "display_name"]
         edge_sort = ["_conformance_rank", "frequency", "business_label"]
         metric_name = "Conformance bucket"
@@ -1323,47 +1536,89 @@ def _render_event_process_details(
     nodes_table = pd.DataFrame()
     if not nodes_df.empty:
         working_nodes = nodes_df.copy()
-        for column in ["display_name", "cases", "occurrences", "median_next_delay_days", "p90_next_delay_days", "conformance_bucket"]:
+        for column in [
+            "display_name",
+            "cases",
+            "occurrences",
+            "median_next_delay_days",
+            "p90_next_delay_days",
+            "conformance_bucket",
+        ]:
             if column not in working_nodes.columns:
                 working_nodes[column] = None
-        working_nodes["_conformance_rank"] = working_nodes["conformance_bucket"].map(conformance_order if metric_coloring == "Conformance bucket" else {}).fillna(0)
+        working_nodes["_conformance_rank"] = (
+            working_nodes["conformance_bucket"].map(conformance_order if metric_coloring == "Conformance bucket" else {}).fillna(0)
+        )
         working_nodes["_selected"] = working_nodes["activity"].astype(str).eq(str(selected_node_id)) if selected_node_id else False
         working_nodes["display_name"] = working_nodes.apply(_node_display_label, axis=1)
-        nodes_table = working_nodes.sort_values(by=["_selected", *node_sort], ascending=[False, False, False, True]).head(row_limit)[
-            ["display_name", "cases", "occurrences", "median_next_delay_days", "p90_next_delay_days", "conformance_bucket"]
-        ].rename(
-            columns={
-                "display_name": "Activity",
-                "cases": "Cases",
-                "occurrences": "Events",
-                "median_next_delay_days": "Median delay (days)",
-                "p90_next_delay_days": "P90 delay (days)",
-                "conformance_bucket": "Conformance",
-            }
-        ).reset_index(drop=True)
+        nodes_table = (
+            working_nodes.sort_values(by=["_selected", *node_sort], ascending=[False, False, False, True])
+            .head(row_limit)[
+                [
+                    "display_name",
+                    "cases",
+                    "occurrences",
+                    "median_next_delay_days",
+                    "p90_next_delay_days",
+                    "conformance_bucket",
+                ]
+            ]
+            .rename(
+                columns={
+                    "display_name": "Activity",
+                    "cases": "Cases",
+                    "occurrences": "Events",
+                    "median_next_delay_days": "Median delay (days)",
+                    "p90_next_delay_days": "P90 delay (days)",
+                    "conformance_bucket": "Conformance",
+                }
+            )
+            .reset_index(drop=True)
+        )
         nodes_table.insert(0, "Rank", range(1, len(nodes_table) + 1))
     edges_table = pd.DataFrame()
     if not edges_df.empty:
         working_edges = edges_df.copy()
-        for column in ["business_label", "frequency", "share_pct", "median_days", "p90_days", "conformance_bucket"]:
+        for column in [
+            "business_label",
+            "frequency",
+            "share_pct",
+            "median_days",
+            "p90_days",
+            "conformance_bucket",
+        ]:
             if column not in working_edges.columns:
                 working_edges[column] = None
-        working_edges["_conformance_rank"] = working_edges["conformance_bucket"].map(conformance_order if metric_coloring == "Conformance bucket" else {}).fillna(0)
+        working_edges["_conformance_rank"] = (
+            working_edges["conformance_bucket"].map(conformance_order if metric_coloring == "Conformance bucket" else {}).fillna(0)
+        )
         edge_id_column = _edge_id_column(working_edges)
         working_edges["_selected"] = working_edges[edge_id_column].astype(str).eq(str(selected_edge_id)) if selected_edge_id else False
         working_edges["business_label"] = working_edges.apply(_edge_display_label, axis=1)
-        edges_table = working_edges.sort_values(by=["_selected", *edge_sort], ascending=[False, False, False, True]).head(row_limit)[
-            ["business_label", "frequency", "share_pct", "median_days", "p90_days", "conformance_bucket"]
-        ].rename(
-            columns={
-                "business_label": "Transition",
-                "frequency": "Events",
-                "share_pct": "Share (%)",
-                "median_days": "Median delay (days)",
-                "p90_days": "P90 delay (days)",
-                "conformance_bucket": "Conformance",
-            }
-        ).reset_index(drop=True)
+        edges_table = (
+            working_edges.sort_values(by=["_selected", *edge_sort], ascending=[False, False, False, True])
+            .head(row_limit)[
+                [
+                    "business_label",
+                    "frequency",
+                    "share_pct",
+                    "median_days",
+                    "p90_days",
+                    "conformance_bucket",
+                ]
+            ]
+            .rename(
+                columns={
+                    "business_label": "Transition",
+                    "frequency": "Events",
+                    "share_pct": "Share (%)",
+                    "median_days": "Median delay (days)",
+                    "p90_days": "P90 delay (days)",
+                    "conformance_bucket": "Conformance",
+                }
+            )
+            .reset_index(drop=True)
+        )
         edges_table.insert(0, "Rank", range(1, len(edges_table) + 1))
 
     model_cards_df = _format_model_summary(model_summary_df).reset_index(drop=True)
@@ -1484,7 +1739,9 @@ def _render_selector(
         options=ids,
         index=ids.index(default_id) if default_id in ids else 0,
         key=key,
-        format_func=lambda option: f"Overview ({label.lower()} not pinned)" if option == "" else format_label(working.loc[working[id_column] == option].iloc[0]),
+        format_func=lambda option: (
+            f"Overview ({label.lower()} not pinned)" if option == "" else format_label(working.loc[working[id_column] == option].iloc[0])
+        ),
     )
     if selected_id == "":
         return None, None
@@ -1495,7 +1752,9 @@ def _render_selector(
     return str(selected_id), selected_rows.iloc[0]
 
 
-def _workflow_dfs(workflow: dict[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def _workflow_dfs(
+    workflow: dict[str, Any],
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     nodes_df = workflow.get("nodes", pd.DataFrame()) if isinstance(workflow, dict) else pd.DataFrame()
     edges_df = workflow.get("edges", pd.DataFrame()) if isinstance(workflow, dict) else pd.DataFrame()
     legend_df = workflow.get("legend", pd.DataFrame()) if isinstance(workflow, dict) else pd.DataFrame()
@@ -1564,12 +1823,7 @@ def _coerce_graph_selection(selection: Any) -> tuple[Optional[str], Optional[str
         if action == "selected_edge":
             edge_id = data.get("target_id")
             return (None, str(edge_id) if edge_id else None)
-        node = (
-            selection.get("selected_node")
-            or selection.get("selectedNode")
-            or selection.get("node")
-            or selection.get("selected")
-        )
+        node = selection.get("selected_node") or selection.get("selectedNode") or selection.get("node") or selection.get("selected")
         edge = selection.get("selected_edge") or selection.get("selectedEdge") or selection.get("edge")
         if isinstance(node, dict):
             node = node.get("id") or node.get("data", {}).get("id")
@@ -1717,7 +1971,12 @@ def _render_selection_summary_card(
         meta = [
             f"{_format_number(node_row.get('cases'))} node cases",
             f"{_format_number(edge_row.get('frequency'))} edge events",
-            str(edge_row.get("conformance_bucket", node_row.get("conformance_bucket", "Conformant"))),
+            str(
+                edge_row.get(
+                    "conformance_bucket",
+                    node_row.get("conformance_bucket", "Conformant"),
+                )
+            ),
         ]
         tone = str(edge_row.get("conformance_bucket", node_row.get("conformance_bucket", "Conformant")))
     elif node_row is not None:
@@ -1741,7 +2000,11 @@ def _render_selection_summary_card(
     else:
         title = "Overview mode"
         subtitle = "No pinned workflow detail"
-        meta = ["Read the pathway first", "Pin a node or transition when you need exact metrics", "Workflow lenses stay above the figure"]
+        meta = [
+            "Read the pathway first",
+            "Pin a node or transition when you need exact metrics",
+            "Workflow lenses stay above the figure",
+        ]
         tone = "Overview"
     st.markdown(
         (
@@ -1820,7 +2083,16 @@ def _render_ranked_table_html(
     title: str,
 ) -> str:
     headers = "".join(f"<th>{html.escape(str(column))}</th>" for column in df.columns)
-    numeric_keywords = ("rank", "cases", "events", "delay", "share", "fitness", "precision", "balance")
+    numeric_keywords = (
+        "rank",
+        "cases",
+        "events",
+        "delay",
+        "share",
+        "fitness",
+        "precision",
+        "balance",
+    )
     numeric_maxima: dict[str, float] = {}
     for column in df.columns:
         if any(keyword in str(column).lower() for keyword in numeric_keywords if keyword != "rank"):
@@ -1842,16 +2114,12 @@ def _render_ranked_table_html(
                 full_value = str(raw_value)
                 display_value = _short_label(full_value, max_chars=34 if label_column == "Activity" else 30)
                 class_name += " crpm-table__cell--label"
-                cell_html = (
-                    f"<td class='{class_name}' title='{html.escape(full_value)}'>"
-                    f"{html.escape(str(display_value))}</td>"
-                )
+                cell_html = f"<td class='{class_name}' title='{html.escape(full_value)}'>{html.escape(str(display_value))}</td>"
             elif column == chip_column:
                 class_name += " crpm-table__cell--chip"
                 chip_slug = _slugify(str(raw_value))
                 cell_html = (
-                    f"<td class='{class_name}'><span class='crpm-chip crpm-chip--{chip_slug}'>"
-                    f"{html.escape(str(display_value))}</span></td>"
+                    f"<td class='{class_name}'><span class='crpm-chip crpm-chip--{chip_slug}'>{html.escape(str(display_value))}</span></td>"
                 )
             else:
                 if any(keyword in column.lower() for keyword in numeric_keywords):
@@ -1926,12 +2194,36 @@ def _legend_fallback_table(workflow: dict[str, Any]) -> pd.DataFrame:
         return legend
     return pd.DataFrame(
         [
-            {"bucket": "Conformant", "meaning": "Expected screening progression", "severity": "Conformant"},
-            {"bucket": "Log deviation", "meaning": "Observed skip, loop, or reorder", "severity": "Log deviation"},
-            {"bucket": "Model deviation", "meaning": "Unmapped or off-pathway activity", "severity": "Model deviation"},
-            {"bucket": "Low", "meaning": "Delay near cohort baseline", "severity": "Low"},
-            {"bucket": "Moderate", "meaning": "Delay requires monitoring", "severity": "Moderate"},
-            {"bucket": "High", "meaning": "Delay materially above baseline", "severity": "High"},
+            {
+                "bucket": "Conformant",
+                "meaning": "Expected screening progression",
+                "severity": "Conformant",
+            },
+            {
+                "bucket": "Log deviation",
+                "meaning": "Observed skip, loop, or reorder",
+                "severity": "Log deviation",
+            },
+            {
+                "bucket": "Model deviation",
+                "meaning": "Unmapped or off-pathway activity",
+                "severity": "Model deviation",
+            },
+            {
+                "bucket": "Low",
+                "meaning": "Delay near cohort baseline",
+                "severity": "Low",
+            },
+            {
+                "bucket": "Moderate",
+                "meaning": "Delay requires monitoring",
+                "severity": "Moderate",
+            },
+            {
+                "bucket": "High",
+                "meaning": "Delay materially above baseline",
+                "severity": "High",
+            },
         ]
     )
 
@@ -2000,7 +2292,9 @@ def _best_balance_row(df: pd.DataFrame) -> pd.Series | None:
 
 
 def _get_workspace(snapshot: AnalysisSnapshot) -> dict[str, object]:
-    workspace = snapshot.conformance_workspace if isinstance(snapshot.conformance_workspace, dict) else dict(snapshot.conformance_workspace or {})
+    workspace = (
+        snapshot.conformance_workspace if isinstance(snapshot.conformance_workspace, dict) else dict(snapshot.conformance_workspace or {})
+    )
     if workspace:
         return workspace
     if snapshot.comparison_df.empty:
@@ -2009,7 +2303,11 @@ def _get_workspace(snapshot: AnalysisSnapshot) -> dict[str, object]:
         "model_summary_df": snapshot.comparison_df.copy(),
         "deviation_summary_df": pd.DataFrame(),
         "trace_deviation_df": pd.DataFrame(),
-        "workflow": {"nodes": pd.DataFrame(), "edges": pd.DataFrame(), "legend": pd.DataFrame()},
+        "workflow": {
+            "nodes": pd.DataFrame(),
+            "edges": pd.DataFrame(),
+            "legend": pd.DataFrame(),
+        },
     }
 
 

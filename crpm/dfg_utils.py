@@ -126,7 +126,7 @@ def filter_dfg_by_coverage(
     filtered_dfg = {(row["source"], row["target"]): row["value"] for row in filtered_rows}
 
     activities_in_dfg = set()
-    for (source, target) in filtered_dfg.keys():
+    for source, target in filtered_dfg.keys():
         activities_in_dfg.add(source)
         activities_in_dfg.add(target)
 
@@ -137,11 +137,7 @@ def filter_dfg_by_coverage(
 
 
 def filter_dfg_by_frequency(
-    dfg: Dict,
-    start_activities: Dict,
-    end_activities: Dict,
-    min_frequency: int = 1,
-    percentage: float = 0.0
+    dfg: Dict, start_activities: Dict, end_activities: Dict, min_frequency: int = 1, percentage: float = 0.0
 ) -> Tuple[Dict, Dict, Dict]:
     """Backward-compatible DFG filter using the legacy threshold contract."""
     if not dfg:
@@ -157,7 +153,7 @@ def filter_dfg_by_frequency(
         filtered_dfg = dict(ranked_items[:keep_count])
 
     activities_in_dfg = set()
-    for (source, target) in filtered_dfg.keys():
+    for source, target in filtered_dfg.keys():
         activities_in_dfg.add(source)
         activities_in_dfg.add(target)
 
@@ -172,12 +168,7 @@ def filter_dfg_by_frequency(
 # ---------------------------------------------------------------------------
 
 
-def render_dfg_to_png(
-    dfg: Dict,
-    start_activities: Dict,
-    end_activities: Dict,
-    variant: str = "frequency"
-) -> bytes:
+def render_dfg_to_png(dfg: Dict, start_activities: Dict, end_activities: Dict, variant: str = "frequency") -> bytes:
     """Render DFG to PNG bytes.
 
     Args:
@@ -204,8 +195,8 @@ def render_dfg_to_png(
         parameters={
             dfg_visualizer.Variants.FREQUENCY.value.Parameters.START_ACTIVITIES: start_activities,
             dfg_visualizer.Variants.FREQUENCY.value.Parameters.END_ACTIVITIES: end_activities,
-            dfg_visualizer.Variants.FREQUENCY.value.Parameters.FORMAT: "png"
-        }
+            dfg_visualizer.Variants.FREQUENCY.value.Parameters.FORMAT: "png",
+        },
     )
 
     # Render to PNG
@@ -222,12 +213,7 @@ def render_dfg_to_png(
             tmp_path.unlink(missing_ok=True)
 
 
-def render_dfg_to_svg(
-    dfg: Dict,
-    start_activities: Dict,
-    end_activities: Dict,
-    variant: str = "frequency"
-) -> str:
+def render_dfg_to_svg(dfg: Dict, start_activities: Dict, end_activities: Dict, variant: str = "frequency") -> str:
     """Render DFG to SVG markup.
 
     Args:
@@ -289,7 +275,7 @@ def get_dfg_statistics(dfg: Dict, start_activities: Dict, end_activities: Dict) 
     """
     # Count unique activities
     activities = set()
-    for (source, target) in dfg.keys():
+    for source, target in dfg.keys():
         activities.add(source)
         activities.add(target)
 
@@ -315,7 +301,7 @@ def get_dfg_statistics(dfg: Dict, start_activities: Dict, end_activities: Dict) 
         "num_end_activities": len(end_activities),
         "total_value": total_value,
         "max_edge": max_edge_str,
-        "max_edge_value": max_edge_value
+        "max_edge_value": max_edge_value,
     }
 
 

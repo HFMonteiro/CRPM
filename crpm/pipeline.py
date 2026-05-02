@@ -38,21 +38,82 @@ def csv_to_event_log(
     timestamp_col: str,
 ) -> EventLog:
     """Convert a pandas DataFrame into a pm4py EventLog."""
-    df = df.rename(
-        columns={
-            case_col: "case:concept:name",
-            activity_col: "concept:name",
-            timestamp_col: "time:timestamp",
-        }
-    )
-    df["time:timestamp"] = pd.to_datetime(df["time:timestamp"])
-    df = dataframe_utils.convert_timestamp_columns_in_df(df)
+    df = _prepare_event_dataframe(df, case_col, activity_col, timestamp_col)
     parameters = {
         "case_id_key": "case:concept:name",
         "activity_key": "concept:name",
         "timestamp_key": "time:timestamp",
     }
     return log_converter.apply(df, variant=log_converter.Variants.TO_EVENT_LOG, parameters=parameters)
+
+
+def _prepare_event_dataframe(
+    df: pd.DataFrame,
+    case_col: str,
+    activity_col: str,
+    timestamp_col: str,
+) -> pd.DataFrame:
+    """Validate and normalize a CSV event table before PM4Py conversion."""
+    if df.empty:
+        raise ValueError("CSV validation failed: file contains no event rows.")
+
+    required = [case_col, activity_col, timestamp_col]
+    missing = [column for column in required if column not in df.columns]
+    if missing:
+        raise ValueError("CSV validation failed: required event columns are missing.")
+    if len(set(required)) != 3:
+        raise ValueError("CSV validation failed: case, activity, and timestamp columns must be distinct.")
+
+    working = df.copy()
+    case_values = working[case_col]
+    activity_values = working[activity_col]
+    timestamp_values = working[timestamp_col]
+
+    if case_values.isna().any() or case_values.astype(str).str.strip().eq("").any():
+        raise ValueError("CSV validation failed: case IDs cannot be null or blank.")
+    if activity_values.isna().any() or activity_values.astype(str).str.strip().eq("").any():
+        raise ValueError("CSV validation failed: activities cannot be null or blank.")
+    if timestamp_values.isna().any() or timestamp_values.astype(str).str.strip().eq("").any():
+        raise ValueError("CSV validation failed: timestamps cannot be null or blank.")
+
+    timezone_kinds = {_timestamp_timezone_kind(value) for value in timestamp_values.tolist()}
+    timezone_kinds.discard("unknown")
+    if len(timezone_kinds) > 1:
+        raise ValueError("CSV validation failed: timestamps mix timezone-aware and timezone-naive values.")
+
+    try:
+        parsed_timestamps = pd.to_datetime(timestamp_values, errors="coerce", format="mixed")
+    except TypeError:
+        parsed_timestamps = pd.to_datetime(timestamp_values, errors="coerce")
+    if parsed_timestamps.isna().any():
+        raise ValueError("CSV validation failed: timestamp column contains invalid values.")
+
+    working["case:concept:name"] = case_values.astype(str).str.strip()
+    working["concept:name"] = activity_values.astype(str).str.strip()
+    working["time:timestamp"] = parsed_timestamps
+    working["_crpm_original_order"] = range(len(working.index))
+    working = working.sort_values(
+        by=["case:concept:name", "time:timestamp", "_crpm_original_order"],
+        kind="mergesort",
+    ).drop(columns=["_crpm_original_order"])
+    return dataframe_utils.convert_timestamp_columns_in_df(working)
+
+
+def _timestamp_timezone_kind(value: Any) -> str:
+    if isinstance(value, datetime):
+        return "aware" if value.tzinfo is not None and value.tzinfo.utcoffset(value) is not None else "naive"
+    text = str(value).strip()
+    if not text:
+        return "unknown"
+    if text.endswith("Z") or text.endswith("z"):
+        return "aware"
+    tail = text[-6:]
+    if len(tail) == 6 and tail[0] in {"+", "-"} and tail[1:3].isdigit() and tail[3] == ":" and tail[4:6].isdigit():
+        return "aware"
+    compact_tail = text[-5:]
+    if len(compact_tail) == 5 and compact_tail[0] in {"+", "-"} and compact_tail[1:].isdigit():
+        return "aware"
+    return "naive"
 
 
 # ---------------------------------------------------------------------------
@@ -103,11 +164,7 @@ def split_by_date(log: EventLog, cutoff: date) -> Tuple[EventLog, EventLog]:
     return before, after
 
 
-def split_log_random(
-    log: EventLog,
-    train_ratio: float = 0.8,
-    random_seed: int = 42
-) -> Tuple[EventLog, EventLog, Dict[str, Any]]:
+def split_log_random(log: EventLog, train_ratio: float = 0.8, random_seed: int = 42) -> Tuple[EventLog, EventLog, Dict[str, Any]]:
     """Split event log randomly into training and test sets by case.
 
     Args:
@@ -133,7 +190,6 @@ def split_log_random(
     # Split into train and test
     train_size = int(total_cases * train_ratio)
     train_case_ids = set(shuffled_cases[:train_size])
-    test_case_ids = set(shuffled_cases[train_size:])
 
     # Create train and test logs
     train_log = PM4PyEventLog()
@@ -155,7 +211,7 @@ def split_log_random(
         "test_ratio": len(test_log) / total_cases if total_cases > 0 else 0,
         "train_events": sum(len(trace) for trace in train_log),
         "test_events": sum(len(trace) for trace in test_log),
-        "random_seed": random_seed
+        "random_seed": random_seed,
     }
 
     return train_log, test_log, split_info
@@ -222,4 +278,3 @@ __all__ = [
     "token_replay_fitness",
     "precision",
 ]
-

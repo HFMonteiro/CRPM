@@ -12,21 +12,22 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Mapping, Optional
+import xml.etree.ElementTree as ET
 
 import pandas as pd
 from pm4py.objects.log.obj import EventLog
 
 from crpm.app_state import CRPMState, bounded_cache_get, bounded_cache_put
 from crpm.conformance import compute_alignments, compute_token_replay, filter_date_range, filter_start_event, load_log, summarize_metrics
-from crpm.discovery import AVAILABLE_ALGORITHMS, DiscoveryResult, compute_model_complexity, discover_all_algorithms
+from crpm.discovery import AVAILABLE_ALGORITHMS as AVAILABLE_ALGORITHMS, DiscoveryResult, compute_model_complexity, discover_all_algorithms
 from crpm.formatting import format_decimal
-from crpm.interpretations import assess_balanced_quality, assess_bottleneck_severity, assess_fitness, assess_precision, get_executive_summary, get_model_quadrant
+from crpm.interpretations import assess_bottleneck_severity, assess_fitness, assess_precision, get_executive_summary, get_model_quadrant
 from crpm.pipeline import csv_to_event_log, split_log_random
-from crpm.screening import describe_followup_window, filter_log_by_incident_period, humanize_activity_label
+from crpm.screening import describe_followup_window, filter_log_by_incident_period
 
 
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
-CONFORMANCE_WORKSPACE_CACHE_VERSION = "workflow-v2"
+CONFORMANCE_WORKSPACE_CACHE_VERSION = "workflow-v3"
 logger = logging.getLogger(__name__)
 
 
@@ -37,6 +38,21 @@ class LoadedLog:
     log: EventLog
     input_name: str
     log_signature: str
+    source_type: str = "XES"
+    source_kind: str = "local"
+    source_display_name: Optional[str] = None
+    source_size_bytes: Optional[int] = None
+    validation_status: str = "validated"
+
+    def metadata(self) -> dict[str, Any]:
+        """Return privacy-safe provenance details for UI and diagnostics."""
+        return {
+            "source_type": self.source_type,
+            "source_kind": self.source_kind,
+            "display_name": self.source_display_name or self.input_name,
+            "size_bytes": self.source_size_bytes,
+            "validation_status": self.validation_status,
+        }
 
 
 def make_file_signature(path: Path) -> str:
@@ -90,9 +106,11 @@ def compute_analysis_signature(
     enable_train_test: bool,
     random_seed: int,
     followup_days: Optional[int] = None,
+    workflow_cohort_policy: str = "first_event_direct",
 ) -> str:
     payload = {
         "log_signature": log_signature,
+        "workflow_cohort_policy": workflow_cohort_policy,
         "start_filter": start_filter,
         "date_filter_mode": date_filter_mode,
         "start_date": start_date.isoformat() if start_date else None,
@@ -113,7 +131,7 @@ def compute_log_stats(log: EventLog) -> dict[str, Optional[object]]:
     traces = len(log)
     events = 0
     timestamps = []
-    for trace in log:
+    for trace_index, trace in enumerate(log, start=1):
         events += len(trace)
         for event in trace:
             ts = event.get("time:timestamp")
@@ -139,12 +157,7 @@ def build_analysis_summary(
         return {}
 
     stats = compute_log_stats(log)
-    unique_activities = {
-        str(event.get("concept:name"))
-        for trace in log
-        for event in trace
-        if event.get("concept:name")
-    }
+    unique_activities = {str(event.get("concept:name")) for trace in log for event in trace if event.get("concept:name")}
 
     workflow = conformance_workspace.get("workflow", {}) if isinstance(conformance_workspace, Mapping) else {}
     workflow_summary = workflow.get("summary", {}) if isinstance(workflow, Mapping) else {}
@@ -197,6 +210,62 @@ def build_analysis_summary(
     }
 
 
+def _redacted_source_label(source_type: str, source_kind: str) -> str:
+    prefix = "Uploaded" if source_kind == "uploaded" else "Local"
+    return f"{prefix} {source_type.upper()} log"
+
+
+def _make_log_case_signature(log: EventLog) -> str:
+    case_fingerprint = [
+        (
+            str(trace.attributes.get("concept:name") or trace.attributes.get("case_id") or index),
+            len(trace),
+        )
+        for index, trace in enumerate(log)
+    ]
+    return hashlib.sha1(repr(case_fingerprint).encode("utf-8")).hexdigest()
+
+
+def _validate_xes_bytes(raw_bytes: bytes) -> None:
+    _ensure_upload_size(raw_bytes)
+    if not raw_bytes.strip():
+        raise ValueError("XES validation failed: file is empty.")
+    lowered_head = raw_bytes[:65536].lower()
+    if b"<!doctype" in lowered_head or b"<!entity" in lowered_head:
+        raise ValueError("XES validation failed: unsafe XML declaration is not allowed.")
+    try:
+        parser = ET.iterparse(io.BytesIO(raw_bytes), events=("start",))
+        _, root = next(parser)
+    except (ET.ParseError, StopIteration, UnicodeDecodeError) as exc:
+        raise ValueError("XES validation failed: XML could not be parsed.") from exc
+    root_name = str(root.tag).split("}", 1)[-1].lower()
+    if root_name != "log":
+        raise ValueError("XES validation failed: root element must be a XES log.")
+
+
+def _validate_xes_file(path: Path) -> int:
+    if not path.exists() or not path.is_file():
+        raise ValueError("XES validation failed: selected file is unavailable.")
+    size = path.stat().st_size
+    if size > MAX_UPLOAD_BYTES:
+        raise ValueError("XES validation failed: selected file exceeds the supported size limit.")
+    with path.open("rb") as handle:
+        head = handle.read(65536).lower()
+    if not head.strip():
+        raise ValueError("XES validation failed: file is empty.")
+    if b"<!doctype" in head or b"<!entity" in head:
+        raise ValueError("XES validation failed: unsafe XML declaration is not allowed.")
+    try:
+        parser = ET.iterparse(path, events=("start",))
+        _, root = next(parser)
+    except (ET.ParseError, StopIteration, UnicodeDecodeError) as exc:
+        raise ValueError("XES validation failed: XML could not be parsed.") from exc
+    root_name = str(root.tag).split("}", 1)[-1].lower()
+    if root_name != "log":
+        raise ValueError("XES validation failed: root element must be a XES log.")
+    return size
+
+
 def resolve_xes_log(
     state: CRPMState,
     *,
@@ -205,7 +274,7 @@ def resolve_xes_log(
     uploaded_name: Optional[str],
 ) -> LoadedLog:
     if uploaded_bytes is not None:
-        _ensure_upload_size(uploaded_bytes)
+        _validate_xes_bytes(uploaded_bytes)
         signature = make_uploaded_signature(uploaded_bytes, "xes_upload")
         cached_log = bounded_cache_get(state, "log_cache", signature)
         if cached_log is None:
@@ -217,18 +286,39 @@ def resolve_xes_log(
             finally:
                 temp_path.unlink(missing_ok=True)
             bounded_cache_put(state, "log_cache", signature, cached_log)
-        return LoadedLog(log=cached_log, input_name=uploaded_name or "uploaded.xes", log_signature=f"xes::{signature}")
+        display_name = _redacted_source_label("XES", "uploaded")
+        return LoadedLog(
+            log=cached_log,
+            input_name=display_name,
+            log_signature=f"xes::{signature}",
+            source_type="XES",
+            source_kind="uploaded",
+            source_display_name=display_name,
+            source_size_bytes=len(uploaded_bytes),
+            validation_status="validated:xes",
+        )
 
     if not selected_path:
         raise ValueError("Select a XES log or upload one to continue.")
 
     path = Path(selected_path)
+    source_size = _validate_xes_file(path)
     signature = make_file_signature(path)
     cached_log = bounded_cache_get(state, "log_cache", signature)
     if cached_log is None:
         cached_log = load_log(path)
         bounded_cache_put(state, "log_cache", signature, cached_log)
-    return LoadedLog(log=cached_log, input_name=path.name, log_signature=f"xes::{signature}")
+    display_name = _redacted_source_label("XES", "local")
+    return LoadedLog(
+        log=cached_log,
+        input_name=display_name,
+        log_signature=f"xes::{signature}",
+        source_type="XES",
+        source_kind="local",
+        source_display_name=display_name,
+        source_size_bytes=source_size,
+        validation_status="validated:xes",
+    )
 
 
 def preview_csv_dataframe(state: CRPMState, uploaded_bytes: bytes) -> pd.DataFrame:
@@ -237,6 +327,10 @@ def preview_csv_dataframe(state: CRPMState, uploaded_bytes: bytes) -> pd.DataFra
     dataframe = bounded_cache_get(state, "dataframe_cache", cache_key)
     if dataframe is None:
         dataframe = pd.read_csv(io.BytesIO(uploaded_bytes))
+        if dataframe.empty:
+            raise ValueError("CSV validation failed: file contains no event rows.")
+        if len(dataframe.columns) < 3:
+            raise ValueError("CSV validation failed: at least case, activity, and timestamp columns are required.")
         bounded_cache_put(state, "dataframe_cache", cache_key, dataframe)
     return dataframe
 
@@ -266,8 +360,13 @@ def resolve_csv_log(
 
     loaded_log = LoadedLog(
         log=cached_log,
-        input_name=uploaded_name or "uploaded.csv",
+        input_name=_redacted_source_label("CSV", "uploaded"),
         log_signature=f"csv::{log_key}",
+        source_type="CSV",
+        source_kind="uploaded",
+        source_display_name=_redacted_source_label("CSV", "uploaded"),
+        source_size_bytes=len(uploaded_bytes),
+        validation_status="validated:csv",
     )
     return loaded_log, dataframe
 
@@ -286,6 +385,7 @@ def run_discovery_comparison_pipeline(
     followup_days: Optional[int] = None,
 ) -> None:
     selected_first = None if start_filter == "All" else start_filter
+    workflow_cohort_policy = getattr(state.config, "workflow_cohort_policy", "first_event_direct") or "first_event_direct"
     analysis_signature = compute_analysis_signature(
         log_signature=loaded_log.log_signature,
         start_filter=start_filter,
@@ -296,6 +396,7 @@ def run_discovery_comparison_pipeline(
         enable_train_test=enable_train_test,
         random_seed=random_seed,
         followup_days=followup_days,
+        workflow_cohort_policy=workflow_cohort_policy,
     )
     filter_key = compute_filter_key(
         loaded_log.log_signature,
@@ -306,7 +407,23 @@ def run_discovery_comparison_pipeline(
         followup_days,
     )
     results = state.results
+    source_metadata = loaded_log.metadata()
     stage_timings: dict[str, float] = {}
+
+    if workflow_cohort_policy == "first_event_direct" and not selected_first:
+        results.reset(
+            input_name=loaded_log.input_name,
+            log_signature=loaded_log.log_signature,
+            filter_key=filter_key,
+            active_followup_label=describe_followup_window(followup_days),
+            source_metadata=source_metadata,
+            workflow_cohort_policy=workflow_cohort_policy,
+            filter_error_message=(
+                "The production First-event workflow gate requires a selected first event. "
+                "Use explicit follow-up anchor mode only for secondary sensitivity analysis."
+            ),
+        )
+        return
 
     filtering_started = time.perf_counter()
     filtered_log = bounded_cache_get(state, "filtered_cache", filter_key)
@@ -320,9 +437,11 @@ def run_discovery_comparison_pipeline(
                     log_signature=loaded_log.log_signature,
                     filter_key=filter_key,
                     active_followup_label=describe_followup_window(followup_days),
+                    source_metadata=source_metadata,
+                    workflow_cohort_policy=workflow_cohort_policy,
                     filter_error_message=(
-                        "A follow-up window requires an explicit screening anchor. "
-                        "Select a start event before rerunning the analysis."
+                        "A follow-up horizon requires the First-event workflow gate. "
+                        "Select the production first event before rerunning the analysis."
                     ),
                 )
                 return
@@ -343,8 +462,10 @@ def run_discovery_comparison_pipeline(
             log_signature=loaded_log.log_signature,
             filter_key=filter_key,
             active_followup_label=describe_followup_window(followup_days),
+            source_metadata=source_metadata,
+            workflow_cohort_policy=workflow_cohort_policy,
             filter_error_message=(
-            "No traces remain after applying the selected filters. Adjust the filter settings and run the analysis again."
+                "No traces remain after applying the selected filters. Adjust the filter settings and run the analysis again."
             ),
         )
         return
@@ -366,6 +487,7 @@ def run_discovery_comparison_pipeline(
         test_log_out = None
         split_info_out = {}
     stage_timings["train_test_split_s"] = time.perf_counter() - split_started
+    evaluation_log_signature = _make_log_case_signature(evaluation_log)
 
     discovery_cache_key = f"{filter_key}::{','.join(sorted(selected_algorithms))}::{eval_mode}::{random_seed}"
     discovery_started = time.perf_counter()
@@ -378,10 +500,12 @@ def run_discovery_comparison_pipeline(
     conformance_results: dict[str, Any] = {}
     conformance_started = time.perf_counter()
     for model_name, result in discovery_results.items():
-        conformance_key = f"{filter_key}::{model_name}::{eval_mode}"
+        conformance_key = f"{analysis_signature}::{evaluation_log_signature}::{model_name}::{eval_mode}"
         conformance_result = bounded_cache_get(state, "conformance_cache", conformance_key)
         if conformance_result is None:
-            conformance_result = compute_full_conformance(evaluation_log, result.net, result.initial_marking, result.final_marking, model_name)
+            conformance_result = compute_full_conformance(
+                evaluation_log, result.net, result.initial_marking, result.final_marking, model_name
+            )
             bounded_cache_put(state, "conformance_cache", conformance_key, conformance_result)
         conformance_results[model_name] = conformance_result
     stage_timings["conformance_s"] = time.perf_counter() - conformance_started
@@ -391,12 +515,12 @@ def run_discovery_comparison_pipeline(
     stage_timings["comparison_s"] = time.perf_counter() - comparison_started
 
     workspace_started = time.perf_counter()
-    workspace_cache_key = f"{analysis_signature}::{CONFORMANCE_WORKSPACE_CACHE_VERSION}"
+    workspace_cache_key = f"{analysis_signature}::{evaluation_log_signature}::{CONFORMANCE_WORKSPACE_CACHE_VERSION}"
     conformance_workspace = bounded_cache_get(state, "conformance_workspace_cache", workspace_cache_key)
     if conformance_workspace is None:
         try:
             conformance_workspace = build_conformance_workspace_payload(
-                log=filtered_log,
+                log=evaluation_log,
                 discovery_results=discovery_results,
                 conformance_results=conformance_results,
                 comparison_df=comparison_df,
@@ -415,6 +539,8 @@ def run_discovery_comparison_pipeline(
 
     results.input_name = loaded_log.input_name
     results.log_signature = loaded_log.log_signature
+    results.workflow_cohort_policy = workflow_cohort_policy
+    results.source_metadata = source_metadata
     results.filter_key = filter_key
     results.filtered_log = filtered_log
     results.discovery_results = discovery_results
@@ -426,6 +552,14 @@ def run_discovery_comparison_pipeline(
         comparison_df=comparison_df,
         conformance_workspace=conformance_workspace,
         stage_timings=stage_timings,
+    )
+    results.analysis_summary.update(
+        {
+            "workflow_cohort_policy": workflow_cohort_policy,
+            "evaluation_cases": int(len(evaluation_log)),
+            "evaluation_events": int(sum(len(trace) for trace in evaluation_log)),
+            "source_validation_status": source_metadata.get("validation_status"),
+        }
     )
     results.train_log = train_log_out
     results.test_log = test_log_out
@@ -560,8 +694,14 @@ def _build_model_summary_table(
                 "token_fitness": _first_value(comparison_row, "token_fitness", fallback=token_fitness),
                 "precision": _first_value(comparison_row, "precision", fallback=precision),
                 "quadrant": _first_value(comparison_row, "quadrant", fallback=get_model_quadrant(alignment_fitness, precision)),
-                "fitness_quality": _first_value(comparison_row, "fitness_quality", fallback=assess_fitness(alignment_fitness)[0] if alignment_fitness is not None else "N/A"),
-                "precision_quality": _first_value(comparison_row, "precision_quality", fallback=assess_precision(precision)[0] if precision is not None else "N/A"),
+                "fitness_quality": _first_value(
+                    comparison_row,
+                    "fitness_quality",
+                    fallback=assess_fitness(alignment_fitness)[0] if alignment_fitness is not None else "N/A",
+                ),
+                "precision_quality": _first_value(
+                    comparison_row, "precision_quality", fallback=assess_precision(precision)[0] if precision is not None else "N/A"
+                ),
                 "recommendation": recommendation,
                 "summary": _summarize_metric_bundle(summary),
             }
@@ -660,8 +800,11 @@ def _build_workflow_payload(
             "branch_family",
             "parent_branch",
             "coverage_pct",
+            "path_denominator",
             "coverage_rank",
             "coverage_group",
+            "activity_pct",
+            "activity_denominator",
             "sync_cases",
             "log_move_cases",
             "model_move_cases",
@@ -679,6 +822,7 @@ def _build_workflow_payload(
     empty_edges = pd.DataFrame(
         columns=[
             "edge_id",
+            "edge_uid",
             "source",
             "target",
             "frequency",
@@ -711,13 +855,38 @@ def _build_workflow_payload(
     )
     legend = pd.DataFrame(
         [
-            {"group": "Conformance", "bucket": "Conformant", "meaning": "Observed transition follows the expected screening progression.", "severity": "Conformant"},
-            {"group": "Conformance", "bucket": "Log deviation", "meaning": "Observed path skips, loops, or reorders the expected progression.", "severity": "Log deviation"},
-            {"group": "Conformance", "bucket": "Model deviation", "meaning": "Observed path includes unmapped or off-pathway activities.", "severity": "Model deviation"},
-            {"group": "Performance", "bucket": "Low", "meaning": "Median and tail delay remain close to the cohort baseline.", "severity": "Low"},
+            {
+                "group": "Conformance",
+                "bucket": "Conformant",
+                "meaning": "Observed transition follows the expected screening progression.",
+                "severity": "Conformant",
+            },
+            {
+                "group": "Conformance",
+                "bucket": "Log deviation",
+                "meaning": "Observed path skips, loops, or reorders the expected progression.",
+                "severity": "Log deviation",
+            },
+            {
+                "group": "Conformance",
+                "bucket": "Model deviation",
+                "meaning": "Observed path includes unmapped or off-pathway activities.",
+                "severity": "Model deviation",
+            },
+            {
+                "group": "Performance",
+                "bucket": "Low",
+                "meaning": "Median and tail delay remain close to the cohort baseline.",
+                "severity": "Low",
+            },
             {"group": "Performance", "bucket": "Moderate", "meaning": "Delay is rising and should be monitored.", "severity": "Moderate"},
             {"group": "Performance", "bucket": "High", "meaning": "Delay is materially above the pathway baseline.", "severity": "High"},
-            {"group": "Performance", "bucket": "Critical", "meaning": "Delay is severe and likely operationally important.", "severity": "Critical"},
+            {
+                "group": "Performance",
+                "bucket": "Critical",
+                "meaning": "Delay is severe and likely operationally important.",
+                "severity": "Critical",
+            },
         ]
     )
 
@@ -733,8 +902,7 @@ def _build_workflow_payload(
 
     alignment_visible_activities = _workflow_alignment_visible_activities(conformance_results, comparison_df)
     activity_names = sorted(
-        {str(event.get("concept:name")) for trace in log for event in trace if event.get("concept:name")}
-        | alignment_visible_activities
+        {str(event.get("concept:name")) for trace in log for event in trace if event.get("concept:name")} | alignment_visible_activities
     )
     activity_step_lookup = classify_activity_steps(activity_names)
     step_rank_lookup = {step: rank for rank, step in enumerate(STEP_ORDER)}
@@ -775,13 +943,15 @@ def _build_workflow_payload(
     throughput_days: list[float] = []
     trace_profiles: list[dict[str, Any]] = []
     canonical_variant_counts: Counter[str] = Counter()
+    total_event_occurrences = 0
 
-    for trace in log:
+    for trace_index, trace in enumerate(log, start=1):
         events = [event for event in trace if event.get("concept:name")]
         raw_activities = [str(event.get("concept:name")) for event in events]
         if not raw_activities:
             continue
-        case_id = str(trace.attributes.get("concept:name") or trace.attributes.get("case_id") or f"case-{len(throughput_days) + 1}")
+        total_event_occurrences += len(events)
+        case_id = _workflow_case_alias(trace_index)
         throughput_days_value: Optional[float] = None
         if len(events) >= 2:
             first_ts = events[0].get("time:timestamp")
@@ -818,6 +988,7 @@ def _build_workflow_payload(
 
         seen_edges: set[tuple[str, str]] = set()
         trace_edge_ids: list[str] = []
+        trace_edge_uids: list[str] = []
         has_log_deviation = False
         for current, nxt in zip(canonical_events, canonical_events[1:]):
             source_raw, source_node, current_ts, source_step = current
@@ -838,14 +1009,23 @@ def _build_workflow_payload(
                 if delta >= 0:
                     edge_delays[edge_key].append(delta / 86400)
                     node_outgoing_delays[source_node].append(delta / 86400)
-            if _edge_conformance_bucket(
+            conformance_bucket = _edge_conformance_bucket(
                 source_step,
                 target_step,
                 step_rank_lookup.get(source_step),
                 step_rank_lookup.get(target_step),
-            ) == "Log deviation":
+            )
+            source_rank = step_rank_lookup.get(source_step)
+            target_rank = step_rank_lookup.get(target_step)
+            edge_type = _workflow_edge_type(
+                source_step, target_step, source_rank, target_rank, source_node == target_node, conformance_bucket
+            )
+            branch_family = _workflow_branch_family(target_raw, target_step)
+            if conformance_bucket == "Log deviation":
                 has_log_deviation = True
-            trace_edge_ids.append(f"{source_node} -> {target_node}")
+            edge_id = f"{source_node} -> {target_node}"
+            trace_edge_ids.append(edge_id)
+            trace_edge_uids.append(_workflow_edge_uid(edge_id, conformance_bucket, edge_type, branch_family))
 
         has_model_deviation = any(step is None for _, _, _, step in canonical_events)
         trace_profiles.append(
@@ -859,13 +1039,12 @@ def _build_workflow_payload(
                 "has_deviation": has_log_deviation or has_model_deviation,
                 "node_ids": canonical_path,
                 "edge_ids": list(dict.fromkeys(trace_edge_ids)),
+                "edge_uids": list(dict.fromkeys(trace_edge_uids)),
             }
         )
 
     dominant_variant_share = (
-        round(canonical_variant_counts.most_common(1)[0][1] / len(log) * 100, 1)
-        if canonical_variant_counts and len(log)
-        else 0.0
+        round(canonical_variant_counts.most_common(1)[0][1] / len(log) * 100, 1) if canonical_variant_counts and len(log) else 0.0
     )
     overall_delay_values = [delay for delays in edge_delays.values() for delay in delays]
     overall_median = float(pd.Series(overall_delay_values).median()) if overall_delay_values else 0.0
@@ -874,8 +1053,8 @@ def _build_workflow_payload(
     neighbor_lookup: defaultdict[str, set[str]] = defaultdict(set)
 
     node_rows = []
-    max_cases = max(node_case_counts.values()) if node_case_counts else 0
-    max_occurrences = max(node_occurrences.values()) if node_occurrences else 0
+    path_denominator = max(len(log), 1)
+    activity_denominator = max(total_event_occurrences, 1)
     for node_id in ordered_nodes:
         step = node_id if node_id in step_rank_lookup else None
         display_label = _node_label(node_id)
@@ -883,8 +1062,8 @@ def _build_workflow_payload(
         severity = _delay_bucket(outgoing_delays, overall_median)
         cases = int(node_case_counts.get(node_id, 0))
         occurrences = int(node_occurrences.get(node_id, 0))
-        coverage_pct = round((cases / max_cases) * 100, 1) if max_cases else 0.0
-        activity_pct = round((occurrences / max_occurrences) * 100, 1) if max_occurrences else 0.0
+        coverage_pct = round((cases / path_denominator) * 100, 1) if path_denominator else 0.0
+        activity_pct = round((occurrences / activity_denominator) * 100, 1) if activity_denominator else 0.0
         node_variants = node_variant_counts.get(node_id, Counter())
         raw_activities = [activity for activity, _ in node_raw_activity_counts.get(node_id, Counter()).most_common()]
         branch_family = _workflow_branch_family(raw_activities[0] if raw_activities else node_id, step)
@@ -921,7 +1100,9 @@ def _build_workflow_payload(
                 "p90_next_delay_days": _percentile_or_none(outgoing_delays, 90),
                 "severity": severity,
                 "conformance_bucket": "Model deviation" if step is None else "Conformant",
-                "step_rank": step_rank_lookup.get(step, len(STEP_ORDER) + activity_names.index(node_id) if node_id in activity_names else len(STEP_ORDER)),
+                "step_rank": step_rank_lookup.get(
+                    step, len(STEP_ORDER) + activity_names.index(node_id) if node_id in activity_names else len(STEP_ORDER)
+                ),
                 "branch_role": "mainline" if step is not None else "side",
                 "lane": "center" if step is not None else "side",
                 "node_type": node_type,
@@ -929,6 +1110,8 @@ def _build_workflow_payload(
                 "parent_branch": None if step is not None else "mainline",
                 "coverage_pct": coverage_pct,
                 "activity_pct": activity_pct,
+                "path_denominator": int(len(log)),
+                "activity_denominator": int(total_event_occurrences),
                 "coverage_rank": 0,
                 "coverage_group": _coverage_group(coverage_pct),
                 "sync_cases": sync_cases,
@@ -967,7 +1150,8 @@ def _build_workflow_payload(
         )
 
     edge_rows = []
-    total_edges = sum(edge_counts.values()) or 1
+    observed_transition_count = sum(edge_counts.values())
+    total_edges = observed_transition_count or 1
     for (source, target), frequency in sorted(edge_counts.items(), key=lambda item: (-item[1], item[0][0], item[0][1])):
         delays = edge_delays.get((source, target), [])
         source_step = source if source in step_rank_lookup else None
@@ -976,12 +1160,23 @@ def _build_workflow_payload(
         target_rank = step_rank_lookup.get(target_step)
         conformance_bucket = _edge_conformance_bucket(source_step, target_step, source_rank, target_rank)
         share_pct = round(frequency / total_edges * 100, 1)
-        branch_role = "mainline" if source_step is not None and target_step is not None and conformance_bucket == "Conformant" else "side"
+        edge_type = _workflow_edge_type(source_step, target_step, source_rank, target_rank, source == target, conformance_bucket)
+        branch_role = (
+            "mainline"
+            if source_step is not None
+            and target_step is not None
+            and source_rank is not None
+            and target_rank is not None
+            and target_rank > source_rank
+            else "side"
+        )
         source_label = _node_label(source)
         target_label = _node_label(target)
         edge_variants = edge_variant_counts.get((source, target), Counter())
         raw_pair_labels = [pair for pair, _ in edge_raw_pair_counts.get((source, target), Counter()).most_common()]
         branch_family = _workflow_branch_family((raw_pair_labels[0] if raw_pair_labels else target), target_step)
+        edge_id = f"{source} -> {target}"
+        edge_uid = _workflow_edge_uid(edge_id, conformance_bucket, edge_type, branch_family)
         edge_bucket_by_activity[source].add(conformance_bucket)
         edge_bucket_by_activity[target].add(conformance_bucket)
         edge_bucket_weight_by_activity[source][conformance_bucket] += int(frequency)
@@ -990,7 +1185,8 @@ def _build_workflow_payload(
         neighbor_lookup[target].add(source)
         edge_rows.append(
             {
-                "edge_id": f"{source} -> {target}",
+                "edge_id": edge_id,
+                "edge_uid": edge_uid,
                 "source": source,
                 "target": target,
                 "source_label": source_label,
@@ -1010,7 +1206,7 @@ def _build_workflow_payload(
                 "stroke_style": "dashed" if conformance_bucket != "Conformant" else "solid",
                 "stroke_weight": max(1.0, round(frequency / max(total_edges, 1) * 18, 2)),
                 "branch_role": branch_role,
-                "edge_type": _workflow_edge_type(source_step, target_step, source_rank, target_rank, source == target, conformance_bucket),
+                "edge_type": edge_type,
                 "branch_family": branch_family,
                 "parent_branch": None if branch_role == "mainline" else "mainline",
                 "coverage_rank": 0,
@@ -1072,15 +1268,20 @@ def _build_workflow_payload(
         nodes_df["conformance_bucket"] = nodes_df["activity"].map(node_bucket_by_activity).fillna(nodes_df["conformance_bucket"])
         nodes_df["neighbor_ids"] = nodes_df["activity"].map(lambda activity: sorted(neighbor_lookup.get(str(activity), set())))
         nodes_df["branch_role"] = nodes_df.apply(
-            lambda row: "mainline"
-            if row.get("step") != "unmapped" and row.get("conformance_bucket") == "Conformant"
-            else "side",
+            lambda row: "mainline" if row.get("step") != "unmapped" else "side",
             axis=1,
         )
         nodes_df["lane"] = nodes_df.apply(
-            lambda row: "center"
-            if row.get("branch_role") == "mainline"
-            else ("right" if row.get("branch_family") in {"admin_review", "rejection", "no_show"} or row.get("conformance_bucket") == "Model deviation" else "left"),
+            lambda row: (
+                "center"
+                if row.get("branch_role") == "mainline"
+                else (
+                    "right"
+                    if row.get("branch_family") in {"admin_review", "rejection", "no_show"}
+                    or row.get("conformance_bucket") == "Model deviation"
+                    else "left"
+                )
+            ),
             axis=1,
         )
         nodes_df["parent_branch"] = nodes_df.apply(
@@ -1099,7 +1300,9 @@ def _build_workflow_payload(
     if not nodes_df.empty:
         nodes_df = nodes_df.sort_values(by=["step_rank", "cases", "occurrences"], ascending=[True, False, False]).reset_index(drop=True)
     if not edges_df.empty:
-        edges_df = edges_df.sort_values(by=["source_rank", "target_rank", "frequency"], ascending=[True, True, False]).reset_index(drop=True)
+        edges_df = edges_df.sort_values(by=["source_rank", "target_rank", "frequency"], ascending=[True, True, False]).reset_index(
+            drop=True
+        )
 
     trace_profiles_df = pd.DataFrame(trace_profiles)
 
@@ -1112,6 +1315,12 @@ def _build_workflow_payload(
         "summary": {
             "cases_covered": int(len(log)),
             "events_covered": int(sum(len(trace) for trace in log)),
+            "path_denominator": int(len(log)),
+            "path_denominator_label": "cases in evaluation log",
+            "activity_denominator": int(total_event_occurrences),
+            "activity_denominator_label": "events in evaluation log",
+            "transition_denominator": int(observed_transition_count),
+            "transition_denominator_label": "observed transitions in evaluation log",
             "dominant_path_share": dominant_variant_share,
             "deviation_share": round(
                 (sum(1 for profile in trace_profiles if bool(profile.get("has_deviation"))) / len(trace_profiles) * 100),
@@ -1161,17 +1370,11 @@ def _workflow_alignment_mix_by_node(
     if not isinstance(aligned_traces, list) or not aligned_traces:
         return {}
 
-    node_case_sets: defaultdict[str, dict[str, set[str]]] = defaultdict(
-        lambda: {"sync": set(), "log": set(), "model": set()}
-    )
-    for trace, aligned_trace in zip(log, aligned_traces):
+    node_case_sets: defaultdict[str, dict[str, set[str]]] = defaultdict(lambda: {"sync": set(), "log": set(), "model": set()})
+    for trace_index, (_, aligned_trace) in enumerate(zip(log, aligned_traces), start=1):
         if not isinstance(aligned_trace, Mapping):
             continue
-        case_id = str(
-            trace.attributes.get("concept:name")
-            or trace.attributes.get("case_id")
-            or f"case-{len(node_case_sets) + 1}"
-        )
+        case_id = _workflow_case_alias(trace_index)
         for alignment_move in aligned_trace.get("alignment", []) or []:
             if not isinstance(alignment_move, (list, tuple)) or len(alignment_move) != 2:
                 continue
@@ -1231,6 +1434,12 @@ def _workflow_alignment_visible_activities(
             if model_label:
                 activities.add(model_label)
     return activities
+
+
+def _workflow_case_alias(trace_index: int) -> str:
+    """Return a per-run pseudonymous case label for UI payloads."""
+
+    return f"case-{trace_index:03d}"
 
 
 def _workflow_reference_alignment_model(
@@ -1400,11 +1609,14 @@ def _summarize_metric_bundle(bundle: Any) -> str:
         "average_trace_fitness": "avg trace",
         "average_cost": "avg cost",
     }
-    return " · ".join(
-        f"{label_map.get(str(key), str(key).replace('_', ' '))} {_format_value(value)}"
-        for key, value in sample_items
-        if value is not None
-    ) or "N/A"
+    return (
+        " · ".join(
+            f"{label_map.get(str(key), str(key).replace('_', ' '))} {_format_value(value)}"
+            for key, value in sample_items
+            if value is not None
+        )
+        or "N/A"
+    )
 
 
 def _format_value(value: Any) -> str:
@@ -1525,6 +1737,12 @@ def _edge_conformance_bucket(
     return "Log deviation"
 
 
+def _workflow_edge_uid(edge_id: str, conformance_bucket: str, edge_type: str, branch_family: str) -> str:
+    """Build a runtime-owned semantic edge id shared by all workflow renderers."""
+    tokens = [edge_id, conformance_bucket, edge_type, branch_family]
+    return "|".join(str(token).strip() for token in tokens if str(token).strip())
+
+
 def _coverage_group(coverage_pct: float) -> str:
     if coverage_pct >= 60:
         return "dominant"
@@ -1536,5 +1754,5 @@ def _coverage_group(coverage_pct: float) -> str:
 def _ensure_upload_size(raw_bytes: bytes) -> None:
     if len(raw_bytes) > MAX_UPLOAD_BYTES:
         raise ValueError(
-            f"Upload too large ({len(raw_bytes)/(1024*1024):.1f} MB). Max allowed: {MAX_UPLOAD_BYTES/(1024*1024):.0f} MB."
+            f"Upload too large ({len(raw_bytes) / (1024 * 1024):.1f} MB). Max allowed: {MAX_UPLOAD_BYTES / (1024 * 1024):.0f} MB."
         )

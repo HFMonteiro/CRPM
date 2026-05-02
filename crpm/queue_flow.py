@@ -18,6 +18,7 @@ from crpm.screening import (
     get_trace_anchor_timestamp,
     split_log_by_periods,
 )
+
 STEP_TIMESTAMP_COLUMNS = {step: f"{step}_ts" for step in STEP_ORDER}
 
 
@@ -163,9 +164,11 @@ def compute_stage_aging_metrics(log: EventLog, step_map: dict[str, Optional[str]
     aging_df = transition_stats.copy()
     aging_df["median_days"] = aging_df["median_duration_s"] / 86400
     aging_df["p90_days"] = aging_df["p90_duration_s"] / 86400
-    return aging_df[["transition", "activity", "next_activity", "frequency", "median_days", "p90_days"]].sort_values(
-        "median_days", ascending=False
-    ).reset_index(drop=True)
+    return (
+        aging_df[["transition", "activity", "next_activity", "frequency", "median_days", "p90_days"]]
+        .sort_values("median_days", ascending=False)
+        .reset_index(drop=True)
+    )
 
 
 def compute_operational_kpis(

@@ -1,4 +1,5 @@
 """Tests for crpm.dfg_utils — DFG discovery, filtering, statistics."""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -202,7 +203,9 @@ def test_render_dfg_page_uses_coverage_slider_and_ranked_table(monkeypatch):
 
     monkeypatch.setattr(dfg_page.st, "subheader", lambda *args, **kwargs: None)
     monkeypatch.setattr(dfg_page.st, "caption", lambda text, **kwargs: calls["captions"].append(text))
-    monkeypatch.setattr(dfg_page.st, "columns", lambda spec, **kwargs: [_Column(i) for i in range(len(spec) if not isinstance(spec, int) else spec)])
+    monkeypatch.setattr(
+        dfg_page.st, "columns", lambda spec, **kwargs: [_Column(i) for i in range(len(spec) if not isinstance(spec, int) else spec)]
+    )
     monkeypatch.setattr(dfg_page.st, "spinner", lambda *args, **kwargs: _Spinner())
     monkeypatch.setattr(dfg_page.st, "metric", lambda *args, **kwargs: None)
     monkeypatch.setattr(dfg_page.st, "image", lambda *args, **kwargs: calls.__setitem__("charts", calls["charts"] + 1))
@@ -216,8 +219,14 @@ def test_render_dfg_page_uses_coverage_slider_and_ranked_table(monkeypatch):
         "render_html_ranked_table",
         lambda df, **kwargs: calls["tables"].append(df),
     )
-    monkeypatch.setattr(dfg_page, "discover_dfg_frequency", lambda log: ({("A", "B"): 10, ("B", "C"): 6, ("C", "D"): 3, ("D", "E"): 1}, {"A": 1}, {"E": 1}))
-    monkeypatch.setattr(dfg_page, "discover_dfg_performance", lambda log: ({("A", "B"): 10, ("B", "C"): 6, ("C", "D"): 3, ("D", "E"): 1}, {"A": 1}, {"E": 1}))
+    monkeypatch.setattr(
+        dfg_page, "discover_dfg_frequency", lambda log: ({("A", "B"): 10, ("B", "C"): 6, ("C", "D"): 3, ("D", "E"): 1}, {"A": 1}, {"E": 1})
+    )
+    monkeypatch.setattr(
+        dfg_page,
+        "discover_dfg_performance",
+        lambda log: ({("A", "B"): 10, ("B", "C"): 6, ("C", "D"): 3, ("D", "E"): 1}, {"A": 1}, {"E": 1}),
+    )
     monkeypatch.setattr(dfg_page, "render_dfg_to_svg", lambda *args, **kwargs: "<svg><text>demo</text></svg>")
     monkeypatch.setattr(dfg_page, "render_dfg_to_png", lambda *args, **kwargs: b"png")
 
@@ -285,7 +294,9 @@ def test_render_dfg_page_supports_performance_mode(monkeypatch):
 
     monkeypatch.setattr(dfg_page.st, "subheader", lambda *args, **kwargs: None)
     monkeypatch.setattr(dfg_page.st, "caption", lambda *args, **kwargs: None)
-    monkeypatch.setattr(dfg_page.st, "columns", lambda spec, **kwargs: [_Column() for _ in range(len(spec) if not isinstance(spec, int) else spec)])
+    monkeypatch.setattr(
+        dfg_page.st, "columns", lambda spec, **kwargs: [_Column() for _ in range(len(spec) if not isinstance(spec, int) else spec)]
+    )
     monkeypatch.setattr(dfg_page.st, "spinner", lambda *args, **kwargs: _Spinner())
     monkeypatch.setattr(dfg_page.st, "metric", lambda *args, **kwargs: None)
     monkeypatch.setattr(dfg_page.st, "image", lambda *args, **kwargs: None)
@@ -367,7 +378,9 @@ def test_render_dfg_page_falls_back_to_png_when_svg_fails(monkeypatch):
 
     monkeypatch.setattr(dfg_page.st, "subheader", lambda *args, **kwargs: None)
     monkeypatch.setattr(dfg_page.st, "caption", lambda *args, **kwargs: None)
-    monkeypatch.setattr(dfg_page.st, "columns", lambda spec, **kwargs: [_Column() for _ in range(len(spec) if not isinstance(spec, int) else spec)])
+    monkeypatch.setattr(
+        dfg_page.st, "columns", lambda spec, **kwargs: [_Column() for _ in range(len(spec) if not isinstance(spec, int) else spec)]
+    )
     monkeypatch.setattr(dfg_page.st, "spinner", lambda *args, **kwargs: _Spinner())
     monkeypatch.setattr(dfg_page.st, "metric", lambda *args, **kwargs: None)
     monkeypatch.setattr(dfg_page.st, "image", lambda *args, **kwargs: calls["image"].append(args[0]))
@@ -379,7 +392,9 @@ def test_render_dfg_page_falls_back_to_png_when_svg_fails(monkeypatch):
     monkeypatch.setattr(dfg_page, "discover_dfg_frequency", lambda log: ({("A", "B"): 10, ("B", "C"): 6}, {"A": 1}, {"C": 1}))
     monkeypatch.setattr(dfg_page, "discover_dfg_performance", lambda log: ({("A", "B"): 10, ("B", "C"): 6}, {"A": 1}, {"C": 1}))
     monkeypatch.setattr(dfg_page, "render_dfg_to_svg", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("svg boom")))
-    monkeypatch.setattr(dfg_page, "render_dfg_to_png", lambda *args, **kwargs: calls.__setitem__("variant", kwargs.get("variant")) or b"png")
+    monkeypatch.setattr(
+        dfg_page, "render_dfg_to_png", lambda *args, **kwargs: calls.__setitem__("variant", kwargs.get("variant")) or b"png"
+    )
 
     dfg_page.render_dfg_page(snapshot)
 
@@ -413,5 +428,5 @@ def test_render_dfg_to_svg_uses_pipe_output_and_responsive_wrapper(monkeypatch):
     svg = render_dfg_to_svg({("A", "B"): 1}, {"A": 1}, {"B": 1})
 
     assert svg.startswith("<svg ")
-    assert "style=\"width:100%; height:auto; display:block;\"" in svg
+    assert 'style="width:100%; height:auto; display:block;"' in svg
     assert "demo" in svg

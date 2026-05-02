@@ -29,14 +29,7 @@ def render_operational_flow_page(snapshot: AnalysisSnapshot) -> None:
         return
 
     log = snapshot.filtered_log
-    activity_names = sorted(
-        {
-            event.get("concept:name")
-            for trace in log
-            for event in trace
-            if event.get("concept:name")
-        }
-    )
+    activity_names = sorted({event.get("concept:name") for trace in log for event in trace if event.get("concept:name")})
     step_map = infer_step_mapping(activity_names)
     anchor_activity = step_map.get("invitation")
 
@@ -179,7 +172,9 @@ def _render_single_view(section_title: str, view: dict[str, Any]) -> None:
             if view["aging_metrics"].empty:
                 render_inline_empty("No stage-aging transitions were observed in this selection.")
             else:
-                render_html_ranked_table(view["aging_metrics"], title="Stage aging exact values", label_column=view["aging_metrics"].columns[0])
+                render_html_ranked_table(
+                    view["aging_metrics"], title="Stage aging exact values", label_column=view["aging_metrics"].columns[0]
+                )
 
 
 def _render_comparison_view(pre_view: dict[str, Any], post_view: dict[str, Any]) -> None:
@@ -251,7 +246,9 @@ def _render_comparison_view(pre_view: dict[str, Any], post_view: dict[str, Any])
     if lens == "Stage flow":
         st.caption("Weekly stage throughput comparison between the PRE and POST incident cohorts.")
         render_plotly_chart(create_operational_flow_chart(pre_view["weekly_counts"], title="PRE weekly flow"), key="operational_pre_flow")
-        render_plotly_chart(create_operational_flow_chart(post_view["weekly_counts"], title="POST weekly flow"), key="operational_post_flow")
+        render_plotly_chart(
+            create_operational_flow_chart(post_view["weekly_counts"], title="POST weekly flow"), key="operational_post_flow"
+        )
     elif lens == "Queue stock":
         st.caption("Estimated queue accumulation comparison between the PRE and POST cohorts.")
         render_plotly_chart(create_queue_stock_chart(pre_view["stock_levels"], title="PRE queue stock"), key="operational_pre_stock")
@@ -261,11 +258,15 @@ def _render_comparison_view(pre_view: dict[str, Any], post_view: dict[str, Any])
         render_plotly_chart(create_stage_aging_chart(pre_view["aging_metrics"], title="PRE stage aging"), key="operational_pre_aging")
         if not pre_view["aging_metrics"].empty:
             with st.expander("PRE exact values", expanded=False):
-                render_html_ranked_table(pre_view["aging_metrics"], title="PRE stage aging exact values", label_column=pre_view["aging_metrics"].columns[0])
+                render_html_ranked_table(
+                    pre_view["aging_metrics"], title="PRE stage aging exact values", label_column=pre_view["aging_metrics"].columns[0]
+                )
         render_plotly_chart(create_stage_aging_chart(post_view["aging_metrics"], title="POST stage aging"), key="operational_post_aging")
         if not post_view["aging_metrics"].empty:
             with st.expander("POST exact values", expanded=False):
-                render_html_ranked_table(post_view["aging_metrics"], title="POST stage aging exact values", label_column=post_view["aging_metrics"].columns[0])
+                render_html_ranked_table(
+                    post_view["aging_metrics"], title="POST stage aging exact values", label_column=post_view["aging_metrics"].columns[0]
+                )
 
 
 def _format_rate(value: Any) -> str:

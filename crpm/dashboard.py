@@ -6,10 +6,9 @@ frequency tables, and time-intelligence charts powered by Plotly.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -19,6 +18,7 @@ from pm4py.objects.log.obj import EventLog
 # ───────────────────────────────────────────────────────────────────
 # 1. Log → flat DataFrame
 # ───────────────────────────────────────────────────────────────────
+
 
 def log_to_dataframe(log: EventLog) -> pd.DataFrame:
     """Flatten an EventLog into a DataFrame with one row per event.
@@ -61,6 +61,7 @@ def log_to_dataframe(log: EventLog) -> pd.DataFrame:
 # 2. Categorical filters
 # ───────────────────────────────────────────────────────────────────
 
+
 def get_categorical_columns(df: pd.DataFrame) -> List[str]:
     """Return column names suitable for categorical filtering."""
     always = []
@@ -98,6 +99,7 @@ def apply_filters(
 # ───────────────────────────────────────────────────────────────────
 # 3. KPI computation
 # ───────────────────────────────────────────────────────────────────
+
 
 def compute_kpis(df: pd.DataFrame) -> Dict[str, Any]:
     """Compute key process indicators from the (optionally filtered) DF.
@@ -163,6 +165,7 @@ def _fmt_duration(seconds: Optional[float]) -> str:
 # ───────────────────────────────────────────────────────────────────
 # 4. Frequency / distribution tables
 # ───────────────────────────────────────────────────────────────────
+
 
 def activity_frequency_table(df: pd.DataFrame) -> pd.DataFrame:
     """Activity frequency and relative frequency."""
@@ -271,10 +274,12 @@ def case_duration_over_time(
 
     freq = _BUCKET_MAP.get(bucket, "W")
     grp = df.groupby("case_id")["timestamp"]
-    case_info = pd.DataFrame({
-        "start": grp.min(),
-        "duration_h": (grp.max() - grp.min()).dt.total_seconds() / 3600,
-    })
+    case_info = pd.DataFrame(
+        {
+            "start": grp.min(),
+            "duration_h": (grp.max() - grp.min()).dt.total_seconds() / 3600,
+        }
+    )
     ts = case_info.set_index("start").resample(freq)["duration_h"].median().reset_index()
     ts.columns = ["Period", "Median Duration (h)"]
 
@@ -377,6 +382,7 @@ def period_comparison(
 # ───────────────────────────────────────────────────────────────────
 # Helpers
 # ───────────────────────────────────────────────────────────────────
+
 
 def _empty_fig(msg: str = "No data") -> go.Figure:
     fig = go.Figure()

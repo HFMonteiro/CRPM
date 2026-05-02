@@ -9,9 +9,8 @@ This module provides functions for:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Tuple, Optional, Any
-from pathlib import Path
 import logging
 
 import pandas as pd
@@ -120,17 +119,19 @@ def compute_activity_statistics(log: EventLog, timing_buckets: Optional[Dict[str
         else:
             min_dur = avg_dur = median_dur = max_dur = p90_dur = std_dur = cv = None
 
-        activity_data.append({
-            "activity": activity,
-            "frequency": frequency,
-            "min_duration_s": min_dur,
-            "avg_duration_s": avg_dur,
-            "median_duration_s": median_dur,
-            "max_duration_s": max_dur,
-            "p90_duration_s": p90_dur,
-            "std_duration_s": std_dur,
-            "coefficient_of_variation": cv
-        })
+        activity_data.append(
+            {
+                "activity": activity,
+                "frequency": frequency,
+                "min_duration_s": min_dur,
+                "avg_duration_s": avg_dur,
+                "median_duration_s": median_dur,
+                "max_duration_s": max_dur,
+                "p90_duration_s": p90_dur,
+                "std_duration_s": std_dur,
+                "coefficient_of_variation": cv,
+            }
+        )
 
     if not activity_data:
         return pd.DataFrame(
@@ -190,18 +191,20 @@ def compute_transition_statistics(
 
         durations_array = np.array(durations)
 
-        results.append({
-            "activity": activity,
-            "next_activity": next_activity,
-            "transition": f"{activity} → {next_activity}",
-            "frequency": frequency,
-            "min_duration_s": float(np.min(durations_array)),
-            "avg_duration_s": float(np.mean(durations_array)),
-            "median_duration_s": float(np.median(durations_array)),
-            "max_duration_s": float(np.max(durations_array)),
-            "p90_duration_s": float(np.percentile(durations_array, 90)),
-            "std_duration_s": float(np.std(durations_array))
-        })
+        results.append(
+            {
+                "activity": activity,
+                "next_activity": next_activity,
+                "transition": f"{activity} → {next_activity}",
+                "frequency": frequency,
+                "min_duration_s": float(np.min(durations_array)),
+                "avg_duration_s": float(np.mean(durations_array)),
+                "median_duration_s": float(np.median(durations_array)),
+                "max_duration_s": float(np.max(durations_array)),
+                "p90_duration_s": float(np.percentile(durations_array, 90)),
+                "std_duration_s": float(np.std(durations_array)),
+            }
+        )
 
     if not results:
         return pd.DataFrame(
@@ -226,10 +229,7 @@ def compute_transition_statistics(
 
 
 def detect_bottlenecks(
-    transition_stats: pd.DataFrame,
-    top_n: int = 10,
-    weight_duration: float = 0.7,
-    weight_frequency: float = 0.3
+    transition_stats: pd.DataFrame, top_n: int = 10, weight_duration: float = 0.7, weight_frequency: float = 0.3
 ) -> pd.DataFrame:
     """Identify bottleneck transitions using weighted scoring.
 
@@ -259,10 +259,7 @@ def detect_bottlenecks(
         df["frequency_score"] = 0
 
     # Compute bottleneck score (high duration + high frequency = bigger bottleneck)
-    df["bottleneck_score"] = (
-        weight_duration * df["duration_score"] +
-        weight_frequency * df["frequency_score"]
-    )
+    df["bottleneck_score"] = weight_duration * df["duration_score"] + weight_frequency * df["frequency_score"]
 
     # Sort and return top N
     df = df.sort_values("bottleneck_score", ascending=False).head(top_n)
@@ -320,15 +317,17 @@ def compute_case_durations(log: EventLog, timing_buckets: Optional[Dict[str, Any
             end_time = max(timestamps)
             duration = (end_time - start_time).total_seconds()
 
-            case_data.append({
-                "case_id": case_id,
-                "start_time": start_time,
-                "end_time": end_time,
-                "duration_s": duration,
-                "duration_hours": duration / 3600,
-                "duration_days": duration / 86400,
-                "num_events": num_events
-            })
+            case_data.append(
+                {
+                    "case_id": case_id,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "duration_s": duration,
+                    "duration_hours": duration / 3600,
+                    "duration_days": duration / 86400,
+                    "num_events": num_events,
+                }
+            )
 
     if not case_data:
         return pd.DataFrame(
@@ -370,7 +369,7 @@ def compute_case_statistics(case_durations: pd.DataFrame) -> Dict[str, float]:
         "p25_duration_s": float(np.percentile(durations, 25)),
         "p75_duration_s": float(np.percentile(durations, 75)),
         "p90_duration_s": float(np.percentile(durations, 90)),
-        "std_duration_s": float(np.std(durations))
+        "std_duration_s": float(np.std(durations)),
     }
 
 

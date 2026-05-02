@@ -240,11 +240,7 @@ def count_cases_with_activity(log: Optional[EventLog], activity_name: Optional[s
     """Count traces that contain the given activity at least once."""
     if log is None or not activity_name:
         return 0
-    return sum(
-        1
-        for trace in log
-        if any(event.get("concept:name") == activity_name for event in trace)
-    )
+    return sum(1 for trace in log if any(event.get("concept:name") == activity_name for event in trace))
 
 
 def compute_screening_kpis(log: Optional[EventLog], step_map: Dict[str, Optional[str]]) -> Dict[str, Any]:
@@ -264,20 +260,12 @@ def compute_screening_kpis(log: Optional[EventLog], step_map: Dict[str, Optional
     colonoscopy_cases = metrics.get("colonoscopy_cases", 0)
 
     metrics["colonoscopy_completion_denominator"] = denominator_label
-    metrics["colonoscopy_completion_rate"] = (
-        colonoscopy_cases / denominator if denominator else None
-    )
-    metrics["fit_return_rate"] = (
-        metrics["fit_return_cases"] / metrics["invitation_cases"]
-        if metrics["invitation_cases"]
-        else None
-    )
+    metrics["colonoscopy_completion_rate"] = colonoscopy_cases / denominator if denominator else None
+    metrics["fit_return_rate"] = metrics["fit_return_cases"] / metrics["invitation_cases"] if metrics["invitation_cases"] else None
     return metrics
 
 
-def build_normative_pathway_model(
-    step_map: Dict[str, Optional[str]]
-) -> Optional[tuple[PetriNet, Marking, Marking, list[str]]]:
+def build_normative_pathway_model(step_map: Dict[str, Optional[str]]) -> Optional[tuple[PetriNet, Marking, Marking, list[str]]]:
     """Build a sequential normative Petri net from mapped pathway steps."""
     ordered_steps: list[str] = []
     seen = set()

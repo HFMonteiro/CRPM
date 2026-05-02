@@ -98,9 +98,7 @@ def filter_date_range(
 # ---------------------------------------------------------------------------
 
 
-def run_heuristics_miner(
-    log: EventLog, variant: Variants = Variants.CLASSIC
-) -> Tuple[Any, Any, Any, Any]:
+def run_heuristics_miner(log: EventLog, variant: Variants = Variants.CLASSIC) -> Tuple[Any, Any, Any, Any]:
     """Discover both a Heuristics Net and a Petri net from the event log."""
     heu_net = heuristics_miner.apply_heu(log, variant=variant)
     net, im, fm = heuristics_miner.apply(log, variant=variant)
@@ -115,18 +113,14 @@ def run_heuristics_miner(
 def compute_alignments(log: EventLog, net, im, fm) -> Dict[str, Any]:
     """Return alignments and their fitness metrics."""
     aligned_traces = alignments.apply_log(log, net, im, fm)
-    fitness = fitness_eval.evaluate(
-        aligned_traces, variant=fitness_eval.Variants.ALIGNMENT_BASED
-    )
+    fitness = fitness_eval.evaluate(aligned_traces, variant=fitness_eval.Variants.ALIGNMENT_BASED)
     return {"aligned_traces": aligned_traces, "fitness": fitness}
 
 
 def compute_token_replay(log: EventLog, net, im, fm) -> Dict[str, Any]:
     """Return token replay results and fitness metrics."""
     token_results = token_replay.apply(log, net, im, fm)
-    fitness = fitness_eval.evaluate(
-        token_results, variant=fitness_eval.Variants.TOKEN_BASED
-    )
+    fitness = fitness_eval.evaluate(token_results, variant=fitness_eval.Variants.TOKEN_BASED)
     return {"token_results": token_results, "fitness": fitness}
 
 
@@ -135,9 +129,7 @@ def compute_token_replay(log: EventLog, net, im, fm) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def summarize_metrics(
-    align_res: Dict[str, Any], token_res: Dict[str, Any]
-) -> Dict[str, Any]:
+def summarize_metrics(align_res: Dict[str, Any], token_res: Dict[str, Any]) -> Dict[str, Any]:
     """Return a dictionary summarizing conformance metrics."""
     return {
         "alignment_fitness": align_res.get("fitness", {}),

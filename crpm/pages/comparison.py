@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pandas as pd
 import streamlit as st
 
 from crpm.app_state import AnalysisSnapshot
@@ -24,8 +23,16 @@ def render_comparison_page(snapshot: AnalysisSnapshot) -> None:
     if "discovery_time_s" in display_df.columns:
         display_df["discovery_time_s"] = display_df["discovery_time_s"].map(lambda value: format_metric_value(value, kind="seconds"))
 
-    best_fitness = comparison_df.loc[comparison_df["alignment_fitness"].idxmax()] if "alignment_fitness" in comparison_df.columns and comparison_df["alignment_fitness"].notna().any() else None
-    best_precision = comparison_df.loc[comparison_df["precision"].idxmax()] if "precision" in comparison_df.columns and comparison_df["precision"].notna().any() else None
+    best_fitness = (
+        comparison_df.loc[comparison_df["alignment_fitness"].idxmax()]
+        if "alignment_fitness" in comparison_df.columns and comparison_df["alignment_fitness"].notna().any()
+        else None
+    )
+    best_precision = (
+        comparison_df.loc[comparison_df["precision"].idxmax()]
+        if "precision" in comparison_df.columns and comparison_df["precision"].notna().any()
+        else None
+    )
     best_balanced = None
     if {"alignment_fitness", "precision"}.issubset(comparison_df.columns):
         balanced_index = (comparison_df["alignment_fitness"].fillna(0) + comparison_df["precision"].fillna(0)).idxmax()

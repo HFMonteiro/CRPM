@@ -124,7 +124,9 @@ def _discovery_signal_cards(snapshot: AnalysisSnapshot, recommended_name: str | 
             "eyebrow": "Recommended",
             "title": recommended_name or "No recommendation",
             "value": f"{float(getattr(recommended_result, 'discovery_time_s', 0.0)):.2f}s" if recommended_result else "N/A",
-            "body": _model_tradeoff_summary(recommended_name or "N/A", recommended_result or fastest_result, snapshot) if recommended_result else "Use the comparison page when the trade-off is not obvious.",
+            "body": _model_tradeoff_summary(recommended_name or "N/A", recommended_result or fastest_result, snapshot)
+            if recommended_result
+            else "Use the comparison page when the trade-off is not obvious.",
             "tone": "accent",
             "title_attr": recommended_name or "No recommendation",
         },

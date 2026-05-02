@@ -21,7 +21,14 @@ PREVIEW_PAGES = (
     "Process Performance",
 )
 
-STATE_VERSION = 5
+WORKFLOW_COHORT_FIRST_EVENT_DIRECT = "first_event_direct"
+WORKFLOW_COHORT_EXPLICIT_FOLLOWUP_ANCHOR = "explicit_followup_anchor"
+WORKFLOW_COHORT_POLICIES = {
+    WORKFLOW_COHORT_FIRST_EVENT_DIRECT,
+    WORKFLOW_COHORT_EXPLICIT_FOLLOWUP_ANCHOR,
+}
+
+STATE_VERSION = 6
 CACHE_LIMITS = {
     "log_cache": 4,
     "dataframe_cache": 2,
@@ -48,14 +55,13 @@ class ShellConfig:
     csv_case_col: Optional[str] = None
     csv_activity_col: Optional[str] = None
     csv_timestamp_col: Optional[str] = None
+    workflow_cohort_policy: str = WORKFLOW_COHORT_FIRST_EVENT_DIRECT
     start_filter: str = "All"
     apply_date_filter: bool = False
     date_filter_mode: str = "case"
     start_date: Optional[date] = None
     end_date: Optional[date] = None
-    selected_algorithms: list[str] = field(
-        default_factory=lambda: ["Heuristics (Classic)", "Inductive (IMf)"]
-    )
+    selected_algorithms: list[str] = field(default_factory=lambda: ["Heuristics (Classic)", "Inductive (IMf)"])
     apply_followup_window: bool = False
     followup_days: int = 365
     enable_train_test: bool = False
@@ -69,6 +75,8 @@ class AnalysisResults:
     analysis_complete: bool = False
     input_name: Optional[str] = None
     log_signature: Optional[str] = None
+    workflow_cohort_policy: str = WORKFLOW_COHORT_FIRST_EVENT_DIRECT
+    source_metadata: dict[str, Any] = field(default_factory=dict)
     filter_key: Optional[str] = None
     filtered_log: Any = None
     discovery_results: dict[str, Any] = field(default_factory=dict)
@@ -100,11 +108,15 @@ class AnalysisResults:
         active_followup_label: Optional[str] = None,
         config_change_message: Optional[str] = None,
         filter_error_message: Optional[str] = None,
+        source_metadata: Optional[Mapping[str, Any]] = None,
+        workflow_cohort_policy: str = WORKFLOW_COHORT_FIRST_EVENT_DIRECT,
     ) -> None:
         """Clear analysis outputs while preserving high-level context."""
         self.analysis_complete = False
         self.input_name = input_name
         self.log_signature = log_signature
+        self.workflow_cohort_policy = workflow_cohort_policy
+        self.source_metadata = dict(source_metadata or {})
         self.filter_key = filter_key
         self.filtered_log = None
         self.discovery_results = {}
@@ -160,6 +172,8 @@ class AnalysisSnapshot:
     conformance_workspace: Mapping[str, Any]
     selected_algorithms: tuple[str, ...]
     stage_timings: Mapping[str, float]
+    workflow_cohort_policy: str = WORKFLOW_COHORT_FIRST_EVENT_DIRECT
+    source_metadata: Mapping[str, Any] = field(default_factory=dict)
     workflow_view_mode: str = "board"
     workflow_detail_level: str = "analyst"
     workflow_selection_kind: str = "none"
@@ -240,10 +254,20 @@ def build_analysis_snapshot(session_state: Mapping[str, Any]) -> AnalysisSnapsho
     discovery_results = results.discovery_results if isinstance(results.discovery_results, Mapping) else {}
     split_info = results.split_info if isinstance(results.split_info, Mapping) else {}
 
-    legacy_node_id = str(getattr(results, "selected_workflow_node_id", None)) if getattr(results, "selected_workflow_node_id", None) is not None else None
-    legacy_edge_id = str(getattr(results, "selected_workflow_edge_id", None)) if getattr(results, "selected_workflow_edge_id", None) is not None else None
+    legacy_node_id = (
+        str(getattr(results, "selected_workflow_node_id", None))
+        if getattr(results, "selected_workflow_node_id", None) is not None
+        else None
+    )
+    legacy_edge_id = (
+        str(getattr(results, "selected_workflow_edge_id", None))
+        if getattr(results, "selected_workflow_edge_id", None) is not None
+        else None
+    )
     selection_kind = str(getattr(results, "workflow_selection_kind", "none") or "none")
-    selection_id = str(getattr(results, "workflow_selection_id", None)) if getattr(results, "workflow_selection_id", None) is not None else None
+    selection_id = (
+        str(getattr(results, "workflow_selection_id", None)) if getattr(results, "workflow_selection_id", None) is not None else None
+    )
     if selection_kind not in {"node", "edge", "none"}:
         selection_kind = "none"
         selection_id = None
@@ -258,6 +282,10 @@ def build_analysis_snapshot(session_state: Mapping[str, Any]) -> AnalysisSnapsho
     return AnalysisSnapshot(
         analysis_complete=bool(results.analysis_complete),
         input_name=results.input_name,
+        workflow_cohort_policy=str(
+            getattr(results, "workflow_cohort_policy", state.config.workflow_cohort_policy) or WORKFLOW_COHORT_FIRST_EVENT_DIRECT
+        ),
+        source_metadata=results.source_metadata if isinstance(getattr(results, "source_metadata", {}), Mapping) else {},
         filter_key=results.filter_key,
         filtered_log=results.filtered_log,
         discovery_results=discovery_results,
@@ -307,12 +335,22 @@ def _migrate_or_create_state(session_state: Mapping[str, Any]) -> CRPMState:
     state.results = AnalysisResults(
         analysis_complete=bool(session_state.get("analysis_complete", False)),
         input_name=session_state.get("current_input_name"),
+        workflow_cohort_policy=str(
+            session_state.get("workflow_cohort_policy", WORKFLOW_COHORT_FIRST_EVENT_DIRECT) or WORKFLOW_COHORT_FIRST_EVENT_DIRECT
+        ),
+        source_metadata=dict(session_state.get("source_metadata", {})) if isinstance(session_state.get("source_metadata"), Mapping) else {},
         filter_key=session_state.get("current_filter_key"),
         filtered_log=session_state.get("current_filtered_log"),
-        discovery_results=dict(session_state.get("discovery_results", {})) if isinstance(session_state.get("discovery_results"), Mapping) else {},
-        comparison_df=session_state.get("comparison_df") if isinstance(session_state.get("comparison_df"), pd.DataFrame) else pd.DataFrame(),
+        discovery_results=dict(session_state.get("discovery_results", {}))
+        if isinstance(session_state.get("discovery_results"), Mapping)
+        else {},
+        comparison_df=session_state.get("comparison_df")
+        if isinstance(session_state.get("comparison_df"), pd.DataFrame)
+        else pd.DataFrame(),
         split_info=dict(session_state.get("split_info", {})) if isinstance(session_state.get("split_info"), Mapping) else {},
-        analysis_summary=dict(session_state.get("analysis_summary", {})) if isinstance(session_state.get("analysis_summary"), Mapping) else {},
+        analysis_summary=dict(session_state.get("analysis_summary", {}))
+        if isinstance(session_state.get("analysis_summary"), Mapping)
+        else {},
         train_log=session_state.get("train_log"),
         test_log=session_state.get("test_log"),
         active_followup_label=session_state.get("active_followup_label"),
@@ -320,15 +358,28 @@ def _migrate_or_create_state(session_state: Mapping[str, Any]) -> CRPMState:
         filter_error_message=session_state.get("filter_error_message"),
         last_analysis_signature=session_state.get("last_analysis_signature"),
         stage_timings=dict(session_state.get("stage_timings", {})) if isinstance(session_state.get("stage_timings"), Mapping) else {},
-        conformance_workspace=dict(session_state.get("conformance_workspace", {})) if isinstance(session_state.get("conformance_workspace"), Mapping) else {},
+        conformance_workspace=dict(session_state.get("conformance_workspace", {}))
+        if isinstance(session_state.get("conformance_workspace"), Mapping)
+        else {},
         workflow_view_mode=str(session_state.get("workflow_view_mode", "board") or "board"),
         workflow_detail_level=str(session_state.get("workflow_detail_level", "analyst") or "analyst"),
         workflow_selection_kind=str(session_state.get("workflow_selection_kind", "none") or "none"),
-        workflow_selection_id=str(session_state.get("workflow_selection_id")) if session_state.get("workflow_selection_id") is not None else None,
-        selected_workflow_node_id=str(session_state.get("selected_workflow_node_id")) if session_state.get("selected_workflow_node_id") is not None else None,
-        selected_workflow_edge_id=str(session_state.get("selected_workflow_edge_id")) if session_state.get("selected_workflow_edge_id") is not None else None,
+        workflow_selection_id=str(session_state.get("workflow_selection_id"))
+        if session_state.get("workflow_selection_id") is not None
+        else None,
+        selected_workflow_node_id=str(session_state.get("selected_workflow_node_id"))
+        if session_state.get("selected_workflow_node_id") is not None
+        else None,
+        selected_workflow_edge_id=str(session_state.get("selected_workflow_edge_id"))
+        if session_state.get("selected_workflow_edge_id") is not None
+        else None,
     )
     state.config.date_filter_mode = str(session_state.get("date_filter_mode", state.config.date_filter_mode))
+    state.config.workflow_cohort_policy = str(
+        session_state.get("workflow_cohort_policy", state.config.workflow_cohort_policy) or WORKFLOW_COHORT_FIRST_EVENT_DIRECT
+    )
+    if state.config.workflow_cohort_policy not in WORKFLOW_COHORT_POLICIES:
+        state.config.workflow_cohort_policy = WORKFLOW_COHORT_FIRST_EVENT_DIRECT
 
     for cache_name in CACHE_LIMITS:
         cache_value = session_state.get(cache_name)

@@ -1,6 +1,13 @@
 import pandas as pd
 
-from crpm.app_state import PREVIEW_PAGES, bounded_cache_put, build_analysis_snapshot, get_crpm_state, initialize_shell_state
+from crpm.app_state import (
+    PREVIEW_PAGES,
+    WORKFLOW_COHORT_FIRST_EVENT_DIRECT,
+    bounded_cache_put,
+    build_analysis_snapshot,
+    get_crpm_state,
+    initialize_shell_state,
+)
 from crpm.pages import PAGE_REGISTRY
 
 
@@ -25,6 +32,8 @@ def test_build_analysis_snapshot_uses_expected_defaults() -> None:
     assert snapshot.workflow_detail_level == "analyst"
     assert snapshot.selected_workflow_node_id is None
     assert snapshot.selected_workflow_edge_id is None
+    assert snapshot.workflow_cohort_policy == WORKFLOW_COHORT_FIRST_EVENT_DIRECT
+    assert snapshot.source_metadata == {}
 
 
 def test_build_analysis_snapshot_reads_existing_results() -> None:
@@ -84,13 +93,15 @@ def test_get_crpm_state_initializes_versioned_state() -> None:
 
     state = get_crpm_state(session_state)
 
-    assert state.version == 5
+    assert state.version == 6
+    assert state.config.workflow_cohort_policy == WORKFLOW_COHORT_FIRST_EVENT_DIRECT
     assert state.config.selected_algorithms
     assert "conformance_cache" in state.caches
     assert "conformance_workspace_cache" in state.caches
     assert "workflow_view_cache" in state.caches
     assert state.results.workflow_view_mode == "board"
     assert state.results.workflow_detail_level == "analyst"
+    assert state.results.workflow_cohort_policy == WORKFLOW_COHORT_FIRST_EVENT_DIRECT
 
 
 def test_bounded_cache_put_evicts_oldest_entries() -> None:

@@ -40,6 +40,7 @@ def get_custom_css() -> str:
 
     .stApp {
         color: var(--crpm-text);
+        scroll-padding-top: 4.25rem;
     }
 
     [data-testid="stAppViewContainer"],
@@ -48,18 +49,20 @@ def get_custom_css() -> str:
         background: linear-gradient(180deg, var(--crpm-bg-soft) 0%, var(--crpm-bg) 42%, #f8f6fb 100%) !important;
     }
 
+    [data-testid="stHeader"],
     .stApp header {
-        background: rgba(245, 243, 248, 0.92) !important;
+        background: rgba(245, 243, 248, 0.96) !important;
         color: var(--crpm-text) !important;
         border-bottom: 1px solid rgba(71, 88, 79, 0.12) !important;
-        padding: 0.55rem 0.75rem !important;
-        box-shadow: 0 8px 24px rgba(50, 41, 66, 0.07) !important;
+        padding: 0.32rem 0.65rem !important;
+        box-shadow: 0 5px 16px rgba(50, 41, 66, 0.055) !important;
         backdrop-filter: blur(14px) !important;
-        position: sticky !important;
-        top: 0 !important;
-        z-index: 100 !important;
+        position: relative !important;
+        top: auto !important;
+        z-index: 20 !important;
     }
 
+    [data-testid="stHeader"] [data-testid="stToolbar"],
     .stApp header [data-testid="stToolbar"] {
         color: var(--crpm-text) !important;
     }
@@ -67,7 +70,7 @@ def get_custom_css() -> str:
     .block-container {
         max-width: min(1580px, calc(100vw - 15.7rem)) !important;
         margin: 0 auto !important;
-        padding-top: 0.2rem !important;
+        padding-top: 2.1rem !important;
         padding-bottom: 7rem !important;
         padding-left: 0.9rem !important;
         padding-right: 0.9rem !important;
@@ -86,7 +89,7 @@ def get_custom_css() -> str:
 
     h1, h2, h3, h4, h5, h6 {
         color: var(--crpm-forest-strong) !important;
-        letter-spacing: -0.03em;
+        letter-spacing: 0;
     }
 
     h1 {
@@ -104,6 +107,267 @@ def get_custom_css() -> str:
         font-size: 1.18rem !important;
         margin-top: 0.3rem !important;
         margin-bottom: 0.16rem !important;
+    }
+
+    .crpm-dashboard-topbar {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.72rem;
+        margin: 0.04rem 0 0.38rem 0;
+        padding: 0.56rem 0.68rem;
+        border-radius: 8px;
+        border: 1px solid rgba(157, 173, 190, 0.38);
+        background: #ffffff;
+        box-shadow: 0 4px 12px rgba(28, 45, 64, 0.06);
+    }
+
+    .crpm-dashboard-topbar,
+    .crpm-dashboard-map-toolbar,
+    .crpm-dashboard-bar-list,
+    .crpm-overview-map-frame,
+    .crpm-conformance-kpi-strip,
+    .crpm-conformance-inspector-grid {
+        scroll-margin-top: 4.25rem;
+    }
+
+    .crpm-dashboard-topbar__copy {
+        min-width: 0;
+        display: grid;
+        gap: 0.1rem;
+    }
+
+    .crpm-dashboard-topbar__label {
+        font-size: 0.72rem;
+        font-weight: 800;
+        line-height: 1.1;
+        color: #315f96;
+        text-transform: uppercase;
+        letter-spacing: 0;
+    }
+
+    .crpm-dashboard-topbar__title {
+        font-size: 1.08rem;
+        font-weight: 800;
+        line-height: 1.1;
+        color: #142233;
+        letter-spacing: 0;
+    }
+
+    .crpm-dashboard-topbar__subtitle,
+    .crpm-dashboard-topbar__meta {
+        font-size: 0.78rem;
+        line-height: 1.22;
+        color: #506174;
+        letter-spacing: 0;
+    }
+
+    .crpm-dashboard-topbar__meta {
+        font-size: 0.72rem;
+        color: #697789;
+    }
+
+    .crpm-dashboard-topbar__badges {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 0.34rem;
+        min-width: 14rem;
+    }
+
+    .crpm-dashboard-badge {
+        display: inline-grid;
+        gap: 0.04rem;
+        min-width: 6.8rem;
+        padding: 0.34rem 0.48rem;
+        border-radius: 8px;
+        border: 1px solid rgba(151, 166, 184, 0.34);
+        background: #f8fafc;
+        color: #26384d;
+    }
+
+    .crpm-dashboard-badge span {
+        font-size: 0.7rem;
+        line-height: 1.05;
+        color: #667789;
+    }
+
+    .crpm-dashboard-badge strong {
+        font-size: 0.78rem;
+        line-height: 1.08;
+        color: #142233;
+    }
+
+    .crpm-dashboard-badge--accent {
+        border-color: rgba(31, 95, 191, 0.32);
+        background: #eff5ff;
+    }
+
+    .crpm-dashboard-badge--success {
+        border-color: rgba(34, 126, 92, 0.28);
+        background: #f0faf5;
+    }
+
+    .crpm-dashboard-section-title {
+        margin: 0.04rem 0 0.2rem 0;
+        font-size: 0.82rem;
+        font-weight: 800;
+        line-height: 1.1;
+        color: #142233;
+        letter-spacing: 0;
+    }
+
+    .crpm-dashboard-bar-list {
+        display: grid;
+        gap: 0.34rem;
+        margin: 0 0 0.42rem 0;
+        padding: 0.5rem 0.54rem;
+        border-radius: 8px;
+        border: 1px solid rgba(157, 173, 190, 0.34);
+        background: #ffffff;
+        box-shadow: 0 3px 10px rgba(28, 45, 64, 0.045);
+    }
+
+    .crpm-dashboard-bar-list__title {
+        font-size: 0.74rem;
+        font-weight: 800;
+        line-height: 1.08;
+        color: #34465b;
+        letter-spacing: 0;
+    }
+
+    .crpm-dashboard-bar-row {
+        display: grid;
+        gap: 0.12rem;
+        min-width: 0;
+    }
+
+    .crpm-dashboard-bar-row__head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.34rem;
+        min-width: 0;
+    }
+
+    .crpm-dashboard-bar-row__label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.72rem;
+        line-height: 1.12;
+        color: #334155;
+    }
+
+    .crpm-dashboard-bar-row__value {
+        flex: 0 0 auto;
+        font-size: 0.72rem;
+        font-weight: 800;
+        line-height: 1.12;
+        color: #16283d;
+    }
+
+    .crpm-dashboard-bar-row__track {
+        position: relative;
+        height: 0.46rem;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #e7edf4;
+    }
+
+    .crpm-dashboard-bar-row__fill {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: #2f6fbe;
+    }
+
+    .crpm-dashboard-bar-row--success .crpm-dashboard-bar-row__fill {
+        background: #2d8a62;
+    }
+
+    .crpm-dashboard-bar-row--watch .crpm-dashboard-bar-row__fill,
+    .crpm-dashboard-bar-row--high .crpm-dashboard-bar-row__fill {
+        background: #b9732f;
+    }
+
+    .crpm-dashboard-bar-row--accent .crpm-dashboard-bar-row__fill,
+    .crpm-dashboard-bar-row--medium .crpm-dashboard-bar-row__fill {
+        background: #4f7fc7;
+    }
+
+    .crpm-dashboard-card-stack {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.38rem;
+        margin: 0 0 0.42rem 0;
+    }
+
+    .crpm-dashboard-card-stack .crpm-bi-card {
+        border-radius: 8px;
+        padding: 0.54rem 0.58rem;
+        box-shadow: 0 3px 10px rgba(28, 45, 64, 0.04);
+        background: #ffffff;
+    }
+
+    .crpm-dashboard-card-stack .crpm-bi-card__header {
+        margin: 0 0 0.24rem 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+    }
+
+    .crpm-dashboard-card-stack .crpm-bi-card__eyebrow,
+    .crpm-dashboard-card-stack .crpm-bi-card__body {
+        font-size: 0.72rem;
+        line-height: 1.18;
+    }
+
+    .crpm-dashboard-card-stack .crpm-bi-card__title,
+    .crpm-dashboard-card-stack .crpm-bi-card__value {
+        font-size: 0.86rem;
+        line-height: 1.12;
+    }
+
+    .crpm-overview-command-center,
+    .crpm-conformance-cockpit-marker {
+        margin: 0;
+        padding: 0;
+        height: 0;
+    }
+
+    .crpm-overview-map-frame {
+        margin: 0 0 0.42rem 0;
+        padding: 0.46rem;
+        border-radius: 8px;
+        border: 1px solid rgba(157, 173, 190, 0.34);
+        background: #ffffff;
+        box-shadow: 0 4px 12px rgba(28, 45, 64, 0.05);
+    }
+
+    .crpm-overview-map-frame .crpm-workflow-board {
+        margin: 0;
+        border-radius: 6px;
+        box-shadow: none;
+    }
+
+    .crpm-dashboard-map-toolbar {
+        border-radius: 8px !important;
+        border-color: rgba(157, 173, 190, 0.34) !important;
+        background: #ffffff !important;
+        box-shadow: 0 3px 10px rgba(28, 45, 64, 0.045) !important;
+    }
+
+    .crpm-conformance-kpi-strip--cockpit {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin: 0 0 0.34rem 0;
+    }
+
+    .crpm-conformance-kpi-strip--cockpit .crpm-bi-card {
+        border-radius: 8px;
+        background: #ffffff;
+        box-shadow: 0 3px 10px rgba(28, 45, 64, 0.04);
     }
 
     .stTabs [data-baseweb="tab-list"] {
@@ -451,7 +715,7 @@ def get_custom_css() -> str:
     }
 
     .crpm-conformance-board-shelf__eyebrow {
-        font-size: 0.66rem;
+        font-size: 0.7rem;
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;
@@ -981,7 +1245,7 @@ def get_custom_css() -> str:
         border-radius: 16px;
         background: rgba(252, 251, 253, 0.98);
         box-shadow: var(--crpm-shadow-soft);
-        overflow: visible;
+        overflow: hidden;
     }
 
     .crpm-ranked-table__title {
@@ -992,6 +1256,7 @@ def get_custom_css() -> str:
     }
 
     .crpm-ranked-table__scroller {
+        max-width: 100%;
         max-height: 360px;
         overflow-x: auto;
         overflow-y: auto;
@@ -1014,7 +1279,7 @@ def get_custom_css() -> str:
         background: #f4eff8;
         color: var(--crpm-forest-strong);
         text-align: left;
-        font-size: 0.59rem;
+        font-size: 0.7rem;
         font-weight: 700;
         letter-spacing: 0.02em;
         border-bottom: 1px solid rgba(71, 88, 79, 0.12);
@@ -1046,7 +1311,7 @@ def get_custom_css() -> str:
     }
 
     .crpm-conformance-inspector-grid .crpm-bi-card__eyebrow {
-        font-size: 0.5rem;
+        font-size: 0.7rem;
         letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--crpm-muted);
@@ -1086,7 +1351,7 @@ def get_custom_css() -> str:
     }
 
     .crpm-conformance-panel__eyebrow {
-        font-size: 0.52rem;
+        font-size: 0.7rem;
         font-weight: 700;
         letter-spacing: 0.06em;
         text-transform: uppercase;
@@ -1102,7 +1367,7 @@ def get_custom_css() -> str:
     }
 
     .crpm-conformance-panel__body {
-        font-size: 0.55rem;
+        font-size: 0.7rem;
         line-height: 1.12;
         color: var(--crpm-text-soft);
     }
@@ -1119,7 +1384,7 @@ def get_custom_css() -> str:
         font-weight: 800;
         line-height: 1.05;
         color: var(--crpm-forest-strong);
-        letter-spacing: -0.01em;
+        letter-spacing: 0;
     }
 
     .crpm-conformance-side-title--rail {
@@ -1132,7 +1397,7 @@ def get_custom_css() -> str:
 
     .crpm-conformance-side-subtitle {
         margin: 0.12rem 0 0.16rem 0;
-        font-size: 0.66rem;
+        font-size: 0.7rem;
         font-weight: 800;
         line-height: 1.04;
         color: var(--crpm-forest-strong);
@@ -1160,7 +1425,7 @@ def get_custom_css() -> str:
     }
 
     .crpm-conformance-side-lead {
-        font-size: 0.63rem;
+        font-size: 0.72rem;
         line-height: 1.22;
         color: var(--crpm-text-soft);
         margin-top: -0.02rem;
@@ -1808,6 +2073,23 @@ def get_custom_css() -> str:
         }
     }
 
+    @media (max-width: 1180px) {
+        .crpm-dashboard-topbar {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .crpm-dashboard-topbar__badges {
+            min-width: 0;
+            justify-content: flex-start;
+        }
+
+        .crpm-dashboard-badge {
+            flex: 1 1 9rem;
+            min-width: 0;
+        }
+    }
+
     .crpm-bi-card {
         min-width: 0;
         padding: 0.75rem 0.8rem;
@@ -2007,13 +2289,13 @@ def get_custom_css() -> str:
 
     .crpm-header-badges {
         position: sticky;
-        top: 0.52rem;
+        top: 0.34rem;
         z-index: 108;
         display: flex;
         align-items: center;
-        gap: 0.62rem;
+        gap: 0.42rem;
         width: fit-content;
-        margin: 0.02rem 0 0.34rem 0;
+        margin: 0 0 0.16rem 0;
     }
 
     .crpm-up-badge,
@@ -2025,7 +2307,7 @@ def get_custom_css() -> str:
         border-radius: 999px;
         background: rgba(252, 251, 253, 0.9);
         border: 1px solid rgba(142, 122, 168, 0.22);
-        box-shadow: 0 10px 20px rgba(50, 41, 66, 0.12);
+        box-shadow: 0 5px 12px rgba(50, 41, 66, 0.08);
         backdrop-filter: blur(10px);
         transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
         text-decoration: none !important;
@@ -2041,15 +2323,15 @@ def get_custom_css() -> str:
 
     .crpm-up-badge,
     .crpm-fmup-badge {
-        min-width: 4.1rem;
-        height: 3.15rem;
-        padding: 0.25rem 0.5rem;
+        min-width: 3.55rem;
+        height: 2.55rem;
+        padding: 0.18rem 0.38rem;
     }
 
     .crpm-up-badge img,
     .crpm-fmup-badge img {
         max-width: none;
-        max-height: 2.18rem;
+        max-height: 1.78rem;
         width: auto;
         height: auto;
         display: block;
@@ -2082,13 +2364,13 @@ def get_custom_css() -> str:
     }
 
     .crpm-author-badge {
-        min-height: 2rem;
-        padding: 0.38rem 0.9rem;
+        min-height: 1.8rem;
+        padding: 0.28rem 0.68rem;
     }
 
     .crpm-author-badge span {
         color: var(--crpm-forest-strong) !important;
-        font-size: 0.76rem;
+        font-size: 0.72rem;
         font-weight: 700;
         letter-spacing: 0.01em;
         white-space: nowrap;
@@ -2237,16 +2519,16 @@ def get_custom_css() -> str:
         justify-content: center;
         align-items: center;
         gap: 0.5rem;
-        min-height: 2rem;
-        padding: 0.38rem 1rem;
-        margin: 0.82rem 0 0 0;
-        background: rgba(39, 66, 57, 0.94);
+        min-height: 1.5rem;
+        padding: 0.24rem 0.75rem;
+        margin: 0.42rem 0 0 0;
+        background: rgba(30, 45, 54, 0.9);
         color: rgba(250, 247, 252, 0.94);
         border-top: 1px solid rgba(232, 224, 240, 0.18);
-        border-radius: 16px;
-        box-shadow: 0 10px 18px rgba(34, 29, 43, 0.12);
+        border-radius: 8px;
+        box-shadow: 0 4px 10px rgba(34, 29, 43, 0.08);
         backdrop-filter: blur(10px);
-        font-size: 0.79rem;
+        font-size: 0.7rem;
         text-align: center;
     }
 
@@ -2261,6 +2543,25 @@ def get_custom_css() -> str:
     .crpm-legal-bar strong {
         color: #ffffff !important;
         font-weight: 700;
+    }
+
+    a:focus-visible,
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible,
+    [role="button"]:focus-visible,
+    [tabindex]:focus-visible {
+        outline: 3px solid #f0b429 !important;
+        outline-offset: 2px !important;
+        box-shadow: 0 0 0 2px rgba(16, 46, 65, 0.22) !important;
+    }
+
+    button,
+    [role="button"],
+    [data-testid="stBaseButton-secondary"],
+    [data-testid="stBaseButton-primary"] {
+        min-height: 2.5rem;
     }
 
     @media (max-width: 1100px) {
@@ -2286,7 +2587,23 @@ def get_custom_css() -> str:
             max-width: none !important;
         }
         .crpm-header-badges {
-            display: none !important;
+            display: flex !important;
+            flex-wrap: wrap !important;
+            justify-content: center !important;
+            gap: 0.38rem !important;
+            position: static !important;
+            margin: 0.4rem auto 0.2rem auto !important;
+            max-width: calc(100vw - 1rem) !important;
+        }
+        .crpm-header-badges img {
+            height: 34px !important;
+            width: auto !important;
+            max-width: 42vw !important;
+        }
+        .crpm-author-badge {
+            min-height: 34px !important;
+            padding: 0.35rem 0.55rem !important;
+            font-size: 0.72rem !important;
         }
         .crpm-legal-bar {
             min-height: 1.8rem;
@@ -2301,6 +2618,7 @@ def get_custom_css() -> str:
 def apply_custom_styling():
     """Apply custom CSS styling to the Streamlit app."""
     import streamlit as st
+
     st.markdown(get_custom_css(), unsafe_allow_html=True)
 
 

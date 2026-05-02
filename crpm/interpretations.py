@@ -164,10 +164,7 @@ def assess_process_variance(std_dev: float, median: float) -> Tuple[str, str, st
 
 
 def assess_bottleneck_severity(
-    median_duration_s: float,
-    p90_duration_s: float,
-    frequency: int,
-    overall_median_s: float
+    median_duration_s: float, p90_duration_s: float, frequency: int, overall_median_s: float
 ) -> Tuple[str, str, str]:
     """Assess bottleneck severity.
 
@@ -239,23 +236,11 @@ def assess_variant_coverage(top_n_percentage: float, top_n: int = 10) -> Tuple[s
         return ("Unknown", "gray", "Insufficient data")
 
     if top_n_percentage >= 80:
-        return (
-            "Excellent",
-            "green",
-            f"Process is highly standardized (top {top_n} variants cover {top_n_percentage:.1f}%)"
-        )
+        return ("Excellent", "green", f"Process is highly standardized (top {top_n} variants cover {top_n_percentage:.1f}%)")
     elif top_n_percentage >= 60:
-        return (
-            "Good",
-            "orange",
-            f"Moderate standardization (top {top_n} variants cover {top_n_percentage:.1f}%)"
-        )
+        return ("Good", "orange", f"Moderate standardization (top {top_n} variants cover {top_n_percentage:.1f}%)")
     else:
-        return (
-            "Poor",
-            "red",
-            f"High process variability (top {top_n} variants only cover {top_n_percentage:.1f}%) - review compliance"
-        )
+        return ("Poor", "red", f"High process variability (top {top_n} variants only cover {top_n_percentage:.1f}%) - review compliance")
 
 
 def assess_variant_count(num_variants: int, num_cases: int) -> Tuple[str, str, str]:
@@ -296,16 +281,11 @@ def get_quality_badge_html(quality_level: str, color: str) -> str:
     Returns:
         HTML string for badge
     """
-    color_map = {
-        "green": "#28a745",
-        "orange": "#fd7e14",
-        "red": "#dc3545",
-        "gray": "#6c757d"
-    }
+    color_map = {"green": "#28a745", "orange": "#fd7e14", "red": "#dc3545", "gray": "#6c757d"}
 
     bg_color = color_map.get(color, "#6c757d")
 
-    return f'''<span class="quality-badge" style="
+    return f"""<span class="quality-badge" style="
         background-color: {bg_color};
         color: white;
         padding: 4px 12px;
@@ -317,14 +297,10 @@ def get_quality_badge_html(quality_level: str, color: str) -> str:
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         text-transform: uppercase;
         letter-spacing: 0.5px;
-    ">{quality_level}</span>'''
+    ">{quality_level}</span>"""
 
 
-def format_metric_with_assessment(
-    metric_name: str,
-    value: float,
-    assessment: Tuple[str, str, str]
-) -> str:
+def format_metric_with_assessment(metric_name: str, value: float, assessment: Tuple[str, str, str]) -> str:
     """Format a metric value with its quality assessment.
 
     Args:
@@ -344,12 +320,7 @@ def format_metric_with_assessment(
     return f"{metric_name}: {format_decimal(value)} {badge} - {message}"
 
 
-def get_executive_summary(
-    fitness: float,
-    precision: float,
-    num_transitions: int,
-    discovery_algorithm: str
-) -> Dict[str, Any]:
+def get_executive_summary(fitness: float, precision: float, num_transitions: int, discovery_algorithm: str) -> Dict[str, Any]:
     """Generate an executive summary for a discovered model.
 
     Args:
@@ -375,7 +346,7 @@ def get_executive_summary(
         "fitness_quality": fitness_assessment[0],
         "precision_quality": precision_assessment[0],
         "complexity": assess_model_complexity(num_transitions, 0)[0],
-        "recommendation": _get_recommendation(fitness, precision, num_transitions)
+        "recommendation": _get_recommendation(fitness, precision, num_transitions),
     }
 
 
