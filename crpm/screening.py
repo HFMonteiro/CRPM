@@ -12,7 +12,6 @@ from pm4py.objects.log.obj import EventLog, Trace
 from pm4py.objects.petri_net.obj import Marking, PetriNet
 from pm4py.objects.petri_net.utils import petri_utils
 
-
 STEP_ORDER = [
     "invitation",
     "fit_mail",

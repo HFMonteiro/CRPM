@@ -7,6 +7,7 @@ frequency and performance annotations.
 from __future__ import annotations
 
 import math
+import re
 from typing import Dict, Tuple
 import tempfile
 from pathlib import Path
@@ -16,6 +17,11 @@ from pm4py.algo.discovery.dfg import algorithm as dfg_discovery
 from pm4py.visualization.dfg import visualizer as dfg_visualizer
 from pm4py.statistics.start_activities.log import get as start_activities_get
 from pm4py.statistics.end_activities.log import get as end_activities_get
+
+_SVG_SCRIPT_RE = re.compile(r"<\s*script\b[^>]*>.*?<\s*/\s*script\s*>", re.IGNORECASE | re.DOTALL)
+_SVG_EVENT_ATTR_RE = re.compile(r"\s+on[a-zA-Z]+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)")
+_SVG_DANGEROUS_URL_RE = re.compile(r"\s+(?:href|xlink:href)\s*=\s*(\"|')\s*(?:javascript:|data:text/html)[^\"']*\1", re.IGNORECASE)
+_SVG_EXTERNAL_REF_RE = re.compile(r"\s+(?:href|xlink:href)\s*=\s*(\"|')\s*https?://[^\"']*\1", re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
@@ -253,13 +259,22 @@ def render_dfg_to_svg(dfg: Dict, start_activities: Dict, end_activities: Dict, v
         finally:
             tmp_path.unlink(missing_ok=True)
 
-    svg_text = svg_bytes.decode("utf-8", errors="replace")
+    svg_text = sanitize_svg_markup(svg_bytes.decode("utf-8", errors="replace"))
     svg_text = svg_text.replace(
         "<svg ",
-        '<svg style="width:100%; height:auto; display:block;" ',
+        '<svg style="width:auto; min-width:100%; height:clamp(240px, 30vh, 340px); display:block;" ',
         1,
     )
     return svg_text
+
+
+def sanitize_svg_markup(svg_text: str) -> str:
+    """Strip active SVG content before embedding renderer output in Streamlit HTML."""
+    sanitized = _SVG_SCRIPT_RE.sub("", svg_text)
+    sanitized = _SVG_EVENT_ATTR_RE.sub("", sanitized)
+    sanitized = _SVG_DANGEROUS_URL_RE.sub("", sanitized)
+    sanitized = _SVG_EXTERNAL_REF_RE.sub("", sanitized)
+    return sanitized
 
 
 def get_dfg_statistics(dfg: Dict, start_activities: Dict, end_activities: Dict) -> Dict:
@@ -313,5 +328,6 @@ __all__ = [
     "rank_dfg_edges",
     "render_dfg_to_svg",
     "render_dfg_to_png",
+    "sanitize_svg_markup",
     "get_dfg_statistics",
 ]

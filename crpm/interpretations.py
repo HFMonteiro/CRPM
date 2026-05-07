@@ -11,7 +11,6 @@ import pandas as pd
 
 from crpm.formatting import format_decimal
 
-
 # ---------------------------------------------------------------------------
 # Conformance Metric Assessments
 # ---------------------------------------------------------------------------

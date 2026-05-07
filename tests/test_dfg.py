@@ -17,6 +17,7 @@ from crpm.dfg_utils import (
     get_dfg_statistics,
     rank_dfg_edges,
     render_dfg_to_svg,
+    sanitize_svg_markup,
 )
 from crpm.pages import dfg as dfg_page
 
@@ -238,6 +239,7 @@ def test_render_dfg_page_uses_coverage_slider_and_ranked_table(monkeypatch):
     assert any("Most frequent edge" in text for text in calls["markdown"])
     assert any("Events" in list(table.columns) for table in calls["tables"])
     assert any("crpm-dfg-vector" in text for text in calls["markdown"])
+    assert any("crpm-dfg-map-canvas" in text for text in calls["markdown"])
     assert calls["markdown"].index("#### Directly-follows map") < calls["markdown"].index("#### Ranked edge detail")
     assert calls["charts"] == 0
 
@@ -414,7 +416,8 @@ def test_render_dfg_to_svg_returns_vector_markup():
     )
     assert svg.startswith("<")
     assert "<svg" in svg
-    assert "width:100%" in svg
+    assert "min-width:100%" in svg
+    assert "height:clamp(240px, 30vh, 340px)" in svg
 
 
 def test_render_dfg_to_svg_uses_pipe_output_and_responsive_wrapper(monkeypatch):
@@ -428,5 +431,40 @@ def test_render_dfg_to_svg_uses_pipe_output_and_responsive_wrapper(monkeypatch):
     svg = render_dfg_to_svg({("A", "B"): 1}, {"A": 1}, {"B": 1})
 
     assert svg.startswith("<svg ")
-    assert 'style="width:100%; height:auto; display:block;"' in svg
+    assert 'style="width:auto; min-width:100%; height:clamp(240px, 30vh, 340px); display:block;"' in svg
+    assert "demo" in svg
+
+
+def test_sanitize_svg_markup_strips_active_content():
+    unsafe_svg = (
+        '<svg onload="alert(1)">'
+        "<script>alert(1)</script>"
+        '<a href="javascript:alert(1)">bad</a>'
+        '<image xlink:href="https://attacker.example/pixel.png" />'
+        '<text onclick="steal()">safe label</text>'
+        "</svg>"
+    )
+
+    sanitized = sanitize_svg_markup(unsafe_svg)
+
+    assert "<script" not in sanitized.lower()
+    assert "onload" not in sanitized.lower()
+    assert "onclick" not in sanitized.lower()
+    assert "javascript:" not in sanitized.lower()
+    assert "attacker.example" not in sanitized.lower()
+    assert "safe label" in sanitized
+
+
+def test_render_dfg_to_svg_sanitizes_pipe_output(monkeypatch):
+    class _Gviz:
+        def pipe(self, format):
+            assert format == "svg"
+            return b'<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(1)</script><text>demo</text></svg>'
+
+    monkeypatch.setattr("crpm.dfg_utils.dfg_visualizer.apply", lambda *args, **kwargs: _Gviz())
+
+    svg = render_dfg_to_svg({("A", "B"): 1}, {"A": 1}, {"B": 1})
+
+    assert "<script" not in svg.lower()
+    assert "onload" not in svg.lower()
     assert "demo" in svg

@@ -15,8 +15,10 @@ class _DummySidebar:
     def __init__(self, *, button_result: bool = False) -> None:
         self.button_result = button_result
         self.info_messages = []
+        self.visible_order = []
 
     def markdown(self, *args, **kwargs):
+        self.visible_order.append(("markdown", args[0] if args else ""))
         return None
 
     def success(self, *args, **kwargs):
@@ -33,6 +35,7 @@ class _DummySidebar:
         return None
 
     def caption(self, *args, **kwargs):
+        self.visible_order.append(("caption", args[0] if args else ""))
         return None
 
     def radio(self, label, options, index=0, key=None, **kwargs):
@@ -60,10 +63,27 @@ class _DummySidebar:
         return value
 
     def button(self, label, type="secondary", use_container_width=False, key=None, **kwargs):
+        self.visible_order.append(("button", label))
         return self.button_result
 
     def expander(self, *args, **kwargs):
+        self.visible_order.append(("expander", args[0] if args else ""))
         return _DummyContext()
+
+    def empty(self):
+        index = len(self.visible_order)
+        self.visible_order.append(("empty", ""))
+        return _DummySidebarSlot(self, index)
+
+
+class _DummySidebarSlot:
+    def __init__(self, sidebar: _DummySidebar, index: int) -> None:
+        self.sidebar = sidebar
+        self.index = index
+
+    def button(self, label, type="secondary", use_container_width=False, key=None, **kwargs):
+        self.sidebar.visible_order[self.index] = ("button", label)
+        return self.sidebar.button_result
 
 
 class _DummyContext:
@@ -196,6 +216,31 @@ def test_render_analysis_controls_shows_sidebar_messages(monkeypatch) -> None:
 
     assert "Needs rerun" in calls["warning"]
     assert "Run failed" in calls["error"]
+
+
+def test_render_analysis_controls_places_run_button_before_advanced_and_log_stats(monkeypatch) -> None:
+    import crpm.app_shell as app_shell
+
+    session_state = {}
+    state = get_crpm_state(session_state)
+    state.config.selected_log_path = str(Path("examples") / "running-example.xes")
+    sidebar = _DummySidebar(button_result=False)
+
+    monkeypatch.setattr(app_shell, "st", _dummy_streamlit(sidebar, session_state))
+    monkeypatch.setattr(app_shell, "resolve_xes_log", lambda *args, **kwargs: _loaded_log())
+    monkeypatch.setattr(
+        app_shell,
+        "compute_log_stats",
+        lambda *_args, **_kwargs: {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+    )
+    monkeypatch.setattr(app_shell, "first_event_names", lambda *_args, **_kwargs: ["Start"])
+
+    _render_analysis_controls(state)
+
+    run_index = sidebar.visible_order.index(("button", "Run analysis"))
+    advanced_index = sidebar.visible_order.index(("expander", "Advanced setup"))
+    log_stats_index = sidebar.visible_order.index(("markdown", "### Log Statistics"))
+    assert run_index < advanced_index < log_stats_index
 
 
 def test_render_header_prompts_rerun_with_note_and_toast(monkeypatch) -> None:

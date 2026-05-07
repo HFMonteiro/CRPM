@@ -25,6 +25,7 @@ from crpm.visualization import (
     _workflow_primary_path_nodes,
     render_workflow_explorer_html,
     render_workflow_conformance_svg,
+    workflow_edge_uid,
 )
 
 
@@ -877,6 +878,12 @@ def test_workflow_interactive_payload_and_html_use_business_labels_only():
 
     assert explorer["nodes"]
     assert explorer["edges"]
+    assert explorer["selected_node_id"] == "FIT_mail"
+    assert explorer["selected_edge_uid"] is None
+    assert explorer["renderer_role"] == "conformance_explorer"
+    assert next(node for node in explorer["nodes"] if node["id"] == "FIT_mail")["selected"] is True
+    assert next(node for node in explorer["nodes"] if node["id"] == "Invitation_mail")["neighbor"] is True
+    assert next(edge for edge in explorer["edges"] if edge["target"] == "FIT_mail")["neighbor"] is True
     assert explorer["detail_level"] == "research"
     assert explorer["conformance_lens"] == "% of paths"
     assert explorer["frame_height"] > explorer["height"]
@@ -890,8 +897,11 @@ def test_workflow_interactive_payload_and_html_use_business_labels_only():
     assert "Active process flow" in html
     assert 'id="crpm-explorer-selection-chip"' in html
     assert "Timing burden on links" in html
-    assert "Clear focus" in html
-    assert "Reset view" in html
+    assert "Clear local focus" in html
+    assert "Reset graph view" in html
+    assert "Pinned node" in html
+    assert "Local node focus" in html
+    assert '"FIT_mail"' in html
     assert 'id="crpm-explorer-live-title"' in html
     assert 'id="crpm-explorer-reset-view"' in html
     assert "Start" in html
@@ -901,6 +911,71 @@ def test_workflow_interactive_payload_and_html_use_business_labels_only():
     assert "FIT mail" in html
     assert "neighbor_ids" not in html
     assert "node::" not in html
+
+
+def test_workflow_interactive_payload_selects_edge_by_edge_uid():
+    edge_uid = "Invitation_mail -> FIT_mail|Conformant|expected|mainline"
+    payload = {
+        "nodes": pd.DataFrame(
+            [
+                {
+                    "activity": "Invitation_mail",
+                    "display_name": "Invitation",
+                    "business_label": "Invitation",
+                    "cases": 10,
+                    "occurrences": 10,
+                    "severity": "Low",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                    "lane": "center",
+                    "step_rank": 0,
+                },
+                {
+                    "activity": "FIT_mail",
+                    "display_name": "FIT mail",
+                    "business_label": "FIT mail",
+                    "cases": 10,
+                    "occurrences": 10,
+                    "severity": "Low",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                    "lane": "center",
+                    "step_rank": 1,
+                },
+            ]
+        ),
+        "edges": pd.DataFrame(
+            [
+                {
+                    "edge_id": "Invitation_mail -> FIT_mail",
+                    "edge_uid": edge_uid,
+                    "source": "Invitation_mail",
+                    "target": "FIT_mail",
+                    "business_label": "Invitation → FIT mail",
+                    "frequency": 10,
+                    "severity": "Low",
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                    "stroke_style": "solid",
+                }
+            ]
+        ),
+        "legend": pd.DataFrame(),
+    }
+
+    explorer = create_workflow_interactive_payload(payload, selected_edge_id=edge_uid)
+    html = render_workflow_explorer_html(explorer)
+
+    assert explorer["selected_edge_id"] == edge_uid
+    assert explorer["selected_edge_uid"] == edge_uid
+    assert next(edge for edge in explorer["edges"] if edge["id"] == edge_uid)["selected"] is True
+    assert all(node["neighbor"] is True for node in explorer["nodes"])
+    assert 'data-edge-id="Invitation_mail -&gt; FIT_mail|Conformant|expected|mainline"' in html
+    assert '"Invitation_mail -> FIT_mail|Conformant|expected|mainline"' in html
+    assert "Pinned edge" in html
 
 
 def test_workflow_interactive_html_uses_compact_shell_defaults():
@@ -1009,6 +1084,110 @@ def test_workflow_interactive_html_serializes_selected_ids_safely():
     assert '</script><script>alert("y")' not in html
     assert '<\\/script><script>alert(\\"x\\")<\\/script>' in html
     assert '<\\/script><script>alert(\\"y\\")<\\/script>' in html
+
+
+def test_workflow_explorer_html_escapes_node_and_edge_labels():
+    explorer = {
+        "nodes": [
+            {
+                "id": "unsafe_node",
+                "business_label": '<script>alert("node")</script> & "quoted"',
+                "display_name": '<script>alert("node")</script>',
+                "cases": 7,
+                "occurrences": 8,
+                "median_days": 2.0,
+                "p90_days": 4.0,
+                "severity": "Low",
+                "conformance_bucket": "Conformant",
+                "branch_role": "mainline",
+                "lane_position": "mainline",
+                "x": 220.0,
+                "y": 120.0,
+                "width": 224.0,
+                "height": 86.0,
+                "center_x": 332.0,
+                "center_y": 163.0,
+                "surface_fill": "#ffffff",
+                "stroke": "#7aa08a",
+                "ink": "#22313b",
+                "accent": "#7aa08a",
+                "accent_fill": "#edf5ef",
+                "chip_fill": "#edf5ef",
+                "chip_ink": "#2d6a3f",
+                "selected": False,
+                "neighbor": False,
+            },
+            {
+                "id": "safe_target",
+                "business_label": "Safe target",
+                "display_name": "Safe target",
+                "cases": 7,
+                "occurrences": 8,
+                "median_days": 2.0,
+                "p90_days": 4.0,
+                "severity": "Low",
+                "conformance_bucket": "Conformant",
+                "branch_role": "mainline",
+                "lane_position": "mainline",
+                "x": 220.0,
+                "y": 260.0,
+                "width": 224.0,
+                "height": 86.0,
+                "center_x": 332.0,
+                "center_y": 303.0,
+                "surface_fill": "#ffffff",
+                "stroke": "#7aa08a",
+                "ink": "#22313b",
+                "accent": "#7aa08a",
+                "accent_fill": "#edf5ef",
+                "chip_fill": "#edf5ef",
+                "chip_ink": "#2d6a3f",
+                "selected": False,
+                "neighbor": False,
+            },
+        ],
+        "edges": [
+            {
+                "id": "unsafe_edge",
+                "source": "unsafe_node",
+                "target": "safe_target",
+                "caption": '<img src=x onerror=alert("edge")> & edge',
+                "frequency": 7,
+                "median_days": 2.0,
+                "p90_days": 4.0,
+                "share_pct": 100.0,
+                "severity": "Low",
+                "conformance_bucket": "Conformant",
+                "branch_role": "mainline",
+                "stroke_style": "solid",
+                "stroke_width": 1.4,
+                "stroke": "#7aa08a",
+                "accent": "#7aa08a",
+                "path": "M 332 206 C 332 230, 332 240, 332 256",
+                "label_x": 360.0,
+                "label_y": 230.0,
+                "selected": False,
+                "neighbor": False,
+                "show_label": True,
+                "label_width": 80.0,
+                "label_height": 20.0,
+            }
+        ],
+        "width": 760,
+        "height": 420,
+        "content_bounds": {"min_x": 180.0, "min_y": 80.0, "max_x": 460.0, "max_y": 360.0},
+        "drawable_bounds": {"min_x": 12.0, "min_y": 12.0, "max_x": 748.0, "max_y": 408.0},
+        "detail_level": "research",
+        "metric_coloring": "Conformance bucket",
+        "conformance_lens": "% of paths",
+    }
+
+    html = render_workflow_explorer_html(explorer)
+
+    assert '<script>alert("node")</script>' not in html
+    assert '<img src=x onerror=alert("edge")>' not in html
+    assert "&lt;script&gt;alert(&quot;node&quot;)&lt;/script&gt;" in html
+    assert "&lt;img src=x onerror=alert(&quot;edge&quot;)&gt;" in html
 
 
 def test_workflow_interactive_payload_keeps_mainline_nodes_spaced_apart():
@@ -1698,6 +1877,7 @@ def test_filter_workflow_payload_summary_matches_visible_subset():
                     "has_deviation": False,
                     "node_ids": ["invitation", "fit_mail"],
                     "edge_ids": ["invitation -> fit_mail"],
+                    "edge_uids": ["invitation -> fit_mail|Conformant|expected|mainline"],
                 },
                 {
                     "case_id": "case-2",
@@ -1707,12 +1887,24 @@ def test_filter_workflow_payload_summary_matches_visible_subset():
                     "has_deviation": True,
                     "node_ids": ["invitation", "fit_mail", "admin_review"],
                     "edge_ids": ["invitation -> fit_mail", "fit_mail -> admin_review"],
+                    "edge_uids": [
+                        "invitation -> fit_mail|Conformant|expected|mainline",
+                        "fit_mail -> admin_review|Model deviation|branch|admin_review",
+                    ],
                 },
             ]
         ),
         "summary": {
             "cases_covered": 2,
             "events_covered": 10,
+            "visible_case_count": 2,
+            "excluded_case_count": 0,
+            "path_denominator": 2,
+            "path_denominator_label": "cases in evaluation log",
+            "activity_denominator": 10,
+            "activity_denominator_label": "events in evaluation log",
+            "transition_denominator": 2,
+            "transition_denominator_label": "observed transitions in evaluation log",
             "dominant_path_share": 50.0,
             "deviation_share": 50.0,
             "median_throughput_days": 31.0,
@@ -1724,8 +1916,90 @@ def test_filter_workflow_payload_summary_matches_visible_subset():
 
     assert filtered["summary"]["cases_covered"] == 1
     assert filtered["summary"]["events_covered"] == 6
+    assert filtered["summary"]["visible_case_count"] == 1
+    assert filtered["summary"]["excluded_case_count"] == 1
+    assert filtered["summary"]["path_denominator"] == 2
+    assert filtered["summary"]["activity_denominator"] == 10
+    assert filtered["summary"]["transition_denominator"] == 2
+    assert filtered["visible_case_count"] == 1
+    assert filtered["excluded_case_count"] == 1
+    assert filtered["path_denominator"] == 2
+    assert filtered["activity_denominator"] == 10
+    assert filtered["process_map_payload"]["denominators"]["visible_case_count"] == 1
     assert filtered["summary"]["deviation_share"] == 100.0
     assert filtered["summary"]["median_throughput_days"] == 42.0
+
+
+def test_filter_workflow_payload_matches_trace_profiles_by_edge_uid():
+    edge_uid = "fit_mail -> admin_review|Model deviation|branch|admin_review"
+    payload = {
+        "nodes": pd.DataFrame(
+            [
+                {
+                    "activity": "fit_mail",
+                    "display_name": "FIT mail",
+                    "cases": 2,
+                    "coverage_group": "dominant",
+                    "conformance_bucket": "Conformant",
+                    "branch_role": "mainline",
+                },
+                {
+                    "activity": "admin_review",
+                    "display_name": "Admin review",
+                    "cases": 1,
+                    "coverage_group": "rare",
+                    "conformance_bucket": "Model deviation",
+                    "branch_role": "side",
+                },
+            ]
+        ),
+        "edges": pd.DataFrame(
+            [
+                {
+                    "edge_id": "raw edge label",
+                    "edge_uid": edge_uid,
+                    "source": "fit_mail",
+                    "target": "admin_review",
+                    "frequency": 1,
+                    "severity": "High",
+                    "conformance_bucket": "Model deviation",
+                    "coverage_group": "rare",
+                    "branch_role": "side",
+                }
+            ]
+        ),
+        "trace_profiles": pd.DataFrame(
+            [
+                {
+                    "case_id": "case-1",
+                    "event_count": 3,
+                    "throughput_days": 12.0,
+                    "variant_signature": "FIT mail → Admin review",
+                    "has_deviation": True,
+                    "has_model_deviation": True,
+                    "node_ids": ["fit_mail", "admin_review"],
+                    "edge_ids": ["does not match"],
+                    "edge_uids": [edge_uid],
+                }
+            ]
+        ),
+        "summary": {
+            "cases_covered": 2,
+            "visible_case_count": 2,
+            "path_denominator": 2,
+            "activity_denominator": 5,
+            "transition_denominator": 2,
+        },
+        "legend": pd.DataFrame(),
+    }
+
+    filtered = filter_workflow_payload(payload, coverage_view="rare", deviation_view="Model deviations", detail_level="analyst")
+
+    assert filtered["summary"]["cases_covered"] == 1
+    assert filtered["summary"]["visible_case_count"] == 1
+    assert filtered["summary"]["excluded_case_count"] == 1
+    assert filtered["trace_profiles"].iloc[0]["case_id"] == "case-1"
+    assert list(filtered["edges"]["edge_uid"]) == [edge_uid]
 
 
 def test_filter_workflow_payload_keeps_node_only_deviations_visible():
@@ -1916,3 +2190,82 @@ def test_filter_workflow_payload_fills_missing_defaults_for_nodes_and_edges():
     assert set(filtered["edges"]["conformance_bucket"]) == {"Conformant"}
     assert set(filtered["edges"]["severity"]) == {"Low"}
     assert set(filtered["edges"]["coverage_group"]) == {"dominant"}
+
+
+def test_filter_workflow_payload_analyst_view_prioritizes_deviating_edges_after_truncation():
+    nodes = [
+        {
+            "activity": f"n{index}",
+            "display_name": f"Node {index}",
+            "cases": 1,
+            "coverage_group": "dominant",
+            "conformance_bucket": "Conformant",
+            "branch_role": "side",
+        }
+        for index in range(23)
+    ]
+    edges = [
+        {
+            "edge_id": f"n{index} -> n{index + 1}",
+            "source": f"n{index}",
+            "target": f"n{index + 1}",
+            "frequency": 100 - index,
+            "coverage_group": "dominant",
+            "conformance_bucket": "Conformant",
+            "branch_role": "side",
+            "severity": "Low",
+        }
+        for index in range(20)
+    ]
+    edges.append(
+        {
+            "edge_id": "n20 -> n21",
+            "source": "n20",
+            "target": "n21",
+            "frequency": 1,
+            "coverage_group": "dominant",
+            "conformance_bucket": "Log deviation",
+            "branch_role": "side",
+            "severity": "High",
+        }
+    )
+    payload = {"nodes": pd.DataFrame(nodes), "edges": pd.DataFrame(edges), "legend": pd.DataFrame()}
+
+    filtered = filter_workflow_payload(payload, coverage_view="all", deviation_view="all", detail_level="analyst")
+
+    assert len(filtered["edges"]) == 18
+    assert "n20 -> n21" in set(filtered["edges"]["edge_id"])
+
+
+def test_filter_workflow_payload_uses_semantic_edge_uid_fallback():
+    payload = {
+        "nodes": pd.DataFrame(
+            [
+                {"activity": "fit_mail", "display_name": "FIT mail", "cases": 1},
+                {"activity": "admin_review", "display_name": "Admin review", "cases": 1},
+            ]
+        ),
+        "edges": pd.DataFrame(
+            [
+                {
+                    "edge_id": "fit_mail -> admin_review",
+                    "source": "fit_mail",
+                    "target": "admin_review",
+                    "frequency": 1,
+                    "conformance_bucket": "Model deviation",
+                    "edge_type": "branch",
+                    "branch_family": "admin_review",
+                }
+            ]
+        ),
+        "legend": pd.DataFrame(),
+    }
+
+    filtered = filter_workflow_payload(payload, coverage_view="all", deviation_view="all", detail_level="research")
+
+    assert filtered["edges"].iloc[0]["edge_uid"] == workflow_edge_uid(
+        "fit_mail -> admin_review",
+        "Model deviation",
+        "branch",
+        "admin_review",
+    )

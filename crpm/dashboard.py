@@ -14,7 +14,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from pm4py.objects.log.obj import EventLog
 
-
 # ───────────────────────────────────────────────────────────────────
 # 1. Log → flat DataFrame
 # ───────────────────────────────────────────────────────────────────

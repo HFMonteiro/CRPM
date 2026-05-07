@@ -11,6 +11,7 @@ from crpm.app_runtime import (
     build_conformance_workspace_payload,
     build_model_comparison_dataframe,
     compute_filter_key,
+    list_safe_local_xes_files,
     resolve_xes_log,
     run_discovery_comparison_pipeline,
 )
@@ -141,15 +142,42 @@ def test_build_conformance_workspace_payload_creates_structured_tables() -> None
         "deviation_share",
         "log_deviation_share",
         "model_deviation_share",
+        "visible_case_count",
+        "excluded_case_count",
         "path_denominator",
         "activity_denominator",
         "transition_denominator",
     }.issubset(payload["workflow"]["summary"].keys())
-    assert payload["workflow"]["summary"]["path_denominator_label"] == "cases in evaluation log"
-    assert payload["workflow"]["trace_profiles"].iloc[0]["case_id"] == "case-001"
-    assert "patient-identifier-001" not in payload["workflow"]["trace_profiles"].to_string()
-    assert "patient-identifier-001" not in payload["workflow"]["nodes"].to_string()
-    assert "patient-identifier-001" not in payload["workflow"]["edges"].to_string()
+    workflow = payload["workflow"]
+    assert workflow["summary"]["visible_case_count"] == 1
+    assert workflow["summary"]["excluded_case_count"] == 0
+    assert workflow["summary"]["path_denominator"] == 1
+    assert workflow["summary"]["activity_denominator"] == 3
+    assert workflow["summary"]["transition_denominator"] == 2
+    assert workflow["summary"]["path_denominator_label"] == "cases in evaluation log"
+    assert workflow["visible_case_count"] == 1
+    assert workflow["excluded_case_count"] == 0
+    assert workflow["path_denominator"] == 1
+    assert workflow["activity_denominator"] == 3
+    assert workflow["renderer_role"] == "conformance_explorer"
+    assert workflow["process_map_payload"]["renderer_role"] == "conformance_explorer"
+    assert workflow["process_map_payload"]["denominators"] == {
+        "visible_case_count": 1,
+        "excluded_case_count": 0,
+        "path_denominator": 1,
+        "activity_denominator": 3,
+        "transition_denominator": 2,
+    }
+    assert set(workflow["nodes"]["path_denominator"]) == {1}
+    assert set(workflow["nodes"]["activity_denominator"]) == {3}
+    assert set(workflow["nodes"]["coverage_pct"]) == {100.0}
+    assert set(workflow["nodes"]["activity_pct"].round(1)) == {33.3}
+    assert set(workflow["edges"]["share_pct"]) == {50.0}
+    assert workflow["trace_profiles"].iloc[0]["case_id"] == "case-001"
+    assert set(workflow["edges"]["edge_uid"]).issubset(set(workflow["trace_profiles"].iloc[0]["edge_uids"]))
+    assert "patient-identifier-001" not in workflow["trace_profiles"].to_string()
+    assert "patient-identifier-001" not in workflow["nodes"].to_string()
+    assert "patient-identifier-001" not in workflow["edges"].to_string()
 
 
 def test_build_conformance_workspace_payload_derives_node_level_alignment_mix() -> None:
@@ -268,6 +296,65 @@ def test_build_conformance_workspace_payload_humanizes_unmapped_activity_labels(
     edges = payload["workflow"]["edges"]
     assert "Admin review" in set(nodes["display_name"].tolist())
     assert "Invitation → Admin review" in set(edges["business_label"].tolist())
+
+
+def test_build_conformance_workspace_payload_uses_processed_case_denominators() -> None:
+    skipped_trace = Trace()
+    skipped_trace.append({"time:timestamp": pd.Timestamp("2024-01-01")})
+
+    trace = Trace()
+    trace.append({"concept:name": "Invitation_mail", "time:timestamp": pd.Timestamp("2024-01-01")})
+    trace.append({"concept:name": "FIT_mail", "time:timestamp": pd.Timestamp("2024-01-02")})
+
+    payload = build_conformance_workspace_payload(
+        log=EventLog([skipped_trace, trace]),
+        discovery_results={},
+        conformance_results={},
+        comparison_df=pd.DataFrame(),
+    )
+
+    workflow = payload["workflow"]
+    assert workflow["summary"]["visible_case_count"] == 1
+    assert workflow["summary"]["excluded_case_count"] == 1
+    assert workflow["summary"]["path_denominator"] == 1
+    assert workflow["summary"]["events_covered"] == 2
+    assert workflow["summary"]["dominant_path_share"] == 100.0
+    assert set(workflow["nodes"]["path_denominator"]) == {1}
+
+
+def test_build_conformance_workspace_payload_sorts_trace_events_for_timing() -> None:
+    trace = Trace()
+    trace.append({"concept:name": "FIT_mail", "time:timestamp": pd.Timestamp("2024-01-02")})
+    trace.append({"concept:name": "Invitation_mail", "time:timestamp": pd.Timestamp("2024-01-01")})
+
+    payload = build_conformance_workspace_payload(
+        log=EventLog([trace]),
+        discovery_results={},
+        conformance_results={},
+        comparison_df=pd.DataFrame(),
+    )
+
+    workflow = payload["workflow"]
+    assert workflow["summary"]["median_throughput_days"] == 1.0
+    assert workflow["edges"].iloc[0]["business_label"] == "Invitation → FIT mail"
+
+
+def test_build_conformance_workspace_payload_fallback_mix_uses_cases_not_occurrences() -> None:
+    trace = Trace()
+    trace.append({"concept:name": "Custom_activity", "time:timestamp": pd.Timestamp("2024-01-01")})
+    trace.append({"concept:name": "Custom_activity", "time:timestamp": pd.Timestamp("2024-01-02")})
+
+    payload = build_conformance_workspace_payload(
+        log=EventLog([trace]),
+        discovery_results={},
+        conformance_results={},
+        comparison_df=pd.DataFrame(),
+    )
+
+    node = payload["workflow"]["nodes"].iloc[0]
+    assert node["cases"] == 1
+    assert node["occurrences"] == 2
+    assert node["conformance_mix_total_cases"] == 1
 
 
 def test_build_conformance_workspace_payload_merges_canonical_activity_labels() -> None:
@@ -501,6 +588,44 @@ def test_resolve_xes_log_rejects_unsafe_xml_without_filename_leak() -> None:
     message = str(exc_info.value)
     assert "XES validation failed" in message
     assert "patient_cohort_secret" not in message
+
+
+def test_resolve_xes_log_rejects_unsafe_xml_after_large_prefix(tmp_path) -> None:
+    state = get_crpm_state({})
+    unsafe_file = tmp_path / "cohort.xes"
+    unsafe_file.write_bytes(b" " * 70000 + b'<!DOCTYPE log [ <!ENTITY secret SYSTEM "file:///secret"> ]><log></log>')
+
+    with pytest.raises(ValueError) as exc_info:
+        resolve_xes_log(
+            state,
+            selected_path=str(unsafe_file),
+            uploaded_bytes=None,
+            uploaded_name=None,
+        )
+
+    message = str(exc_info.value)
+    assert "unsafe XML declaration" in message
+    assert str(unsafe_file) not in message
+
+
+def test_resolve_xes_log_rejects_unc_network_paths_without_touching_share() -> None:
+    state = get_crpm_state({})
+
+    with pytest.raises(ValueError) as exc_info:
+        resolve_xes_log(
+            state,
+            selected_path=r"\\attacker.example\share\cohort.xes",
+            uploaded_bytes=None,
+            uploaded_name=None,
+        )
+
+    message = str(exc_info.value)
+    assert "network paths are not allowed" in message
+    assert "attacker" not in message
+
+
+def test_list_safe_local_xes_files_rejects_unc_directory() -> None:
+    assert list_safe_local_xes_files(r"\\attacker.example\share") == []
 
 
 def test_delay_bucket_uses_p90_tail_for_severity() -> None:

@@ -37,6 +37,7 @@ from crpm.visualization import (
     filter_workflow_payload,
     render_workflow_conformance_svg,
     render_workflow_explorer_html,
+    workflow_edge_uid,
 )
 
 try:  # optional interactive workflow dependency
@@ -46,14 +47,19 @@ except Exception:  # pragma: no cover - optional dependency
 
 
 logger = logging.getLogger(__name__)
-WORKFLOW_VIEW_CACHE_VERSION = "workflow-view-v2"
+WORKFLOW_VIEW_CACHE_VERSION = "workflow-view-v3"
+WORKFLOW_LOCAL_FOCUS_HINT = (
+    "Local graph focus stays inside the frame. Use Pinned exact metrics in the right rail for persisted node or transition values."
+)
 WORKFLOW_FILTER_DEFAULTS = {
+    "filter_category": "Pathway",
     "coverage_view": "All",
     "deviation_view": "All",
     "metric_coloring": "Conformance bucket",
     "detail_level": "Analyst",
     "conformance_lens": "% of paths",
 }
+WORKFLOW_FILTER_CATEGORIES = ["Pathway", "Deviation", "Display", "Actions"]
 
 
 def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
@@ -111,6 +117,11 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
         if isinstance(filtered_workflow, dict):
             filtered_workflow = dict(filtered_workflow)
             filtered_workflow["conformance_lens"] = controls["conformance_lens"]
+            _annotate_workflow_renderer_metadata(
+                filtered_workflow,
+                base_workflow=workflow if isinstance(workflow, dict) else None,
+                renderer_role="conformance_explorer",
+            )
         filtered_nodes_df, filtered_edges_df, filtered_legend_df = _workflow_dfs(filtered_workflow)
         current_selection_kind, current_selection_id = _coerce_selection_to_visible_subset(
             nodes_df=filtered_nodes_df,
@@ -123,6 +134,11 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
         filtered_workflow = dict(workflow) if isinstance(workflow, dict) else workflow
         if isinstance(filtered_workflow, dict):
             filtered_workflow["conformance_lens"] = controls["conformance_lens"]
+            _annotate_workflow_renderer_metadata(
+                filtered_workflow,
+                base_workflow=workflow if isinstance(workflow, dict) else None,
+                renderer_role="conformance_explorer",
+            )
         filtered_nodes_df, filtered_edges_df, filtered_legend_df = (
             nodes_df,
             edges_df,
@@ -140,7 +156,7 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
             grid_class="crpm-conformance-kpi-strip crpm-conformance-kpi-strip--cockpit",
         )
 
-    filter_col, main_col, detail_col = st.columns([0.64, 2.2, 1.0], gap="small")
+    filter_col, main_col, detail_col = st.columns([0.72, 2.55, 0.73], gap="small")
 
     with filter_col:
         _render_conformance_filter_rail(
@@ -270,8 +286,12 @@ def _render_interactive_workflow_graph(
         selected_node_id = selection_id if selection_kind == "node" else None
         selected_edge_id = selection_id if selection_kind == "edge" else None
         viewport_nonce = int(st.session_state.get(_widget_key(snapshot, "workflow_viewport_nonce"), 0) or 0)
+        workflow_for_render = dict(workflow) if isinstance(workflow, dict) else workflow
+        if isinstance(workflow_for_render, dict):
+            workflow_for_render["selected_node_id"] = selected_node_id
+            workflow_for_render["selected_edge_uid"] = selected_edge_id
         explorer_payload = create_workflow_interactive_payload(
-            workflow,
+            workflow_for_render,
             metric_coloring=metric_coloring,
             detail_level=detail_level,
             selected_node_id=selected_node_id,
@@ -333,12 +353,6 @@ def _render_right_panel(
     selection_id: Optional[str],
 ) -> tuple[str, Optional[str]]:
     st.markdown(
-        "<div class='crpm-conformance-side-subtitle'>Evidence rail</div>",
-        unsafe_allow_html=True,
-    )
-    _render_workflow_evidence_rail(workflow=workflow, nodes_df=nodes_df, edges_df=edges_df)
-
-    st.markdown(
         "<div class='crpm-conformance-side-subtitle'>Selection focus</div>",
         unsafe_allow_html=True,
     )
@@ -365,13 +379,17 @@ def _render_right_panel(
             selected_edge_id=selected_id if selected_kind == "edge" else None,
         )
     else:
-        render_legend_note("Overview mode is active. Pin a node or transition from this rail when you need exact metrics.")
+        render_legend_note("Overview mode is active. Use Pinned exact metrics to persist a node or transition from this rail.")
 
     st.markdown(
-        "<div class='crpm-conformance-side-subtitle'>Context</div>",
+        "<div class='crpm-conformance-side-subtitle'>Lead-time watchlist</div>",
         unsafe_allow_html=True,
     )
-    _render_insight_action_panel(workflow, controls)
+    _render_workflow_lead_time_rail(workflow=workflow, nodes_df=nodes_df, edges_df=edges_df)
+
+    with st.expander("Context", expanded=False):
+        _render_workflow_scope_rail(workflow)
+        _render_insight_action_panel(workflow, controls)
 
     with st.expander("Drilldown", expanded=False):
         _render_reference_model_panel(model_summary_df)
@@ -390,6 +408,37 @@ def _render_right_panel(
 
 
 def _render_workflow_evidence_rail(*, workflow: dict[str, Any], nodes_df: pd.DataFrame, edges_df: pd.DataFrame) -> None:
+    _render_workflow_scope_rail(workflow)
+    _render_workflow_lead_time_rail(workflow=workflow, nodes_df=nodes_df, edges_df=edges_df)
+
+
+def _render_workflow_scope_rail(workflow: dict[str, Any]) -> None:
+    summary = workflow.get("summary", {}) if isinstance(workflow, dict) else {}
+    visible_cases = _coerce_int(summary.get("visible_case_count", summary.get("cases_covered")))
+    excluded_cases = _coerce_int(summary.get("excluded_case_count"))
+    path_denominator = _coerce_int(summary.get("path_denominator"))
+    if visible_cases or excluded_cases or path_denominator:
+        scope_rows = [
+            {
+                "label": "Visible cases",
+                "value": float(visible_cases),
+                "display": f"{visible_cases:,}" + (f" / {path_denominator:,}" if path_denominator else ""),
+                "tone": "neutral",
+            }
+        ]
+        if excluded_cases:
+            scope_rows.append(
+                {
+                    "label": "Excluded by view",
+                    "value": float(excluded_cases),
+                    "display": f"{excluded_cases:,}",
+                    "tone": "warning",
+                }
+            )
+        render_dashboard_bar_list("Cohort scope", scope_rows, value_label="")
+
+
+def _render_workflow_lead_time_rail(*, workflow: dict[str, Any], nodes_df: pd.DataFrame, edges_df: pd.DataFrame) -> None:
     summary = workflow.get("summary", {}) if isinstance(workflow, dict) else {}
     throughput = _coerce_float(summary.get("median_throughput_days"))
     if throughput is not None:
@@ -477,9 +526,11 @@ def _render_selection_focus_content(
     selected_node_id = selection_id if normalized_kind == "node" else None
     selected_edge_id = selection_id if normalized_kind == "edge" else None
 
+    _render_selector_guide(selection_kind=normalized_kind, selection_id=selection_id)
+
     selector_kind_key = _widget_key(snapshot, "selection_kind")
     selector_kind_label = _render_choice_control(
-        "Pin type",
+        "Pinned metric type",
         ["Overview", "Node", "Edge"],
         key=selector_kind_key,
         default={"none": "Overview", "node": "Node", "edge": "Edge"}.get(normalized_kind, "Overview"),
@@ -493,21 +544,23 @@ def _render_selection_focus_content(
 
     if active_kind == "node":
         node_id, node_row = _render_selector(
-            label="Node",
+            label="Pinned node",
             df=nodes_df,
             id_column="activity",
             default_id=selected_node_id,
             key=_widget_key(snapshot, "selected_node"),
             format_label=_node_option_label,
+            empty_label="Overview (node not pinned)",
         )
     elif active_kind == "edge":
         edge_id, edge_row = _render_selector(
-            label="Edge",
+            label="Pinned edge",
             df=_workflow_edges_with_ids(edges_df),
             id_column="edge_uid",
             default_id=selected_edge_id,
             key=_widget_key(snapshot, "selected_edge"),
             format_label=_edge_option_label,
+            empty_label="Overview (edge not pinned)",
         )
 
     next_kind = "none"
@@ -558,7 +611,7 @@ def _render_selector_guide(*, selection_kind: str, selection_id: Optional[str]) 
         (
             "<div class='crpm-conformance-panel crpm-conformance-panel--muted'>"
             "<div class='crpm-conformance-panel__eyebrow'>Selection state</div>"
-            "<div class='crpm-conformance-panel__body'>Use graph clicks for local focus. Use the selector below to pin one node or one transition when you need exact metrics. "
+            "<div class='crpm-conformance-panel__body'>Use Local graph focus inside the map for quick visual inspection. Use Pinned exact metrics below for one persisted node or transition. "
             "Keep overview mode active when you are reading the whole pathway.</div>"
             f"<div class='crpm-conformance-panel__body'><strong>{html.escape(state)}</strong></div>"
             "</div>"
@@ -660,6 +713,7 @@ def _render_supporting_detail_tabs(
 
 
 def _workflow_controls_from_state(snapshot: AnalysisSnapshot) -> dict[str, Any]:
+    category_key = _widget_key(snapshot, "workflow_filter_category")
     coverage_key = _widget_key(snapshot, "workflow_coverage")
     deviation_key = _widget_key(snapshot, "workflow_deviation")
     metric_key = _widget_key(snapshot, "workflow_metric_coloring")
@@ -669,6 +723,7 @@ def _workflow_controls_from_state(snapshot: AnalysisSnapshot) -> dict[str, Any]:
 
     reset_triggered = bool(st.session_state.get(reset_pending_key))
     if reset_triggered:
+        st.session_state[category_key] = WORKFLOW_FILTER_DEFAULTS["filter_category"]
         st.session_state[coverage_key] = WORKFLOW_FILTER_DEFAULTS["coverage_view"]
         st.session_state[deviation_key] = WORKFLOW_FILTER_DEFAULTS["deviation_view"]
         st.session_state[metric_key] = WORKFLOW_FILTER_DEFAULTS["metric_coloring"]
@@ -676,6 +731,7 @@ def _workflow_controls_from_state(snapshot: AnalysisSnapshot) -> dict[str, Any]:
         st.session_state[lens_key] = WORKFLOW_FILTER_DEFAULTS["conformance_lens"]
         st.session_state[reset_pending_key] = False
 
+    current_category = str(st.session_state.get(category_key, WORKFLOW_FILTER_DEFAULTS["filter_category"]))
     current_coverage = str(st.session_state.get(coverage_key, WORKFLOW_FILTER_DEFAULTS["coverage_view"]))
     current_deviation = str(st.session_state.get(deviation_key, WORKFLOW_FILTER_DEFAULTS["deviation_view"]))
     current_metric = str(st.session_state.get(metric_key, WORKFLOW_FILTER_DEFAULTS["metric_coloring"]))
@@ -686,6 +742,7 @@ def _workflow_controls_from_state(snapshot: AnalysisSnapshot) -> dict[str, Any]:
     metric_default = current_metric if current_metric in metric_options else "Conformance bucket"
     return {
         "workflow_mode": "interactive",
+        "filter_category": _normalize_filter_category(current_category),
         "coverage_view": current_coverage.lower() if current_coverage else "all",
         "deviation_view": current_deviation or "All",
         "metric_coloring": metric_default,
@@ -702,6 +759,7 @@ def _render_workflow_controls(
     controls: Optional[dict[str, Any]] = None,
     layout: str = "panel",
 ) -> dict[str, Any]:
+    category_key = _widget_key(snapshot, "workflow_filter_category")
     coverage_key = _widget_key(snapshot, "workflow_coverage")
     deviation_key = _widget_key(snapshot, "workflow_deviation")
     metric_key = _widget_key(snapshot, "workflow_metric_coloring")
@@ -715,9 +773,11 @@ def _render_workflow_controls(
     current_metric = str(state_controls.get("metric_coloring", "Conformance bucket"))
     current_detail = str(state_controls.get("detail_level", "analyst")).title()
     current_lens = str(state_controls.get("conformance_lens", "% of paths"))
+    current_category = _normalize_filter_category(str(state_controls.get("filter_category", "Pathway")))
 
     metric_options = ["Conformance bucket", "Frequency", "Median delay", "P90 delay"]
     metric_default = current_metric if current_metric in metric_options else "Conformance bucket"
+    filter_category = current_category
     if layout == "toolbar":
         toolbar_cols = st.columns([1.02, 1.1, 0.82, 0.78, 0.82, 0.6], gap="medium")
         with toolbar_cols[0]:
@@ -759,29 +819,35 @@ def _render_workflow_controls(
             st.markdown("##### Actions")
             reset_filters = st.button("Reset filters", key=_widget_key(snapshot, "workflow_reset_filters"))
     elif layout == "rail":
-        st.markdown(
-            (
-                "<div class='crpm-conformance-panel crpm-conformance-panel--muted crpm-conformance-panel--rail'>"
-                "<div class='crpm-conformance-panel__eyebrow'>Cases, pathway & deviation</div>"
-                "<div class='crpm-conformance-panel__body'>Subset and lens controls live here. "
-                "The reference flow stays centered; the inspector is reserved for exact pins.</div>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
+        filter_category = _render_filter_category_boxes(
+            snapshot,
+            category_key=category_key,
+            current_category=current_category,
         )
-        coverage_view = _render_choice_control(
-            "Path view",
-            ["All", "Dominant", "Mixed", "Rare"],
-            key=coverage_key,
-            default=current_coverage,
-        )
-        deviation_view = _render_choice_control(
-            "Deviation focus",
-            ["All", "Conformant", "Log deviations", "Model deviations"],
-            key=deviation_key,
-            default=current_deviation,
-        )
-        with st.expander("Secondary controls", expanded=False):
+
+        coverage_view = current_coverage
+        deviation_view = current_deviation
+        metric_coloring = metric_default
+        detail_label = current_detail
+        lens_label = current_lens
+        reset_filters = False
+
+        _render_filter_composer_child(filter_category)
+        if filter_category == "Pathway":
+            coverage_view = _render_choice_control(
+                "Path view",
+                ["All", "Dominant", "Mixed", "Rare"],
+                key=coverage_key,
+                default=current_coverage,
+            )
+        elif filter_category == "Deviation":
+            deviation_view = _render_choice_control(
+                "Deviation focus",
+                ["All", "Conformant", "Log deviations", "Model deviations"],
+                key=deviation_key,
+                default=current_deviation,
+            )
+        elif filter_category == "Display":
             metric_coloring = st.selectbox(
                 "Color",
                 options=metric_options,
@@ -800,7 +866,22 @@ def _render_workflow_controls(
                 key=lens_key,
                 default=current_lens,
             )
-            reset_filters = st.button("Reset filters", key=_widget_key(snapshot, "workflow_reset_filters"))
+        elif filter_category == "Actions":
+            reset_filters = st.button(
+                "Reset filters",
+                key=_widget_key(snapshot, "workflow_reset_filters"),
+                help="Clear pathway, deviation, and display filters.",
+                use_container_width=True,
+            )
+
+        _render_active_filter_summary(
+            coverage_view=coverage_view,
+            deviation_view=deviation_view,
+            metric_coloring=metric_coloring,
+            detail_label=detail_label,
+            lens_label=lens_label,
+            filter_category=filter_category,
+        )
     else:
         coverage_view = _render_choice_control(
             "Path view",
@@ -841,6 +922,7 @@ def _render_workflow_controls(
 
     return {
         "workflow_mode": "interactive",
+        "filter_category": _normalize_filter_category(filter_category),
         "coverage_view": str(coverage_view).lower(),
         "deviation_view": str(deviation_view),
         "metric_coloring": str(metric_coloring),
@@ -858,43 +940,13 @@ def _render_conformance_filter_rail(
     *,
     model_summary_df: pd.DataFrame,
 ) -> None:
-    _render_conformance_side_intro(
-        title="Filter rail",
-        lead="Trim the visible subset and lens settings before reading the process map.",
-        variant="filters",
-    )
-    _render_workflow_distribution_rail(workflow)
+    _render_workflow_top_transition_rail(workflow)
     _render_workflow_controls(snapshot, controls=controls, layout="rail")
+    _render_filter_context_note()
 
 
-def _render_workflow_distribution_rail(workflow: dict[str, Any]) -> None:
+def _render_workflow_top_transition_rail(workflow: dict[str, Any]) -> None:
     summary = workflow.get("summary", {}) if isinstance(workflow, dict) else {}
-    render_dashboard_bar_list(
-        "Visible pathway mix",
-        [
-            {
-                "label": "Dominant path",
-                "value": _coerce_float(summary.get("dominant_path_share")) or 0.0,
-                "tone": "success",
-            },
-            {
-                "label": "Deviation share",
-                "value": _coerce_float(summary.get("deviation_share")) or 0.0,
-                "tone": "watch",
-            },
-            {
-                "label": "Log deviations",
-                "value": _coerce_float(summary.get("log_deviation_share")) or 0.0,
-                "tone": "accent",
-            },
-            {
-                "label": "Model deviations",
-                "value": _coerce_float(summary.get("model_deviation_share")) or 0.0,
-                "tone": "neutral",
-            },
-        ],
-    )
-
     nodes_df, edges_df, _ = _workflow_dfs(workflow)
     if not edges_df.empty and "frequency" in edges_df.columns:
         top_edges = edges_df.copy()
@@ -913,6 +965,7 @@ def _render_workflow_distribution_rail(workflow: dict[str, Any]) -> None:
             ],
             value_label="",
         )
+        return
     elif not nodes_df.empty and "cases" in nodes_df.columns:
         top_nodes = nodes_df.copy()
         top_nodes["_cases"] = pd.to_numeric(top_nodes["cases"], errors="coerce").fillna(0)
@@ -930,6 +983,29 @@ def _render_workflow_distribution_rail(workflow: dict[str, Any]) -> None:
             ],
             value_label="",
         )
+        return
+
+    render_dashboard_bar_list(
+        "Top transitions",
+        [
+            {
+                "label": "Dominant path",
+                "value": _coerce_float(summary.get("dominant_path_share")) or 0.0,
+                "tone": "success",
+            },
+            {
+                "label": "Deviation share",
+                "value": _coerce_float(summary.get("deviation_share")) or 0.0,
+                "tone": "watch",
+            },
+        ],
+    )
+
+
+def _render_filter_context_note() -> None:
+    render_legend_note(
+        "Subset and lens controls change only the visible workflow view. The first-event direct workflow gate remains fixed for the run."
+    )
 
 
 def _render_conformance_side_intro(*, title: str, lead: str, variant: str) -> None:
@@ -947,7 +1023,7 @@ def _render_conformance_side_intro(*, title: str, lead: str, variant: str) -> No
 
 
 def _render_workflow_stage_toolbar(snapshot: AnalysisSnapshot) -> dict[str, bool]:
-    header_col, clear_col, reset_col = st.columns([0.76, 0.12, 0.12], gap="small")
+    header_col, clear_col, reset_col = st.columns([0.48, 0.26, 0.26], gap="small")
     with header_col:
         st.markdown(
             (
@@ -955,7 +1031,7 @@ def _render_workflow_stage_toolbar(snapshot: AnalysisSnapshot) -> dict[str, bool
                 "<div class='crpm-conformance-stage-header__eyebrow'>Process map</div>"
                 "<div class='crpm-conformance-stage-header__title'>Interactive workflow explorer</div>"
                 "<div class='crpm-conformance-stage-header__body'>"
-                "Graph clicks change local focus. Pin exact metrics from the right rail when needed."
+                "Local graph focus stays inside the frame. Pinned exact metrics persist in the right rail."
                 "</div>"
                 "</div>"
             ),
@@ -963,15 +1039,17 @@ def _render_workflow_stage_toolbar(snapshot: AnalysisSnapshot) -> dict[str, bool
         )
     with clear_col:
         reset_selection = st.button(
-            "Clear",
+            "Clear pinned metrics",
             key=_widget_key(snapshot, "workflow_reset"),
             help="Clear the pinned node or edge selection.",
+            use_container_width=True,
         )
     with reset_col:
         reset_graph_viewport = st.button(
-            "Reset",
+            "Reset graph view",
             key=_widget_key(snapshot, "workflow_reset_viewport"),
             help="Reset the interactive workflow viewport without changing filters.",
+            use_container_width=True,
         )
     if reset_graph_viewport:
         viewport_nonce_key = _widget_key(snapshot, "workflow_viewport_nonce")
@@ -1076,6 +1154,101 @@ def _render_choice_control(label: str, options: list[str], *, key: str, default:
     return st.radio(label, options, index=options.index(default_value), key=key, horizontal=True)
 
 
+def _normalize_filter_category(value: str) -> str:
+    return value if value in WORKFLOW_FILTER_CATEGORIES else WORKFLOW_FILTER_DEFAULTS["filter_category"]
+
+
+def _render_filter_category_boxes(
+    snapshot: AnalysisSnapshot,
+    *,
+    category_key: str,
+    current_category: str,
+) -> str:
+    selected = _normalize_filter_category(current_category)
+    if category_key not in st.session_state:
+        st.session_state[category_key] = selected
+
+    st.markdown(
+        "<div class='crpm-filter-parent-label'>Filter category</div>",
+        unsafe_allow_html=True,
+    )
+    descriptions = {
+        "Pathway": "Show all, dominant, mixed, or rare paths.",
+        "Deviation": "Isolate conformant and deviation cohorts.",
+        "Display": "Tune color, density, and denominator lens.",
+        "Actions": "Reset subset filters without changing graph zoom.",
+    }
+    for category in WORKFLOW_FILTER_CATEGORIES:
+        if st.button(
+            category,
+            key=_widget_key(snapshot, f"workflow_filter_category_{category.lower()}"),
+            type="primary" if category == selected else "tertiary",
+            use_container_width=True,
+            help=descriptions[category],
+        ):
+            selected = category
+            st.session_state[category_key] = category
+            if _has_streamlit_run_context():
+                st.rerun()
+
+    return selected
+
+
+def _render_filter_composer_child(filter_category: str) -> None:
+    descriptions = {
+        "Pathway": "Choose which path cohort is visible in the process map.",
+        "Deviation": "Isolate conformant, log-deviation, or model-deviation behavior.",
+        "Display": "Tune coloring, density, and denominator lens without changing cohort semantics.",
+        "Actions": "Reset visible subset filters. Graph viewport reset remains separate above the map.",
+    }
+    st.markdown(
+        (
+            "<div class='crpm-filter-composer'>"
+            f"<div class='crpm-filter-composer__title'>{html.escape(filter_category)} options</div>"
+            f"<div class='crpm-filter-composer__body'>{html.escape(descriptions.get(filter_category, 'Choose a filter category.'))}</div>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _render_active_filter_summary(
+    *,
+    coverage_view: str,
+    deviation_view: str,
+    metric_coloring: str,
+    detail_label: str,
+    lens_label: str,
+    filter_category: str,
+) -> None:
+    chips = [
+        ("Active", filter_category),
+        ("Pathway", coverage_view),
+        ("Deviation", deviation_view),
+        ("Color", metric_coloring),
+        ("Density", detail_label),
+        ("Lens", lens_label),
+    ]
+    chip_markup = "".join(
+        (
+            "<span class='crpm-active-filter-summary__chip'>"
+            f"<span>{html.escape(label)}</span>"
+            f"<strong>{html.escape(str(value))}</strong>"
+            "</span>"
+        )
+        for label, value in chips
+    )
+    st.markdown(
+        (
+            "<div class='crpm-active-filter-summary'>"
+            "<div class='crpm-active-filter-summary__title'>Active filters</div>"
+            f"<div class='crpm-active-filter-summary__chips'>{chip_markup}</div>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
 def _has_streamlit_run_context() -> bool:
     try:
         from streamlit.runtime.scriptrunner import get_script_run_ctx  # type: ignore
@@ -1150,7 +1323,6 @@ def _render_workflow_feedback(
         if isinstance(workflow, dict)
         else requested_coverage_view
     )
-    covered_cases = _coerce_int(summary.get("cases_covered"))
     log_deviation_share = _coerce_float(summary.get("log_deviation_share"))
     model_deviation_share = _coerce_float(summary.get("model_deviation_share"))
     deviation_bits = []
@@ -1161,10 +1333,18 @@ def _render_workflow_feedback(
     coverage_suffix = ""
     if requested_coverage_view and applied_coverage_view and requested_coverage_view != applied_coverage_view:
         coverage_suffix = f" · requested {requested_coverage_view.title()} view, showing {applied_coverage_view.title()} because the requested slice was empty"
+    visible_case_count = _coerce_int(summary.get("visible_case_count", summary.get("cases_covered")))
+    path_denominator = _coerce_int(summary.get("path_denominator"))
+    excluded_case_count = _coerce_int(summary.get("excluded_case_count"))
+    case_text = f"{visible_case_count:,} cases"
+    if path_denominator:
+        case_text = f"{visible_case_count:,}/{path_denominator:,} cases"
+    if excluded_case_count:
+        case_text += f" · {excluded_case_count:,} excluded"
     st.markdown(
         (
             "<div class='crpm-conformance-evidence-band'>"
-            f"Visible subset: {covered_cases:,} cases · {len(nodes_df):,} nodes · {len(edges_df):,} edges"
+            f"Visible subset: {case_text} · {len(nodes_df):,} nodes · {len(edges_df):,} edges"
             + (f" · {' · '.join(deviation_bits)}" if deviation_bits else "")
             + coverage_suffix
             + "</div>"
@@ -1362,7 +1542,6 @@ def _workflow_feedback_text(
         if isinstance(workflow, dict)
         else requested_coverage_view
     )
-    covered_cases = _coerce_int(summary.get("cases_covered"))
     log_deviation_share = _coerce_float(summary.get("log_deviation_share"))
     model_deviation_share = _coerce_float(summary.get("model_deviation_share"))
     deviation_bits = []
@@ -1373,11 +1552,91 @@ def _workflow_feedback_text(
     coverage_suffix = ""
     if requested_coverage_view and applied_coverage_view and requested_coverage_view != applied_coverage_view:
         coverage_suffix = f" · requested {requested_coverage_view.title()} view, showing {applied_coverage_view.title()} because the requested slice was empty"
+    visible_case_count = _coerce_int(summary.get("visible_case_count", summary.get("cases_covered")))
+    path_denominator = _coerce_int(summary.get("path_denominator"))
+    excluded_case_count = _coerce_int(summary.get("excluded_case_count"))
+    case_text = f"{visible_case_count:,} cases"
+    if path_denominator:
+        case_text = f"{visible_case_count:,}/{path_denominator:,} cases"
+    if excluded_case_count:
+        case_text += f" · {excluded_case_count:,} excluded"
     return (
-        f"Visible subset: {covered_cases:,} cases · {len(nodes_df):,} nodes · {len(edges_df):,} edges"
+        f"Visible subset: {case_text} · {len(nodes_df):,} nodes · {len(edges_df):,} edges"
         + (f" · {' · '.join(deviation_bits)}" if deviation_bits else "")
         + coverage_suffix
     )
+
+
+def _annotate_workflow_renderer_metadata(
+    workflow: dict[str, Any],
+    *,
+    base_workflow: Optional[dict[str, Any]],
+    renderer_role: str,
+) -> None:
+    if not isinstance(workflow, dict):
+        return
+    summary = workflow.get("summary")
+    if not isinstance(summary, dict):
+        summary = {}
+        workflow["summary"] = summary
+    base_summary = base_workflow.get("summary", {}) if isinstance(base_workflow, dict) else {}
+    if not isinstance(base_summary, dict):
+        base_summary = {}
+
+    visible_case_count = _coerce_int(summary.get("visible_case_count", summary.get("cases_covered")))
+    base_case_count = _coerce_int(base_summary.get("visible_case_count", base_summary.get("cases_covered", visible_case_count)))
+    if base_case_count <= 0:
+        base_case_count = _coerce_int(base_summary.get("path_denominator", visible_case_count))
+    excluded_case_count = max(base_case_count - visible_case_count, 0)
+
+    path_denominator = _coerce_int(summary.get("path_denominator", base_summary.get("path_denominator", base_case_count)))
+    activity_denominator = _coerce_int(summary.get("activity_denominator", base_summary.get("activity_denominator", 0)))
+    transition_denominator = _coerce_int(summary.get("transition_denominator", base_summary.get("transition_denominator", 0)))
+
+    summary["visible_case_count"] = visible_case_count
+    summary["excluded_case_count"] = excluded_case_count
+    summary["path_denominator"] = path_denominator
+    summary.setdefault("path_denominator_label", base_summary.get("path_denominator_label", "cases in evaluation log"))
+    summary["activity_denominator"] = activity_denominator
+    summary.setdefault("activity_denominator_label", base_summary.get("activity_denominator_label", "events in evaluation log"))
+    summary["transition_denominator"] = transition_denominator
+    summary.setdefault(
+        "transition_denominator_label",
+        base_summary.get("transition_denominator_label", "observed transitions in evaluation log"),
+    )
+
+    workflow["visible_case_count"] = visible_case_count
+    workflow["excluded_case_count"] = excluded_case_count
+    workflow["path_denominator"] = path_denominator
+    workflow["activity_denominator"] = activity_denominator
+    workflow.setdefault("selected_node_id", None)
+    workflow.setdefault("selected_edge_uid", None)
+    workflow["local_focus_hint"] = WORKFLOW_LOCAL_FOCUS_HINT
+    workflow["renderer_role"] = renderer_role
+
+    nodes_df, edges_df, legend_df = _workflow_dfs(workflow)
+    trace_profiles_df = workflow.get("trace_profiles", pd.DataFrame())
+    if not isinstance(trace_profiles_df, pd.DataFrame):
+        trace_profiles_df = pd.DataFrame()
+    workflow["process_map_payload"] = {
+        "renderer_role": renderer_role,
+        "nodes": nodes_df,
+        "edges": edges_df,
+        "legend": legend_df,
+        "trace_profiles": trace_profiles_df,
+        "summary": dict(summary),
+        "denominators": {
+            "visible_case_count": visible_case_count,
+            "excluded_case_count": excluded_case_count,
+            "path_denominator": path_denominator,
+            "activity_denominator": activity_denominator,
+            "transition_denominator": transition_denominator,
+        },
+        "selection": {
+            "selected_node_id": workflow.get("selected_node_id"),
+            "selected_edge_uid": workflow.get("selected_edge_uid"),
+        },
+    }
 
 
 def _board_export_story_text(*, workflow: dict[str, Any], model_summary_df: pd.DataFrame) -> str:
@@ -1459,8 +1718,8 @@ def _get_filtered_workflow(snapshot: AnalysisSnapshot, workflow: dict[str, Any],
             snapshot.filter_key or snapshot.input_name or "workflow",
             controls["coverage_view"],
             controls["deviation_view"],
-            controls["metric_coloring"],
             controls["detail_level"],
+            controls["conformance_lens"],
         ]
     )
     cached = bounded_cache_get(state, "workflow_view_cache", cache_key)
@@ -1722,6 +1981,7 @@ def _render_selector(
     default_id: Optional[str],
     key: str,
     format_label,
+    empty_label: Optional[str] = None,
 ) -> tuple[Optional[str], Optional[pd.Series]]:
     if df.empty:
         return None, None
@@ -1740,7 +2000,9 @@ def _render_selector(
         index=ids.index(default_id) if default_id in ids else 0,
         key=key,
         format_func=lambda option: (
-            f"Overview ({label.lower()} not pinned)" if option == "" else format_label(working.loc[working[id_column] == option].iloc[0])
+            (empty_label or f"Overview ({label.lower()} not pinned)")
+            if option == ""
+            else format_label(working.loc[working[id_column] == option].iloc[0])
         ),
     )
     if selected_id == "":
@@ -1775,7 +2037,12 @@ def _workflow_edges_with_ids(edges_df: pd.DataFrame) -> pd.DataFrame:
         working["edge_uid"] = working["edge_uid"].astype(str)
     else:
         working["edge_uid"] = working.apply(
-            lambda row: f"{row.get('source', '')} -> {row.get('target', '')}",
+            lambda row: workflow_edge_uid(
+                row.get("edge_id") or f"{row.get('source', '')} -> {row.get('target', '')}",
+                row.get("conformance_bucket", "Conformant"),
+                row.get("edge_type", "expected"),
+                row.get("branch_family", "mainline"),
+            ),
             axis=1,
         )
     if "edge_id" not in working.columns:
@@ -1852,6 +2119,7 @@ def _clear_workflow_selection(snapshot: AnalysisSnapshot) -> None:
 
 def _reset_workflow_filters(snapshot: AnalysisSnapshot) -> None:
     _clear_workflow_selection(snapshot)
+    st.session_state[_widget_key(snapshot, "workflow_filter_category")] = WORKFLOW_FILTER_DEFAULTS["filter_category"]
     st.session_state[_widget_key(snapshot, "workflow_coverage")] = WORKFLOW_FILTER_DEFAULTS["coverage_view"]
     st.session_state[_widget_key(snapshot, "workflow_deviation")] = WORKFLOW_FILTER_DEFAULTS["deviation_view"]
     st.session_state[_widget_key(snapshot, "workflow_metric_coloring")] = WORKFLOW_FILTER_DEFAULTS["metric_coloring"]
@@ -2002,7 +2270,7 @@ def _render_selection_summary_card(
         subtitle = "No pinned workflow detail"
         meta = [
             "Read the pathway first",
-            "Pin a node or transition when you need exact metrics",
+            "Use Pinned exact metrics when you need one persisted value",
             "Workflow lenses stay above the figure",
         ]
         tone = "Overview"

@@ -9,7 +9,6 @@ from typing import Any, Mapping, MutableMapping, Optional
 
 import pandas as pd
 
-
 PREVIEW_PAGES = (
     "Overview",
     "Discovery",
@@ -341,16 +340,16 @@ def _migrate_or_create_state(session_state: Mapping[str, Any]) -> CRPMState:
         source_metadata=dict(session_state.get("source_metadata", {})) if isinstance(session_state.get("source_metadata"), Mapping) else {},
         filter_key=session_state.get("current_filter_key"),
         filtered_log=session_state.get("current_filtered_log"),
-        discovery_results=dict(session_state.get("discovery_results", {}))
-        if isinstance(session_state.get("discovery_results"), Mapping)
-        else {},
-        comparison_df=session_state.get("comparison_df")
-        if isinstance(session_state.get("comparison_df"), pd.DataFrame)
-        else pd.DataFrame(),
+        discovery_results=(
+            dict(session_state.get("discovery_results", {})) if isinstance(session_state.get("discovery_results"), Mapping) else {}
+        ),
+        comparison_df=(
+            session_state.get("comparison_df") if isinstance(session_state.get("comparison_df"), pd.DataFrame) else pd.DataFrame()
+        ),
         split_info=dict(session_state.get("split_info", {})) if isinstance(session_state.get("split_info"), Mapping) else {},
-        analysis_summary=dict(session_state.get("analysis_summary", {}))
-        if isinstance(session_state.get("analysis_summary"), Mapping)
-        else {},
+        analysis_summary=(
+            dict(session_state.get("analysis_summary", {})) if isinstance(session_state.get("analysis_summary"), Mapping) else {}
+        ),
         train_log=session_state.get("train_log"),
         test_log=session_state.get("test_log"),
         active_followup_label=session_state.get("active_followup_label"),
@@ -358,21 +357,21 @@ def _migrate_or_create_state(session_state: Mapping[str, Any]) -> CRPMState:
         filter_error_message=session_state.get("filter_error_message"),
         last_analysis_signature=session_state.get("last_analysis_signature"),
         stage_timings=dict(session_state.get("stage_timings", {})) if isinstance(session_state.get("stage_timings"), Mapping) else {},
-        conformance_workspace=dict(session_state.get("conformance_workspace", {}))
-        if isinstance(session_state.get("conformance_workspace"), Mapping)
-        else {},
+        conformance_workspace=(
+            dict(session_state.get("conformance_workspace", {})) if isinstance(session_state.get("conformance_workspace"), Mapping) else {}
+        ),
         workflow_view_mode=str(session_state.get("workflow_view_mode", "board") or "board"),
         workflow_detail_level=str(session_state.get("workflow_detail_level", "analyst") or "analyst"),
         workflow_selection_kind=str(session_state.get("workflow_selection_kind", "none") or "none"),
-        workflow_selection_id=str(session_state.get("workflow_selection_id"))
-        if session_state.get("workflow_selection_id") is not None
-        else None,
-        selected_workflow_node_id=str(session_state.get("selected_workflow_node_id"))
-        if session_state.get("selected_workflow_node_id") is not None
-        else None,
-        selected_workflow_edge_id=str(session_state.get("selected_workflow_edge_id"))
-        if session_state.get("selected_workflow_edge_id") is not None
-        else None,
+        workflow_selection_id=(
+            str(session_state.get("workflow_selection_id")) if session_state.get("workflow_selection_id") is not None else None
+        ),
+        selected_workflow_node_id=(
+            str(session_state.get("selected_workflow_node_id")) if session_state.get("selected_workflow_node_id") is not None else None
+        ),
+        selected_workflow_edge_id=(
+            str(session_state.get("selected_workflow_edge_id")) if session_state.get("selected_workflow_edge_id") is not None else None
+        ),
     )
     state.config.date_filter_mode = str(session_state.get("date_filter_mode", state.config.date_filter_mode))
     state.config.workflow_cohort_policy = str(

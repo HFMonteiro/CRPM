@@ -39,8 +39,8 @@ jobs:
       - name: Ruff lint
         run: ruff check crpm tests
 
-      - name: Ruff format check
-        run: ruff format --check crpm tests
+      - name: Black format check
+        run: black --check crpm tests
 
       - name: Preflight smoke test
         run: python -m crpm.preflight

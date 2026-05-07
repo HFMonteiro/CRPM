@@ -103,7 +103,7 @@ def render_dfg_page(snapshot: AnalysisSnapshot) -> None:
             try:
                 svg_markup = render_dfg_to_svg(dfg, starts, ends, variant=vis_variant)
                 st.markdown(
-                    f'<div class="crpm-dfg-vector">{svg_markup}</div>',
+                    f'<div class="crpm-dfg-vector crpm-dfg-map-canvas">{svg_markup}</div>',
                     unsafe_allow_html=True,
                 )
             except Exception:

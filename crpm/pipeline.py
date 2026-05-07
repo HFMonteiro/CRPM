@@ -20,7 +20,6 @@ from pm4py.objects.log.obj import EventLog
 from pm4py.objects.log.util import dataframe_utils
 from pm4py.objects.petri_net.utils import petri_utils
 
-
 # ---------------------------------------------------------------------------
 # CSV utilities
 # ---------------------------------------------------------------------------

@@ -229,7 +229,7 @@ def test_render_overview_page_uses_dashboard_command_center(monkeypatch) -> None
     assert any("crpm-reading-order-band" in text for text in calls["markdown"])
     assert any("crpm-page-card-grid" in text for text in calls["markdown"])
     assert calls["workflow"]
-    assert calls["workflow"][0]["kwargs"]["layout_mode"] == "horizontal"
+    assert calls["workflow"][0]["kwargs"]["layout_mode"] == "vertical"
     assert calls["workflow"][0]["kwargs"]["detail_level"] == "executive"
 
 
@@ -683,11 +683,12 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
         lambda label, options, **kwargs: (
             calls.setdefault("segmented", []).append((label, tuple(options)))
             or {
+                "Filter category": "Pathway",
                 "Path view": "All",
                 "Deviation focus": "All",
                 "Density": "Analyst",
                 "Lens": "% of paths",
-                "Pin type": "Overview",
+                "Pinned metric type": "Overview",
             }.get(label, options[0])
         ),
     )
@@ -773,16 +774,18 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
     assert "workflow pathway board" not in explanatory_text
     assert "direct workflow mode" in explanatory_text
     assert not any(label == "Mode" for label, _ in calls["segmented"])
+    assert {"Pathway", "Deviation", "Display", "Actions"}.issubset(set(calls["buttons"]))
     assert any(label == "Path view" for label, _ in calls["segmented"])
-    assert any(label == "Deviation focus" for label, _ in calls["segmented"])
-    assert any(label == "Density" for label, _ in calls["segmented"])
-    assert any(label == "Lens" for label, _ in calls["segmented"])
-    assert any(label == "Pin type" for label, _ in calls["segmented"])
-    assert any(label == "Color" for label, _ in calls["selectbox"])
-    assert "Clear" in calls["buttons"]
-    assert "Reset filters" in calls["buttons"]
-    assert "Reset" in calls["buttons"]
-    assert (0.64, 2.2, 1.0) in calls["columns"]
+    assert not any(label == "Deviation focus" for label, _ in calls["segmented"])
+    assert not any(label == "Density" for label, _ in calls["segmented"])
+    assert not any(label == "Lens" for label, _ in calls["segmented"])
+    assert any(label == "Pinned metric type" for label, _ in calls["segmented"])
+    assert not any(label == "Color" for label, _ in calls["selectbox"])
+    assert "Clear pinned metrics" in calls["buttons"]
+    assert "Reset filters" not in calls["buttons"]
+    assert "Reset graph view" in calls["buttons"]
+    assert (0.72, 2.55, 0.73) in calls["columns"]
+    assert (0.48, 0.26, 0.26) in calls["columns"]
     assert any("crpm-selection-card" in text for text in calls["markdown"])
     assert any("crpm-model-card-grid" in text for text in calls["markdown"])
     assert any("crpm-ranked-table" in text for text in calls["markdown"])
@@ -791,20 +794,31 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
     assert any("crpm-dashboard-topbar" in str(text) for text in calls["markdown"])
     assert not any("crpm-conformance-hero" in str(text) for text in calls["markdown"])
     assert not any("crpm-conformance-report-band" in str(text) for text in calls["markdown"])
-    assert any("crpm-conformance-side-rail--filters" in str(text) for text in calls["markdown"])
     assert any("crpm-conformance-side-rail--inspector" in str(text) for text in calls["markdown"])
     assert any("crpm-conformance-panel--rail" in str(text) for text in calls["markdown"])
+    assert any("crpm-filter-parent-label" in str(text) for text in calls["markdown"])
+    assert any("crpm-filter-composer" in str(text) for text in calls["markdown"])
+    assert any("crpm-active-filter-summary" in str(text) for text in calls["markdown"])
     assert any("crpm-dashboard-bar-list" in str(text) for text in calls["markdown"])
     assert any(label == "Report/export view" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
     inspector_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-conformance-side-title--inspector" in str(text))
-    evidence_index = next(idx for idx, text in enumerate(calls["markdown"]) if "Evidence rail</div>" in str(text))
     selection_index = next(idx for idx, text in enumerate(calls["markdown"]) if "Selection focus</div>" in str(text))
     pinned_index = next(
         idx for idx, text in enumerate(calls["markdown"]) if idx > selection_index and "Pinned exact metrics</div>" in str(text)
     )
-    context_index = next(idx for idx, text in enumerate(calls["markdown"]) if idx > pinned_index and "Context</div>" in str(text))
-    assert inspector_index < evidence_index < selection_index < pinned_index < context_index
-    assert any("crpm-conformance-side-title--rail" in str(text) for text in calls["markdown"])
+    lead_time_index = next(
+        idx for idx, text in enumerate(calls["markdown"]) if idx > pinned_index and "Lead-time watchlist</div>" in str(text)
+    )
+    assert inspector_index < selection_index < pinned_index < lead_time_index
+    assert any(label == "Context" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
+    assert not any("Evidence rail</div>" in str(text) for text in calls["markdown"])
+    top_transitions_index = next(
+        idx for idx, text in enumerate(calls["markdown"]) if "Top transitions" in str(text) or "Top activities" in str(text)
+    )
+    filter_parent_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-filter-parent-label" in str(text))
+    composer_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-filter-composer" in str(text))
+    active_filter_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-active-filter-summary" in str(text))
+    assert top_transitions_index < filter_parent_index < composer_index < active_filter_index
 
 
 def test_conformance_label_helpers_humanize_raw_workflow_labels() -> None:
@@ -909,7 +923,7 @@ def test_render_conformance_page_falls_back_to_comparison_dataframe(
             "Path view": "All",
             "Deviation focus": "All",
             "Density": "Analyst",
-            "Pin type": "Overview",
+            "Pinned metric type": "Overview",
         }.get(label, options[0]),
     )
     monkeypatch.setattr(
@@ -1058,7 +1072,7 @@ def test_render_conformance_page_interactive_mode_degrades_gracefully(
             "Path view": "All",
             "Deviation focus": "All",
             "Density": "Analyst",
-            "Pin type": "Overview",
+            "Pinned metric type": "Overview",
         }.get(label, options[0]),
     )
     monkeypatch.setattr(
@@ -1215,7 +1229,7 @@ def test_render_conformance_page_renders_html_explorer_without_selection(
             "Path view": "All",
             "Deviation focus": "All",
             "Density": "Analyst",
-            "Pin type": "Overview",
+            "Pinned metric type": "Overview",
         }.get(label, options[0]),
     )
     monkeypatch.setattr(
@@ -1333,12 +1347,132 @@ def test_render_workflow_controls_sanitizes_invalid_metric_coloring(
     assert controls["reset_graph_viewport"] is False
 
 
+def test_render_workflow_controls_rail_uses_progressive_filter_categories(
+    monkeypatch,
+) -> None:
+    snapshot = SimpleNamespace(filter_key="filter", input_name="sample.xes", workflow_view_mode="interactive")
+    session_state = {
+        conformance_page._widget_key(snapshot, "workflow_filter_category"): "Display",
+        conformance_page._widget_key(snapshot, "workflow_coverage"): "Rare",
+        conformance_page._widget_key(snapshot, "workflow_deviation"): "Log deviations",
+        conformance_page._widget_key(snapshot, "workflow_metric_coloring"): "Median delay",
+        conformance_page._widget_key(snapshot, "workflow_detail_level"): "Research",
+        conformance_page._widget_key(snapshot, "workflow_lens"): "% of activities",
+    }
+    segmented_calls: list[tuple[str, tuple[str, ...]]] = []
+    button_calls: list[str] = []
+    selectbox_calls: list[tuple[str, tuple[str, ...], int]] = []
+    markdown_calls: list[str] = []
+
+    def _segmented(label, options, **kwargs):
+        segmented_calls.append((label, tuple(options)))
+        return {
+            "Filter category": "Display",
+            "Density": "Research",
+            "Lens": "% of activities",
+        }.get(label, kwargs.get("default", options[0]))
+
+    monkeypatch.setattr(conformance_page.st, "session_state", session_state)
+    monkeypatch.setattr(conformance_page.st, "markdown", lambda text, **kwargs: markdown_calls.append(str(text)))
+    monkeypatch.setattr(conformance_page.st, "segmented_control", _segmented)
+    monkeypatch.setattr(
+        conformance_page.st,
+        "selectbox",
+        lambda label, options, index=0, **kwargs: selectbox_calls.append((label, tuple(options), index)) or options[index],
+    )
+    monkeypatch.setattr(conformance_page.st, "button", lambda label, *args, **kwargs: button_calls.append(label) or False)
+
+    controls = conformance_page._render_workflow_controls(snapshot, layout="rail")
+
+    assert {"Pathway", "Deviation", "Display", "Actions"}.issubset(set(button_calls))
+    assert "Reset filters" not in button_calls
+    assert not any(label == "Filter category" for label, _ in segmented_calls)
+    assert ("Density", ("Executive", "Analyst", "Research")) in segmented_calls
+    assert ("Lens", ("% of activities", "% of paths")) in segmented_calls
+    assert not any(label == "Path view" for label, _ in segmented_calls)
+    assert not any(label == "Deviation focus" for label, _ in segmented_calls)
+    assert (
+        "Color",
+        ("Conformance bucket", "Frequency", "Median delay", "P90 delay"),
+        2,
+    ) in selectbox_calls
+    assert controls["coverage_view"] == "rare"
+    assert controls["deviation_view"] == "Log deviations"
+    assert controls["metric_coloring"] == "Median delay"
+    assert controls["detail_level"] == "research"
+    assert controls["conformance_lens"] == "% of activities"
+    assert any("crpm-filter-parent-label" in text for text in markdown_calls)
+    assert any("crpm-filter-composer" in text for text in markdown_calls)
+    assert any("crpm-active-filter-summary" in text for text in markdown_calls)
+
+
+def test_render_workflow_controls_rail_actions_category_surfaces_reset(
+    monkeypatch,
+) -> None:
+    snapshot = SimpleNamespace(filter_key="filter", input_name="sample.xes", workflow_view_mode="interactive")
+    session_state = {
+        conformance_page._widget_key(snapshot, "workflow_filter_category"): "Actions",
+        conformance_page._widget_key(snapshot, "workflow_coverage"): "Rare",
+        conformance_page._widget_key(snapshot, "workflow_deviation"): "Log deviations",
+        conformance_page._widget_key(snapshot, "workflow_metric_coloring"): "Median delay",
+        conformance_page._widget_key(snapshot, "workflow_detail_level"): "Research",
+        conformance_page._widget_key(snapshot, "workflow_lens"): "% of activities",
+    }
+    button_calls: list[str] = []
+
+    monkeypatch.setattr(conformance_page.st, "session_state", session_state)
+    monkeypatch.setattr(conformance_page.st, "markdown", lambda *args, **kwargs: None)
+    monkeypatch.setattr(conformance_page.st, "button", lambda label, *args, **kwargs: button_calls.append(label) or False)
+
+    controls = conformance_page._render_workflow_controls(snapshot, layout="rail")
+
+    assert {"Pathway", "Deviation", "Display", "Actions", "Reset filters"}.issubset(set(button_calls))
+    assert controls["filter_category"] == "Actions"
+    assert controls["coverage_view"] == "rare"
+    assert controls["deviation_view"] == "Log deviations"
+
+
+def test_filtered_workflow_cache_key_includes_denominator_lens(monkeypatch) -> None:
+    snapshot = SimpleNamespace(filter_key="filter", input_name="sample.xes")
+    session_state: dict[str, object] = {}
+    filter_calls: list[tuple[str, str, str]] = []
+
+    def _fake_filter_workflow_payload(workflow, *, coverage_view, deviation_view, detail_level):
+        filter_calls.append((coverage_view, deviation_view, detail_level))
+        return {"summary": {"call_count": len(filter_calls)}}
+
+    monkeypatch.setattr(conformance_page.st, "session_state", session_state)
+    monkeypatch.setattr(conformance_page, "filter_workflow_payload", _fake_filter_workflow_payload)
+
+    base_controls = {
+        "coverage_view": "all",
+        "deviation_view": "All",
+        "metric_coloring": "Conformance bucket",
+        "detail_level": "analyst",
+    }
+    first = conformance_page._get_filtered_workflow(
+        snapshot,
+        {},
+        {**base_controls, "conformance_lens": "% of paths"},
+    )
+    second = conformance_page._get_filtered_workflow(
+        snapshot,
+        {},
+        {**base_controls, "conformance_lens": "% of activities"},
+    )
+
+    assert first["summary"]["call_count"] == 1
+    assert second["summary"]["call_count"] == 2
+    assert len(filter_calls) == 2
+
+
 def test_workflow_controls_from_state_surfaces_pending_filter_reset(
     monkeypatch,
 ) -> None:
     snapshot = SimpleNamespace(filter_key="filter", input_name="sample.xes", workflow_view_mode="interactive")
     session_state = {
         conformance_page._widget_key(snapshot, "workflow_reset_pending"): True,
+        conformance_page._widget_key(snapshot, "workflow_filter_category"): "Display",
         conformance_page._widget_key(snapshot, "workflow_coverage"): "Rare",
         conformance_page._widget_key(snapshot, "workflow_deviation"): "Model deviations",
         conformance_page._widget_key(snapshot, "workflow_metric_coloring"): "P90 delay",
@@ -1357,7 +1491,9 @@ def test_workflow_controls_from_state_surfaces_pending_filter_reset(
     assert controls["metric_coloring"] == "Conformance bucket"
     assert controls["detail_level"] == "analyst"
     assert controls["conformance_lens"] == "% of paths"
+    assert controls["filter_category"] == "Pathway"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_reset_pending")] is False
+    assert session_state[conformance_page._widget_key(snapshot, "workflow_filter_category")] == "Pathway"
 
 
 def test_reset_workflow_filters_clears_selection_and_restores_defaults(
@@ -1367,6 +1503,7 @@ def test_reset_workflow_filters_clears_selection_and_restores_defaults(
     session_state = {
         conformance_page._widget_key(snapshot, "selected_node"): "FIT_mail",
         conformance_page._widget_key(snapshot, "selected_edge"): "invitation -> fit_mail",
+        conformance_page._widget_key(snapshot, "workflow_filter_category"): "Display",
         conformance_page._widget_key(snapshot, "workflow_coverage"): "Rare",
         conformance_page._widget_key(snapshot, "workflow_deviation"): "Log deviations",
         conformance_page._widget_key(snapshot, "workflow_metric_coloring"): "Median delay",
@@ -1386,6 +1523,7 @@ def test_reset_workflow_filters_clears_selection_and_restores_defaults(
     assert session_state[conformance_page._widget_key(snapshot, "workflow_metric_coloring")] == "Conformance bucket"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_detail_level")] == "Analyst"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_lens")] == "% of paths"
+    assert session_state[conformance_page._widget_key(snapshot, "workflow_filter_category")] == "Pathway"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_reset_pending")] is False
 
 

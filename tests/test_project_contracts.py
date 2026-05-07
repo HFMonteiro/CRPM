@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -21,7 +20,7 @@ def test_ci_runs_on_push_and_pull_request_with_security_gates() -> None:
     assert "permissions:" in workflow
     assert "contents: read" in workflow
     assert "ruff check crpm tests" in workflow
-    assert "ruff format --check crpm tests" in workflow
+    assert "black --check crpm tests" in workflow
     assert "python -m build" in workflow
     assert "build==1.5.0" in workflow
     assert "pip-audit" in workflow

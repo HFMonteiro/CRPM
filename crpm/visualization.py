@@ -2614,7 +2614,8 @@ def filter_workflow_payload(
             ].copy()
     elif detail_key == "analyst":
         if not normalized_edges.empty:
-            normalized_edges = normalized_edges.head(min(len(normalized_edges), 18)).copy()
+            selected_edge_uid = str(payload.get("selected_edge_uid") or "") if isinstance(payload, Mapping) else ""
+            normalized_edges = _select_analyst_workflow_edges(normalized_edges, selected_edge_uid=selected_edge_uid, limit=18)
         if not ordered_nodes.empty and not normalized_edges.empty:
             active_nodes = set(normalized_edges["source"].astype(str).tolist()) | set(normalized_edges["target"].astype(str).tolist())
             deviation_nodes = set(
@@ -2655,6 +2656,16 @@ def filter_workflow_payload(
         normalized_edges,
         filtered_trace_profiles,
     )
+    renderer_role = str(payload.get("renderer_role") or "conformance_explorer") if isinstance(payload, Mapping) else "conformance_explorer"
+    local_focus_hint = (
+        str(payload.get("local_focus_hint"))
+        if isinstance(payload, Mapping) and payload.get("local_focus_hint")
+        else "Local graph focus stays inside the frame; use Pinned exact metrics to persist node or transition metrics."
+    )
+    visible_case_count = _safe_int(filtered_summary.get("visible_case_count", filtered_summary.get("cases_covered", 0)))
+    excluded_case_count = _safe_int(filtered_summary.get("excluded_case_count", 0))
+    path_denominator = _safe_int(filtered_summary.get("path_denominator", visible_case_count))
+    activity_denominator = _safe_int(filtered_summary.get("activity_denominator", 0))
 
     return {
         "nodes": ordered_nodes.reset_index(drop=True),
@@ -2663,10 +2674,62 @@ def filter_workflow_payload(
         "trace_profiles": filtered_trace_profiles.reset_index(drop=True),
         "overall_median_delay_days": overall_median,
         "summary": filtered_summary,
+        "visible_case_count": visible_case_count,
+        "excluded_case_count": excluded_case_count,
+        "path_denominator": path_denominator,
+        "activity_denominator": activity_denominator,
+        "selected_node_id": payload.get("selected_node_id") if isinstance(payload, Mapping) else None,
+        "selected_edge_uid": payload.get("selected_edge_uid") if isinstance(payload, Mapping) else None,
+        "local_focus_hint": local_focus_hint,
+        "renderer_role": renderer_role,
+        "process_map_payload": _workflow_process_map_payload(
+            nodes_df=ordered_nodes.reset_index(drop=True),
+            edges_df=normalized_edges.reset_index(drop=True),
+            legend_df=legend_df.copy(),
+            trace_profiles_df=filtered_trace_profiles.reset_index(drop=True),
+            summary=filtered_summary,
+            renderer_role=renderer_role,
+            selected_node_id=payload.get("selected_node_id") if isinstance(payload, Mapping) else None,
+            selected_edge_uid=payload.get("selected_edge_uid") if isinstance(payload, Mapping) else None,
+        ),
         "renderer_capabilities": dict(payload.get("renderer_capabilities", {})) if isinstance(payload, Mapping) else {},
         "detail_level": detail_key,
         "requested_coverage_view": coverage_key,
         "applied_coverage_view": coverage_key,
+    }
+
+
+def _workflow_process_map_payload(
+    *,
+    nodes_df: pd.DataFrame,
+    edges_df: pd.DataFrame,
+    legend_df: pd.DataFrame,
+    trace_profiles_df: pd.DataFrame,
+    summary: Mapping[str, Any],
+    renderer_role: str,
+    selected_node_id: Any = None,
+    selected_edge_uid: Any = None,
+) -> dict[str, Any]:
+    visible_case_count = _safe_int(summary.get("visible_case_count", summary.get("cases_covered", 0)))
+    excluded_case_count = _safe_int(summary.get("excluded_case_count", 0))
+    return {
+        "renderer_role": renderer_role,
+        "nodes": nodes_df,
+        "edges": edges_df,
+        "legend": legend_df,
+        "trace_profiles": trace_profiles_df,
+        "summary": dict(summary),
+        "denominators": {
+            "visible_case_count": visible_case_count,
+            "excluded_case_count": excluded_case_count,
+            "path_denominator": _safe_int(summary.get("path_denominator", visible_case_count)),
+            "activity_denominator": _safe_int(summary.get("activity_denominator", 0)),
+            "transition_denominator": _safe_int(summary.get("transition_denominator", 0)),
+        },
+        "selection": {
+            "selected_node_id": str(selected_node_id) if selected_node_id else None,
+            "selected_edge_uid": str(selected_edge_uid) if selected_edge_uid else None,
+        },
     }
 
 
@@ -2696,12 +2759,32 @@ def _workflow_view_summary(
     edges_df: pd.DataFrame,
     trace_profiles_df: pd.DataFrame,
 ) -> dict[str, Any]:
+    base_case_count = _safe_int(base_summary.get("visible_case_count", base_summary.get("cases_covered", 0)))
+    if base_case_count <= 0:
+        base_case_count = _safe_int(base_summary.get("path_denominator", 0))
+    path_denominator = _safe_int(base_summary.get("path_denominator", base_case_count))
+    activity_denominator = _safe_int(base_summary.get("activity_denominator", 0))
+    transition_denominator = _safe_int(base_summary.get("transition_denominator", 0))
+    path_denominator_label = str(base_summary.get("path_denominator_label", "cases in evaluation log"))
+    activity_denominator_label = str(base_summary.get("activity_denominator_label", "events in evaluation log"))
+    transition_denominator_label = str(base_summary.get("transition_denominator_label", "observed transitions in evaluation log"))
     if trace_profiles_df.empty:
+        events_covered = int(nodes_df.get("occurrences", pd.Series(dtype=float)).fillna(0).sum()) if not nodes_df.empty else 0
         return {
             "cases_covered": 0,
-            "events_covered": int(nodes_df.get("occurrences", pd.Series(dtype=float)).fillna(0).sum()) if not nodes_df.empty else 0,
+            "events_covered": events_covered,
+            "visible_case_count": 0,
+            "excluded_case_count": max(base_case_count, 0),
+            "path_denominator": path_denominator,
+            "path_denominator_label": path_denominator_label,
+            "activity_denominator": activity_denominator,
+            "activity_denominator_label": activity_denominator_label,
+            "transition_denominator": transition_denominator,
+            "transition_denominator_label": transition_denominator_label,
             "dominant_path_share": 0.0,
             "deviation_share": 0.0,
+            "log_deviation_share": 0.0,
+            "model_deviation_share": 0.0,
             "median_throughput_days": None,
             "visible_nodes": int(len(nodes_df.index)),
             "visible_edges": int(len(edges_df.index)),
@@ -2722,14 +2805,33 @@ def _workflow_view_summary(
     if "has_deviation" in trace_profiles_df.columns:
         deviation_share = round(float(trace_profiles_df["has_deviation"].astype(bool).mean()) * 100, 1)
 
+    visible_case_count = int(len(trace_profiles_df.index))
+    events_covered = int(pd.to_numeric(trace_profiles_df.get("event_count", pd.Series(dtype=float)), errors="coerce").fillna(0).sum())
+    log_deviation_share = 0.0
+    if "has_log_deviation" in trace_profiles_df.columns:
+        log_deviation_share = round(float(trace_profiles_df["has_log_deviation"].astype(bool).mean()) * 100, 1)
+    model_deviation_share = 0.0
+    if "has_model_deviation" in trace_profiles_df.columns:
+        model_deviation_share = round(float(trace_profiles_df["has_model_deviation"].astype(bool).mean()) * 100, 1)
+
     return {
-        "cases_covered": int(len(trace_profiles_df.index)),
-        "events_covered": int(pd.to_numeric(trace_profiles_df.get("event_count", pd.Series(dtype=float)), errors="coerce").fillna(0).sum()),
+        "cases_covered": visible_case_count,
+        "events_covered": events_covered,
+        "visible_case_count": visible_case_count,
+        "excluded_case_count": max(base_case_count - visible_case_count, 0),
+        "path_denominator": path_denominator,
+        "path_denominator_label": path_denominator_label,
+        "activity_denominator": activity_denominator,
+        "activity_denominator_label": activity_denominator_label,
+        "transition_denominator": transition_denominator,
+        "transition_denominator_label": transition_denominator_label,
         "dominant_path_share": dominant_variant_share,
         "deviation_share": deviation_share,
-        "median_throughput_days": round(float(throughput_series.median()), 1)
-        if not throughput_series.empty
-        else base_summary.get("median_throughput_days"),
+        "log_deviation_share": log_deviation_share,
+        "model_deviation_share": model_deviation_share,
+        "median_throughput_days": (
+            round(float(throughput_series.median()), 1) if not throughput_series.empty else base_summary.get("median_throughput_days")
+        ),
         "visible_nodes": int(len(nodes_df.index)),
         "visible_edges": int(len(edges_df.index)),
     }
@@ -2787,6 +2889,28 @@ def create_workflow_interactive_payload(
 ) -> dict[str, Any]:
     """Build a process-map explorer payload from the canonical workflow payload."""
     detail_level = str(detail_level or "analyst").lower()
+    payload_mapping = payload if isinstance(payload, Mapping) else {}
+    payload_summary = payload_mapping.get("summary", {}) if isinstance(payload_mapping.get("summary"), Mapping) else {}
+
+    def _metadata_int(key: str, fallback: int = 0) -> int:
+        for source in (payload_mapping, payload_summary):
+            if key not in source:
+                continue
+            value = source.get(key)
+            if value is not None:
+                return _safe_int(value)
+        return int(fallback)
+
+    visible_case_count = _metadata_int("visible_case_count", _metadata_int("cases_covered", 0))
+    excluded_case_count = _metadata_int("excluded_case_count", 0)
+    path_denominator = _metadata_int("path_denominator", visible_case_count)
+    activity_denominator = _metadata_int("activity_denominator", 0)
+    transition_denominator = _metadata_int("transition_denominator", 0)
+    renderer_role = str(payload_mapping.get("renderer_role") or "conformance_explorer")
+    local_focus_hint = str(
+        payload_mapping.get("local_focus_hint")
+        or "Local graph focus stays inside the frame; use Pinned exact metrics to persist node or transition metrics."
+    )
     nodes_df, edges_df, legend_df, overall_median = _coerce_workflow_payload(payload, None)
     ordered_nodes = _aggregate_explorer_nodes(_order_workflow_nodes(nodes_df))
     normalized_edges = _aggregate_explorer_edges(_normalize_workflow_edges(edges_df, ordered_nodes), ordered_nodes)
@@ -2807,6 +2931,16 @@ def create_workflow_interactive_payload(
             "drawable_bounds": {"min_x": 12.0, "min_y": 12.0, "max_x": 748.0, "max_y": 508.0},
             "fit_padding": {"top": 14.0, "right": 12.0, "bottom": 30.0, "left": 12.0},
             "toolbar_height_hint": 116,
+            "selected_node_id": str(selected_node_id) if selected_node_id else None,
+            "selected_edge_id": str(selected_edge_id) if selected_edge_id else None,
+            "selected_edge_uid": str(selected_edge_id) if selected_edge_id else None,
+            "visible_case_count": visible_case_count,
+            "excluded_case_count": excluded_case_count,
+            "path_denominator": path_denominator,
+            "activity_denominator": activity_denominator,
+            "transition_denominator": transition_denominator,
+            "local_focus_hint": local_focus_hint,
+            "renderer_role": renderer_role,
         }
     if ordered_nodes.empty and not normalized_edges.empty:
         ordered_nodes = _derive_nodes_from_edges(normalized_edges)
@@ -3119,6 +3253,10 @@ def create_workflow_interactive_payload(
                     str(selected_edge_rows.iloc[0].get("target", "")),
                 }
             )
+    if selected_edge_neighbors:
+        for node in node_items:
+            if str(node.get("id", "")) in selected_edge_neighbors:
+                node["neighbor"] = True
 
     max_frequency = max((_safe_int(row.get("frequency", 0)) for _, row in normalized_edges.iterrows()), default=0)
     for _, row in normalized_edges.iterrows():
@@ -3352,6 +3490,14 @@ def create_workflow_interactive_payload(
         "overall_median_delay_days": overall_median,
         "selected_node_id": selected_node,
         "selected_edge_id": selected_edge,
+        "selected_edge_uid": selected_edge,
+        "visible_case_count": visible_case_count,
+        "excluded_case_count": excluded_case_count,
+        "path_denominator": path_denominator,
+        "activity_denominator": activity_denominator,
+        "transition_denominator": transition_denominator,
+        "local_focus_hint": local_focus_hint,
+        "renderer_role": renderer_role,
         "metric_coloring": metric_coloring,
         "detail_level": detail_level,
         "conformance_lens": lens_value,
@@ -3414,6 +3560,14 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
     selected_edge_id = str(explorer_payload.get("selected_edge_id") or "").strip()
     selected_node_js = _script_json(selected_node_id)
     selected_edge_js = _script_json(selected_edge_id)
+    local_focus_hint = str(
+        explorer_payload.get("local_focus_hint")
+        or "Local graph focus stays inside the frame; use Pinned exact metrics to persist node or transition metrics."
+    )
+    local_focus_hint_js = _script_json(local_focus_hint)
+    renderer_role = str(explorer_payload.get("renderer_role") or "conformance_explorer")
+    visible_case_count = _safe_int(explorer_payload.get("visible_case_count", 0))
+    excluded_case_count = _safe_int(explorer_payload.get("excluded_case_count", 0))
     canvas_width = int(explorer_payload.get("width", 1080))
     canvas_height = int(explorer_payload.get("height", 520))
     drawable_width = max(320.0, float(canvas_width))
@@ -3470,11 +3624,17 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
         )
 
     if selected_node_id:
-        selection_state = f"Focused node: {selected_node_id.replace('_', ' ').title()}"
+        selection_state = f"Pinned node: {selected_node_id.replace('_', ' ').title()}"
     elif selected_edge_id:
-        selection_state = "Focused edge"
+        selection_state = "Pinned edge"
     else:
         selection_state = "Overview mode"
+    case_scope_label = ""
+    if visible_case_count or excluded_case_count:
+        case_scope_label = f"{visible_case_count:,} visible cases"
+        if excluded_case_count:
+            case_scope_label += f" · {excluded_case_count:,} excluded"
+    case_scope_badge = f'<span class="crpm-explorer-badge">{escape(case_scope_label)}</span>' if case_scope_label else ""
     coloring_hint = _workflow_metric_coloring_hint(metric_coloring)
     density_hint = _workflow_density_hint(detail_level)
     lens_hint = "Activity lens" if "activit" in conformance_lens.lower() else "Path lens"
@@ -3491,7 +3651,7 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
         mainline_backbone_path = ""
 
     parts = [
-        f'<div class="crpm-workflow-explorer" data-instance="{instance_id}" style="font-family:Segoe UI, Arial, sans-serif;">',
+        f'<div class="crpm-workflow-explorer" data-instance="{instance_id}" data-renderer-role="{escape(renderer_role)}" style="font-family:Segoe UI, Arial, sans-serif;">',
         "<style>"
         ".crpm-workflow-explorer{color:#1d2c34;}"
         ".crpm-explorer-shell{display:grid;gap:6px;}"
@@ -3521,7 +3681,7 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
         ".crpm-explorer-edge.is-muted{opacity:.24;}"
         ".crpm-explorer-node.is-neighbor{opacity:.97;}"
         ".crpm-explorer-edge.is-neighbor{opacity:.74;}"
-        ".crpm-explorer-node.is-focus,.crpm-explorer-edge.is-focus{opacity:1;filter:drop-shadow(0 8px 16px rgba(82,113,170,.14));}"
+        ".crpm-explorer-node.is-focus,.crpm-explorer-edge.is-focus{opacity:1;filter:drop-shadow(0 9px 18px rgba(64,105,180,.24));}"
         "@media (max-width: 920px){.crpm-explorer-toolbar{grid-template-columns:minmax(0,1fr);}.crpm-explorer-toolbar__actions{justify-content:flex-start;}.crpm-explorer-action{flex:0 1 auto;}}"
         "</style>",
         '<div class="crpm-explorer-shell">',
@@ -3532,23 +3692,24 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
         f'<span id="crpm-explorer-selection-chip" class="crpm-explorer-badge">{escape(selection_state)}</span>'
         f'<span class="crpm-explorer-badge">{escape(metric_coloring)}</span>'
         f'<span class="crpm-explorer-badge">{escape(lens_hint)}</span>'
+        f"{case_scope_badge}"
         "</div>",
         f'<div class="crpm-explorer-toolbar__summary">{escape(coloring_hint)} {escape(density_hint)}</div>',
         '<div class="crpm-explorer-status-line">'
         '<div id="crpm-explorer-live-title" class="crpm-explorer-live-title">Overview mode</div>'
-        '<div id="crpm-explorer-live-meta" class="crpm-explorer-live-meta">Click a node or edge for local focus. Use the inspector selector when you need pinned exact metrics.</div>'
+        f'<div id="crpm-explorer-live-meta" class="crpm-explorer-live-meta">{escape(local_focus_hint)}</div>'
         "</div>",
         '<div class="crpm-explorer-legend">'
         '<span class="crpm-explorer-legend__item"><span class="crpm-explorer-legend__swatch" style="background:#9ed2a2;"></span>Conformance class</span>'
         '<span class="crpm-explorer-legend__item"><span class="crpm-explorer-legend__swatch" style="background:#7c98bd;"></span>Timing burden on links</span>'
-        '<span class="crpm-explorer-toolbar__sub">Reference flow now reads top to bottom. Use local focus to inspect neighboring transitions without losing the full pathway.</span>'
+        '<span class="crpm-explorer-toolbar__sub">Reference flow now reads top to bottom. Local graph focus is separate from pinned exact metrics.</span>'
         "</div>",
         "</div>",
         '<div class="crpm-explorer-toolbar__actions">',
         '<button id="crpm-explorer-zoom-in" class="crpm-explorer-action" type="button">Zoom in</button>',
         '<button id="crpm-explorer-zoom-out" class="crpm-explorer-action" type="button">Zoom out</button>',
-        '<button id="crpm-explorer-clear-focus" class="crpm-explorer-action" type="button">Clear focus</button>',
-        '<button id="crpm-explorer-reset-view" class="crpm-explorer-action crpm-explorer-action--reset" type="button">Reset view</button>',
+        '<button id="crpm-explorer-clear-focus" class="crpm-explorer-action" type="button">Clear local focus</button>',
+        '<button id="crpm-explorer-reset-view" class="crpm-explorer-action crpm-explorer-action--reset" type="button">Reset graph view</button>',
         "</div></div>",
         '<div class="crpm-explorer-canvas">',
         '<div class="crpm-explorer-figure" style="width:100%;">',
@@ -3659,7 +3820,7 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
         elif edge["neighbor"]:
             edge_classes.append("is-neighbor")
         edge_stroke = str(edge.get("stroke", "#86ae9b")) if is_mainline_edge else "#a9b5c0"
-        base_stroke_width = float(edge["stroke_width"]) + (0.52 if edge["selected"] else (0.18 if is_mainline_edge else 0.06))
+        base_stroke_width = float(edge["stroke_width"]) + (1.0 if edge["selected"] else (0.18 if is_mainline_edge else 0.06))
         conformance_bucket = str(edge.get("conformance_bucket", "Conformant"))
         if edge["selected"]:
             marker_id = "workflow-explorer-arrow-mainline"
@@ -3767,7 +3928,7 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
         )
         if node["selected"]:
             parts.append(
-                f'<rect x="{node["x"] - 4:.1f}" y="{node["y"] - 4:.1f}" width="{node["width"] + 8:.1f}" height="{node["height"] + 8:.1f}" rx="{card_radius + 2.0:.1f}" ry="{card_radius + 2.0:.1f}" fill="none" stroke="{node["stroke"]}" stroke-width="1.5" opacity="0.14" filter="url(#workflow-explorer-glow)"/>'
+                f'<rect x="{node["x"] - 5:.1f}" y="{node["y"] - 5:.1f}" width="{node["width"] + 10:.1f}" height="{node["height"] + 10:.1f}" rx="{card_radius + 2.5:.1f}" ry="{card_radius + 2.5:.1f}" fill="none" stroke="{node["stroke"]}" stroke-width="2.4" opacity="0.46" filter="url(#workflow-explorer-glow)"/>'
             )
         card_fill = node.get("surface_fill", "#ffffff")
         chip_label = node["conformance_bucket"] if metric_coloring == "Conformance bucket" else node["severity"]
@@ -3865,6 +4026,7 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             "let baselineTx = 0.0;",
             "let baselineTy = 0.0;",
             "let zoomFactor = 1.0;",
+            "const localFocusHint = " + local_focus_hint_js + ";",
             "const computeBaselineFit = () => {",
             "  const availableWidth = Math.max(1, drawableMaxX - drawableMinX);",
             "  const availableHeight = Math.max(1, drawableMaxY - drawableMinY);",
@@ -3881,7 +4043,7 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             "const setOverview = () => {",
             "  setChip('Overview mode');",
             "  liveTitle.textContent = 'Overview mode';",
-            "  liveMeta.textContent = 'Click a node or edge for local focus. Use the inspector selector when you need pinned exact metrics.';",
+            "  liveMeta.textContent = localFocusHint;",
             "};",
             "const resetFocusClasses = () => {",
             "  nodeEls.forEach((el) => el.classList.remove('is-focus', 'is-neighbor', 'is-muted'));",
@@ -3925,7 +4087,7 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             "  const bucket = nodeEl.getAttribute('data-bucket') || 'Conformant';",
             "  const median = fmtDays(nodeEl.getAttribute('data-median'));",
             "  const neighborCount = Math.max(0, relatedNodes.size - 1);",
-            "  setChip('Focused node');",
+            "  setChip('Local node focus');",
             "  liveTitle.textContent = label;",
             "  liveMeta.textContent = `${cases} cases · ${bucket} · median ${median} · ${neighborCount} neighboring step${neighborCount === 1 ? '' : 's'}`;",
             "};",
@@ -3960,7 +4122,7 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             "  const freq = edgeEl.getAttribute('data-frequency') || '0';",
             "  const bucket = edgeEl.getAttribute('data-bucket') || 'Conformant';",
             "  const median = fmtDays(edgeEl.getAttribute('data-median'));",
-            "  setChip('Focused edge');",
+            "  setChip('Local edge focus');",
             "  liveTitle.textContent = caption;",
             "  liveMeta.textContent = `${freq} events · ${bucket} · median ${median} · endpoints ${source || 'n/a'} / ${target || 'n/a'}`;",
             "};",
@@ -3990,8 +4152,8 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             "}",
             "const initialNode = nodeEls.find((el) => (el.getAttribute('data-node-id') || '') === " + selected_node_js + ");",
             "const initialEdge = edgeEls.find((el) => (el.getAttribute('data-edge-id') || '') === " + selected_edge_js + ");",
-            "if (initialNode) { focusNode(initialNode); }",
-            "else if (initialEdge) { focusEdge(initialEdge); }",
+            "if (initialNode) { focusNode(initialNode); setChip('Pinned node'); liveMeta.textContent = `Pinned exact metrics · ${liveMeta.textContent}`; }",
+            "else if (initialEdge) { focusEdge(initialEdge); setChip('Pinned edge'); liveMeta.textContent = `Pinned exact metrics · ${liveMeta.textContent}`; }",
             "else { setOverview(); }",
             "})();",
             "</script>",
@@ -4305,6 +4467,56 @@ def _order_workflow_nodes(nodes_df: pd.DataFrame) -> pd.DataFrame:
     return working.sort_values(by=sort_cols, ascending=ascending, kind="stable").reset_index(drop=True)
 
 
+def workflow_edge_uid(
+    edge_id: object, conformance_bucket: object = "Conformant", edge_type: object = "expected", branch_family: object = "mainline"
+) -> str:
+    """Build the semantic workflow edge identifier used by runtime and renderers."""
+    return "|".join(
+        token
+        for token in (
+            str(edge_id or "").strip(),
+            str(conformance_bucket or "Conformant").strip(),
+            str(edge_type or "expected").strip(),
+            str(branch_family or "mainline").strip(),
+        )
+        if token
+    )
+
+
+def _select_analyst_workflow_edges(edges_df: pd.DataFrame, *, selected_edge_uid: str = "", limit: int = 18) -> pd.DataFrame:
+    if edges_df.empty or len(edges_df) <= limit:
+        return edges_df.copy()
+
+    working = edges_df.copy()
+    severity_rank = {"High": 0, "Medium": 1, "Low": 2}
+    branch_roles = working.get("branch_role", pd.Series(["side"] * len(working), index=working.index)).astype(str).str.lower()
+    buckets = working.get("conformance_bucket", pd.Series(["Conformant"] * len(working), index=working.index)).astype(str)
+    edge_uids = working.get("edge_uid", pd.Series([""] * len(working), index=working.index)).astype(str)
+    selected_mask = edge_uids.eq(str(selected_edge_uid)) if selected_edge_uid else pd.Series([False] * len(working), index=working.index)
+    retained = working.loc[selected_mask | branch_roles.eq("mainline")].copy()
+
+    remaining = working.drop(index=retained.index, errors="ignore").copy()
+    if not remaining.empty:
+        remaining_severity = remaining.get("severity", pd.Series(["Low"] * len(remaining), index=remaining.index))
+        remaining_frequency = remaining.get("frequency", pd.Series([0] * len(remaining), index=remaining.index))
+        remaining_share = remaining.get("share_pct", pd.Series([0] * len(remaining), index=remaining.index))
+        remaining["_deviation_rank"] = buckets.loc[remaining.index].ne("Conformant").map({True: 0, False: 1})
+        remaining["_severity_rank"] = remaining_severity.astype(str).map(severity_rank).fillna(3)
+        remaining["_frequency_rank"] = remaining_frequency.fillna(0).astype(float) * -1
+        remaining["_share_rank"] = remaining_share.fillna(0).astype(float) * -1
+        remaining = remaining.sort_values(
+            by=["_deviation_rank", "_severity_rank", "_frequency_rank", "_share_rank", "edge_id"],
+            ascending=[True, True, True, True, True],
+        ).drop(columns=["_deviation_rank", "_severity_rank", "_frequency_rank", "_share_rank"], errors="ignore")
+
+    combined = pd.concat([retained, remaining], ignore_index=False)
+    if len(combined) > limit and selected_edge_uid:
+        selected_rows = combined.loc[combined.get("edge_uid", pd.Series(dtype=str)).astype(str).eq(str(selected_edge_uid))]
+        rest = combined.drop(index=selected_rows.index, errors="ignore").head(max(limit - len(selected_rows), 0))
+        combined = pd.concat([selected_rows, rest], ignore_index=False)
+    return combined.head(limit).copy()
+
+
 def _normalize_workflow_edges(edges_df: pd.DataFrame, nodes_df: pd.DataFrame) -> pd.DataFrame:
     if edges_df.empty:
         return edges_df
@@ -4333,29 +4545,31 @@ def _normalize_workflow_edges(edges_df: pd.DataFrame, nodes_df: pd.DataFrame) ->
     _ensure_workflow_string_column(working, "stroke_style", "solid")
     if "edge_uid" not in working.columns:
         working["edge_uid"] = working.apply(
-            lambda row: (
+            lambda row: workflow_edge_uid(
                 (
                     str(row.get("edge_id", "")).strip()
                     if str(row.get("edge_id", "")).strip()
                     else f"{str(row.get('source', '')).strip()} -> {str(row.get('target', '')).strip()}"
-                )
-                + "|"
-                + "|".join(
-                    token
-                    for token in (
-                        str(row.get("business_label", "")).strip(),
-                        str(row.get("branch_role", "mainline")).strip(),
-                        str(row.get("coverage_group", "dominant")).strip(),
-                        str(row.get("conformance_bucket", "Conformant")).strip(),
-                        str(row.get("severity", "Low")).strip(),
-                    )
-                    if token
-                )
-            ).strip("|"),
+                ),
+                row.get("conformance_bucket", "Conformant"),
+                row.get("edge_type", "expected"),
+                row.get("branch_family", "mainline"),
+            ),
             axis=1,
         )
     else:
         working["edge_uid"] = working["edge_uid"].astype(str)
+    duplicate_uid_mask = working["edge_uid"].duplicated(keep=False)
+    if duplicate_uid_mask.any():
+        working.loc[duplicate_uid_mask, "edge_uid"] = working.loc[duplicate_uid_mask].apply(
+            lambda row: workflow_edge_uid(
+                row.get("edge_uid"),
+                row.get("severity", "Low"),
+                row.get("coverage_group", "dominant"),
+                row.get("branch_role", "mainline"),
+            ),
+            axis=1,
+        )
     if "share_pct" not in working.columns:
         total_edges = float(working["frequency"].sum() or 1.0)
         working["share_pct"] = working["frequency"].fillna(0).astype(float) / total_edges * 100.0
@@ -4813,4 +5027,5 @@ __all__ = [
     "render_workflow_explorer_html",
     "create_workflow_cytoscape_payload",
     "create_workflow_conformance_sankey",
+    "workflow_edge_uid",
 ]

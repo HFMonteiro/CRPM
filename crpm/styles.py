@@ -15,6 +15,7 @@ def get_custom_css() -> str:
         --crpm-sidebar-text: #eef3f8;
         --crpm-sidebar-text-soft: #b4c0cd;
         --crpm-sidebar-accent: #6f88c6;
+        --crpm-sidebar-width: 14rem;
         --crpm-surface: #fcfbfd;
         --crpm-surface-alt: #f7f4fa;
         --crpm-forest: #365348;
@@ -57,9 +58,6 @@ def get_custom_css() -> str:
         padding: 0.32rem 0.65rem !important;
         box-shadow: 0 5px 16px rgba(50, 41, 66, 0.055) !important;
         backdrop-filter: blur(14px) !important;
-        position: relative !important;
-        top: auto !important;
-        z-index: 20 !important;
     }
 
     [data-testid="stHeader"] [data-testid="stToolbar"],
@@ -68,7 +66,8 @@ def get_custom_css() -> str:
     }
 
     .block-container {
-        max-width: min(1580px, calc(100vw - 15.7rem)) !important;
+        max-width: min(1580px, 100%) !important;
+        width: 100% !important;
         margin: 0 auto !important;
         padding-top: 2.1rem !important;
         padding-bottom: 7rem !important;
@@ -330,6 +329,88 @@ def get_custom_css() -> str:
         line-height: 1.12;
     }
 
+    .crpm-filter-parent-label {
+        margin: 0.12rem 0 0.28rem 0;
+        font-size: 0.72rem;
+        font-weight: 800;
+        line-height: 1.1;
+        color: #34465b;
+    }
+
+    .crpm-filter-composer {
+        display: grid;
+        gap: 0.12rem;
+        margin: 0.24rem 0 0.34rem 0;
+        padding: 0.46rem 0.52rem;
+        border-radius: 8px;
+        border: 1px solid rgba(157, 173, 190, 0.28);
+        background: #ffffff;
+        box-shadow: 0 2px 8px rgba(28, 45, 64, 0.032);
+    }
+
+    .crpm-filter-composer__title {
+        font-size: 0.72rem;
+        font-weight: 800;
+        line-height: 1.12;
+        color: #142233;
+    }
+
+    .crpm-filter-composer__body {
+        font-size: 0.74rem;
+        line-height: 1.18;
+        color: #59687a;
+    }
+
+    .crpm-active-filter-summary {
+        display: grid;
+        gap: 0.3rem;
+        margin: 0.34rem 0 0.42rem 0;
+        padding: 0.48rem 0.52rem;
+        border-radius: 8px;
+        border: 1px solid rgba(157, 173, 190, 0.3);
+        background: #f8fafc;
+    }
+
+    .crpm-active-filter-summary__title {
+        font-size: 0.74rem;
+        font-weight: 800;
+        line-height: 1.14;
+        color: #34465b;
+        text-transform: uppercase;
+    }
+
+    .crpm-active-filter-summary__chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.26rem;
+    }
+
+    .crpm-active-filter-summary__chip {
+        display: inline-grid;
+        gap: 0.02rem;
+        max-width: 100%;
+        padding: 0.28rem 0.38rem;
+        border-radius: 7px;
+        border: 1px solid rgba(151, 166, 184, 0.32);
+        background: #ffffff;
+        color: #26384d;
+    }
+
+    .crpm-active-filter-summary__chip span {
+        font-size: 0.72rem;
+        line-height: 1.12;
+        color: #667789;
+    }
+
+    .crpm-active-filter-summary__chip strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.72rem;
+        line-height: 1.08;
+        color: #142233;
+    }
+
     .crpm-overview-command-center,
     .crpm-conformance-cockpit-marker {
         margin: 0;
@@ -340,23 +421,30 @@ def get_custom_css() -> str:
     .crpm-overview-map-frame {
         margin: 0 0 0.42rem 0;
         padding: 0.46rem;
+        height: clamp(280px, 38vh, 420px);
         border-radius: 8px;
         border: 1px solid rgba(157, 173, 190, 0.34);
         background: #ffffff;
         box-shadow: 0 4px 12px rgba(28, 45, 64, 0.05);
+        overflow: auto;
     }
 
     .crpm-overview-map-frame .crpm-workflow-board {
         margin: 0;
+        min-height: 280px;
         border-radius: 6px;
         box-shadow: none;
+    }
+
+    .crpm-overview-map-frame .crpm-workflow-board svg {
+        min-height: 280px;
     }
 
     .crpm-dashboard-map-toolbar {
         border-radius: 8px !important;
         border-color: rgba(157, 173, 190, 0.34) !important;
         background: #ffffff !important;
-        box-shadow: 0 3px 10px rgba(28, 45, 64, 0.045) !important;
+        box-shadow: 0 2px 8px rgba(28, 45, 64, 0.035) !important;
     }
 
     .crpm-conformance-kpi-strip--cockpit {
@@ -462,21 +550,21 @@ def get_custom_css() -> str:
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #1a2026 0%, #151b21 100%) !important;
         border-right: 1px solid var(--crpm-sidebar-border) !important;
-        min-width: 15.3rem !important;
-        max-width: 15.3rem !important;
+        min-width: var(--crpm-sidebar-width) !important;
+        max-width: var(--crpm-sidebar-width) !important;
         box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.03) !important;
     }
 
     [data-testid="stSidebar"] > div:first-child {
-        width: 15.3rem !important;
-        min-width: 15.3rem !important;
-        max-width: 15.3rem !important;
+        width: var(--crpm-sidebar-width) !important;
+        min-width: var(--crpm-sidebar-width) !important;
+        max-width: var(--crpm-sidebar-width) !important;
     }
 
     [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
         padding-top: 0.4rem !important;
-        padding-left: 0.8rem !important;
-        padding-right: 0.8rem !important;
+        padding-left: 0.68rem !important;
+        padding-right: 0.68rem !important;
         color: var(--crpm-sidebar-text) !important;
     }
 
@@ -484,7 +572,7 @@ def get_custom_css() -> str:
     [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] label,
     [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] span {
         color: var(--crpm-sidebar-text) !important;
-        font-size: 0.78rem !important;
+        font-size: 0.84rem !important;
     }
 
     [data-testid="stSidebar"] h1,
@@ -501,7 +589,7 @@ def get_custom_css() -> str:
     [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p,
     [data-testid="stSidebar"] [data-testid="stCaptionContainer"] span {
         color: var(--crpm-sidebar-text-soft) !important;
-        font-size: 0.68rem !important;
+        font-size: 0.72rem !important;
     }
 
     .stButton button,
@@ -560,16 +648,51 @@ def get_custom_css() -> str:
         box-shadow: 0 0 0 4px rgba(96, 127, 205, 0.18), 0 12px 24px rgba(42, 46, 86, 0.18) !important;
     }
 
-    .stButton button[kind="secondary"] {
+    .stButton button[kind="secondary"],
+    [data-testid="stBaseButton-secondary"] {
         background: rgba(255, 255, 255, 0.76) !important;
         color: var(--crpm-forest-strong) !important;
-        border: 1px solid rgba(142, 122, 168, 0.22) !important;
+        border: 1px solid rgba(101, 120, 143, 0.3) !important;
         width: auto !important;
         min-width: 4.8rem !important;
-        min-height: 1.95rem !important;
-        padding: 0.24rem 0.48rem !important;
+        min-height: 2.05rem !important;
+        padding: 0.24rem 0.5rem !important;
         font-size: 0.72rem !important;
         line-height: 1 !important;
+        justify-content: center !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+
+    .stButton button[kind="secondary"] *,
+    [data-testid="stBaseButton-secondary"] * {
+        color: var(--crpm-forest-strong) !important;
+        font-size: inherit !important;
+        line-height: 1.05 !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+    }
+
+    .stButton button[kind="tertiary"],
+    [data-testid="stBaseButton-tertiary"] {
+        width: 100% !important;
+        min-height: 2.28rem !important;
+        padding: 0.38rem 0.62rem !important;
+        border-radius: 8px !important;
+        border: 1px solid rgba(101, 120, 143, 0.28) !important;
+        background: rgba(255, 255, 255, 0.78) !important;
+        color: #26384d !important;
+        box-shadow: 0 1px 5px rgba(28, 45, 64, 0.03) !important;
+        justify-content: center !important;
+    }
+
+    .stButton button[kind="tertiary"] *,
+    [data-testid="stBaseButton-tertiary"] * {
+        color: #26384d !important;
+        font-size: 0.76rem !important;
+        line-height: 1.08 !important;
+        white-space: nowrap !important;
     }
 
     .stAlert {
@@ -1373,9 +1496,9 @@ def get_custom_css() -> str:
     }
 
     .crpm-conformance-panel--rail {
-        border-color: rgba(71, 88, 79, 0.09);
-        background: linear-gradient(180deg, rgba(251, 250, 253, 0.98) 0%, rgba(247, 244, 250, 0.98) 100%);
-        box-shadow: 0 5px 12px rgba(50, 41, 66, 0.045);
+        border-color: rgba(157, 173, 190, 0.22);
+        background: #ffffff;
+        box-shadow: 0 2px 8px rgba(28, 45, 64, 0.032);
     }
 
     .crpm-conformance-side-title {
@@ -1408,20 +1531,18 @@ def get_custom_css() -> str:
     .crpm-conformance-side-rail {
         margin: 0 0 0.06rem 0;
         padding: 0.42rem 0.5rem 0.34rem 0.5rem;
-        border-radius: 18px;
-        border: 1px solid rgba(71, 88, 79, 0.1);
-        background:
-            radial-gradient(circle at top right, rgba(95, 121, 165, 0.06), transparent 30%),
-            linear-gradient(180deg, rgba(252, 251, 253, 0.99) 0%, rgba(247, 244, 250, 0.98) 100%);
-        box-shadow: 0 6px 14px rgba(50, 41, 66, 0.05);
+        border-radius: 8px;
+        border: 1px solid rgba(157, 173, 190, 0.26);
+        background: #ffffff;
+        box-shadow: 0 2px 8px rgba(28, 45, 64, 0.032);
     }
 
     .crpm-conformance-side-rail--filters {
-        border-left: 4px solid rgba(85, 124, 147, 0.26);
+        border-left: 3px solid rgba(85, 124, 147, 0.24);
     }
 
     .crpm-conformance-side-rail--inspector {
-        border-left: 4px solid rgba(100, 89, 148, 0.2);
+        border-left: 3px solid rgba(100, 89, 148, 0.18);
     }
 
     .crpm-conformance-side-lead {
@@ -1438,10 +1559,10 @@ def get_custom_css() -> str:
     .crpm-conformance-evidence-band {
         margin: 0 0 0.12rem 0;
         padding: 0.38rem 0.54rem;
-        border-radius: 15px;
-        border: 1px solid rgba(71, 88, 79, 0.12);
-        background: linear-gradient(180deg, rgba(252, 251, 253, 0.98) 0%, rgba(247, 249, 252, 0.98) 100%);
-        box-shadow: var(--crpm-shadow-soft);
+        border-radius: 8px;
+        border: 1px solid rgba(157, 173, 190, 0.26);
+        background: #ffffff;
+        box-shadow: 0 2px 8px rgba(28, 45, 64, 0.032);
     }
 
     .crpm-conformance-hero__eyebrow,
@@ -1493,7 +1614,7 @@ def get_custom_css() -> str:
     }
 
     .crpm-conformance-hero__badge span {
-        font-size: 0.58rem;
+        font-size: 0.72rem;
         font-weight: 700;
         letter-spacing: 0.05em;
         text-transform: uppercase;
@@ -1671,6 +1792,7 @@ def get_custom_css() -> str:
     .crpm-dfg-vector {
         margin: 0.12rem 0 0.56rem 0;
         padding: 0.72rem 0.82rem;
+        min-height: 272px;
         border-radius: 18px;
         border: 1px solid rgba(71, 88, 79, 0.12);
         background: rgba(252, 251, 253, 0.98);
@@ -1678,9 +1800,14 @@ def get_custom_css() -> str:
         overflow: auto;
     }
 
+    .crpm-dfg-map-canvas {
+        min-height: 272px;
+    }
+
     .crpm-dfg-vector svg {
         min-width: 100%;
-        height: auto;
+        height: clamp(240px, 30vh, 340px);
+        width: auto;
     }
 
     .stMarkdown ul, .stMarkdown ol {
@@ -2288,9 +2415,9 @@ def get_custom_css() -> str:
     }
 
     .crpm-header-badges {
-        position: sticky;
+        position: static;
         top: 0.34rem;
-        z-index: 108;
+        z-index: auto;
         display: flex;
         align-items: center;
         gap: 0.42rem;

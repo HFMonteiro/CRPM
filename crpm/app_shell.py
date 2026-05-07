@@ -15,6 +15,7 @@ from crpm.app_runtime import (
     compute_analysis_signature,
     compute_log_stats,
     first_event_names,
+    list_safe_local_xes_files,
     preview_csv_dataframe,
     resolve_csv_log,
     resolve_xes_log,
@@ -51,8 +52,7 @@ def _svg_data_uri(svg_markup: str) -> str:
     return f"data:image/svg+xml;base64,{encoded}"
 
 
-UP_BADGE_SRC = _svg_data_uri(
-    """
+UP_BADGE_SRC = _svg_data_uri("""
     <svg xmlns="http://www.w3.org/2000/svg" width="196" height="64" viewBox="0 0 196 64" role="img" aria-label="Universidade do Porto">
       <rect width="196" height="64" rx="14" fill="#ffffff"/>
       <rect x="6" y="6" width="52" height="52" rx="10" fill="#111111"/>
@@ -60,11 +60,9 @@ UP_BADGE_SRC = _svg_data_uri(
       <text x="71" y="27" fill="#141414" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="800" letter-spacing="1.6">PORTO</text>
       <text x="71" y="46" fill="#55606d" font-family="Arial, Helvetica, sans-serif" font-size="8.5" font-weight="700" letter-spacing="1.1">UNIVERSIDADE DO PORTO</text>
     </svg>
-    """.strip()
-)
+    """.strip())
 
-FMUP_BADGE_SRC = _svg_data_uri(
-    """
+FMUP_BADGE_SRC = _svg_data_uri("""
     <svg xmlns="http://www.w3.org/2000/svg" width="232" height="64" viewBox="0 0 232 64" role="img" aria-label="Faculdade de Medicina da Universidade do Porto">
       <rect width="232" height="64" rx="14" fill="#ffffff"/>
       <rect x="6" y="6" width="52" height="52" rx="10" fill="#111111"/>
@@ -73,8 +71,7 @@ FMUP_BADGE_SRC = _svg_data_uri(
       <rect x="71" y="32" width="88" height="10" rx="5" fill="#ffd54a"/>
       <text x="71" y="53" fill="#55606d" font-family="Arial, Helvetica, sans-serif" font-size="8.5" font-weight="700" letter-spacing="0.8">FACULDADE DE MEDICINA</text>
     </svg>
-    """.strip()
-)
+    """.strip())
 
 
 def render_app() -> None:
@@ -269,15 +266,11 @@ def _render_analysis_controls(state: CRPMState) -> None:
     st.sidebar.markdown("### Analysis Setup")
     config = state.config
     results = state.results
-    config.workflow_cohort_policy = WORKFLOW_COHORT_FIRST_EVENT_DIRECT
     st.sidebar.caption("Run badge: Direct workflow mode · First-event gate")
     with st.sidebar.expander("How to use this sidebar", expanded=False):
         st.caption(
-            "1. Load a log. 2. Choose filters and algorithms. 3. Run analysis. "
-            "If you change settings after a successful run, the current results are invalidated until you rerun."
-        )
-        st.caption(
-            "Use case-cohort date filtering for most screening analyses. Event clipping is an advanced mode that can change trace structure."
+            "Load a log, confirm the first-event gate, then run analysis. "
+            "Advanced date, algorithm, split, and follow-up controls stay below."
         )
 
     source_type = st.sidebar.radio(
@@ -298,8 +291,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
                 key="crpm_xes_logs_directory",
                 help="Local paths are used only for loading; run metadata shown in the UI is redacted.",
             )
-        logs_dir = Path(config.xes_logs_directory)
-        xes_options = [str(path) for path in sorted(logs_dir.glob("*.xes"))] if logs_dir.exists() else []
+        xes_options = list_safe_local_xes_files(config.xes_logs_directory)
         uploaded_xes = st.sidebar.file_uploader("Upload XES log", type=["xes"], key="crpm_xes_upload")
 
         if xes_options:
@@ -383,6 +375,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
         key="crpm_start_filter",
         help="Production discovery/conformance/DFG mode keeps cases whose first event matches this gate. Use All only outside the paper-aligned production workflow.",
     )
+    run_button_slot = st.sidebar.empty()
     with st.sidebar.expander("Advanced setup", expanded=False):
         config.apply_date_filter = st.checkbox(
             "Apply date filter",
@@ -491,7 +484,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
             config_change_message="Analysis settings changed. Click Run analysis to refresh the stabilized shell results.",
         )
 
-    if st.sidebar.button("Run analysis", type="primary", use_container_width=True, key="crpm_run_analysis"):
+    if run_button_slot.button("Run analysis", type="primary", use_container_width=True, key="crpm_run_analysis"):
         try:
             run_discovery_comparison_pipeline(
                 state,
@@ -505,8 +498,8 @@ def _render_analysis_controls(state: CRPMState) -> None:
                 random_seed=config.random_seed,
                 followup_days=followup_days,
             )
-        except Exception:
-            logger.exception("Analysis run failed")
+        except Exception as exc:
+            logger.warning("Analysis run failed: %s", exc.__class__.__name__)
             results.reset(
                 input_name=loaded_log.input_name,
                 log_signature=loaded_log.log_signature,

@@ -66,9 +66,14 @@ def test_overview_and_bi_card_styles_exist() -> None:
     assert ".crpm-dashboard-topbar" in css
     assert ".crpm-dashboard-bar-list" in css
     assert ".crpm-dashboard-card-stack" in css
+    assert ".crpm-filter-parent-label" in css
+    assert ".crpm-filter-composer" in css
+    assert ".crpm-active-filter-summary" in css
+    assert '[data-testid="stBaseButton-tertiary"]' in css
     assert ".crpm-dashboard-section-title" in css
     assert ".crpm-overview-command-center" in css
     assert ".crpm-overview-map-frame" in css
+    assert "height: clamp(280px, 38vh, 420px);" in css
     assert ".crpm-bi-card-grid" in css
     assert ".crpm-page-card-grid" in css
     assert ".crpm-reading-order-band" in css
@@ -80,11 +85,35 @@ def test_overview_and_bi_card_styles_exist() -> None:
     assert ".crpm-fmup-badge" in css
 
 
+def test_dfg_map_canvas_has_desktop_height_guard() -> None:
+    css = get_custom_css()
+    assert ".crpm-dfg-map-canvas" in css
+    assert "min-height: 272px;" in css
+    assert "height: clamp(240px, 30vh, 340px);" in css
+
+
 def test_dashboard_header_avoids_cockpit_clipping() -> None:
     css = get_custom_css()
     assert '[data-testid="stHeader"]' in css
-    assert "position: relative !important;" in css
+    assert "position: relative !important;" not in css
     assert "scroll-padding-top: 4.25rem;" in css
+    assert ".crpm-header-badges {\n        position: static;" in css
+    assert "z-index: auto;" in css
     assert ".crpm-dashboard-map-toolbar" in css
     assert "scroll-margin-top: 4.25rem;" in css
     assert "@media (max-width: 1180px)" in css
+
+
+def test_sidebar_width_is_tokenized_for_process_map_space() -> None:
+    css = get_custom_css()
+    assert "--crpm-sidebar-width: 14rem;" in css
+    assert "min(1580px, 100%)" in css
+    assert "min-width: var(--crpm-sidebar-width) !important;" in css
+    assert "width: var(--crpm-sidebar-width) !important;" in css
+
+
+def test_dense_filter_text_keeps_readable_minimum_sizes() -> None:
+    css = get_custom_css()
+    assert ".crpm-active-filter-summary__title {\n        font-size: 0.74rem;" in css
+    assert ".crpm-active-filter-summary__chip span {\n        font-size: 0.72rem;" in css
+    assert ".crpm-conformance-hero__badge span {\n        font-size: 0.72rem;" in css

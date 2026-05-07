@@ -9,7 +9,7 @@ from collections import Counter, defaultdict
 import tempfile
 import time
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Optional
 import xml.etree.ElementTree as ET
@@ -25,9 +25,12 @@ from crpm.interpretations import assess_bottleneck_severity, assess_fitness, ass
 from crpm.pipeline import csv_to_event_log, split_log_random
 from crpm.screening import describe_followup_window, filter_log_by_incident_period
 
-
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
+_XML_SCAN_CHUNK_BYTES = 64 * 1024
+_XML_SCAN_OVERLAP_BYTES = 128
 CONFORMANCE_WORKSPACE_CACHE_VERSION = "workflow-v3"
+WORKFLOW_RENDERER_ROLE = "conformance_explorer"
+WORKFLOW_LOCAL_FOCUS_HINT = "Local graph focus stays inside the frame; use Pinned exact metrics to persist node or transition metrics."
 logger = logging.getLogger(__name__)
 
 
@@ -61,6 +64,28 @@ def make_file_signature(path: Path) -> str:
     except OSError:
         return str(path.resolve())
     return f"{path.resolve()}::{stat.st_size}::{stat.st_mtime_ns}"
+
+
+def _is_unc_path(path: Path) -> bool:
+    return str(path).startswith(("\\\\", "//")) or bool(path.drive.startswith("\\\\"))
+
+
+def list_safe_local_xes_files(directory: str | Path) -> list[str]:
+    """Return local XES files from a trusted desktop path without touching UNC shares."""
+    try:
+        path = Path(directory)
+    except (TypeError, ValueError):
+        return []
+    if _is_unc_path(path):
+        logger.warning("Local XES directory rejected: UNC paths are not allowed.")
+        return []
+    try:
+        if not path.exists() or not path.is_dir():
+            return []
+        return [str(candidate) for candidate in sorted(path.glob("*.xes")) if candidate.is_file()]
+    except OSError:
+        logger.warning("Local XES directory rejected: path could not be inspected.")
+        return []
 
 
 def make_uploaded_signature(raw: bytes, label: str) -> str:
@@ -226,13 +251,24 @@ def _make_log_case_signature(log: EventLog) -> str:
     return hashlib.sha1(repr(case_fingerprint).encode("utf-8")).hexdigest()
 
 
+def _workflow_timestamp(value: Any) -> Optional[datetime]:
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _workflow_event_sort_key(event: Mapping[str, Any], index: int) -> tuple[datetime, int]:
+    timestamp = _workflow_timestamp(event.get("time:timestamp"))
+    return (timestamp if timestamp is not None else datetime.max, index)
+
+
 def _validate_xes_bytes(raw_bytes: bytes) -> None:
     _ensure_upload_size(raw_bytes)
     if not raw_bytes.strip():
         raise ValueError("XES validation failed: file is empty.")
-    lowered_head = raw_bytes[:65536].lower()
-    if b"<!doctype" in lowered_head or b"<!entity" in lowered_head:
-        raise ValueError("XES validation failed: unsafe XML declaration is not allowed.")
+    _reject_unsafe_xml_bytes(raw_bytes)
     try:
         parser = ET.iterparse(io.BytesIO(raw_bytes), events=("start",))
         _, root = next(parser)
@@ -244,17 +280,18 @@ def _validate_xes_bytes(raw_bytes: bytes) -> None:
 
 
 def _validate_xes_file(path: Path) -> int:
+    if _is_unc_path(path):
+        raise ValueError("XES validation failed: network paths are not allowed.")
+    if path.suffix.lower() != ".xes":
+        raise ValueError("XES validation failed: selected file must use the .xes extension.")
     if not path.exists() or not path.is_file():
         raise ValueError("XES validation failed: selected file is unavailable.")
     size = path.stat().st_size
+    if size == 0:
+        raise ValueError("XES validation failed: file is empty.")
     if size > MAX_UPLOAD_BYTES:
         raise ValueError("XES validation failed: selected file exceeds the supported size limit.")
-    with path.open("rb") as handle:
-        head = handle.read(65536).lower()
-    if not head.strip():
-        raise ValueError("XES validation failed: file is empty.")
-    if b"<!doctype" in head or b"<!entity" in head:
-        raise ValueError("XES validation failed: unsafe XML declaration is not allowed.")
+    _reject_unsafe_xml_file(path)
     try:
         parser = ET.iterparse(path, events=("start",))
         _, root = next(parser)
@@ -264,6 +301,25 @@ def _validate_xes_file(path: Path) -> int:
     if root_name != "log":
         raise ValueError("XES validation failed: root element must be a XES log.")
     return size
+
+
+def _reject_unsafe_xml_bytes(raw_bytes: bytes) -> None:
+    lowered = raw_bytes.lower()
+    if b"<!doctype" in lowered or b"<!entity" in lowered:
+        raise ValueError("XES validation failed: unsafe XML declaration is not allowed.")
+
+
+def _reject_unsafe_xml_file(path: Path) -> None:
+    previous_tail = b""
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(_XML_SCAN_CHUNK_BYTES)
+            if not chunk:
+                break
+            window = (previous_tail + chunk).lower()
+            if b"<!doctype" in window or b"<!entity" in window:
+                raise ValueError("XES validation failed: unsafe XML declaration is not allowed.")
+            previous_tail = window[-_XML_SCAN_OVERLAP_BYTES:]
 
 
 def resolve_xes_log(
@@ -891,12 +947,45 @@ def _build_workflow_payload(
     )
 
     if log is None or len(log) == 0:
+        empty_summary = {
+            "cases_covered": 0,
+            "events_covered": 0,
+            "visible_case_count": 0,
+            "excluded_case_count": 0,
+            "path_denominator": 0,
+            "path_denominator_label": "cases in evaluation log",
+            "activity_denominator": 0,
+            "activity_denominator_label": "events in evaluation log",
+            "transition_denominator": 0,
+            "transition_denominator_label": "observed transitions in evaluation log",
+            "dominant_path_share": 0.0,
+            "deviation_share": 0.0,
+            "log_deviation_share": 0.0,
+            "model_deviation_share": 0.0,
+            "median_throughput_days": None,
+        }
         return {
             "nodes": empty_nodes,
             "edges": empty_edges,
             "legend": legend,
             "trace_profiles": pd.DataFrame(),
-            "summary": {},
+            "summary": empty_summary,
+            "visible_case_count": 0,
+            "excluded_case_count": 0,
+            "path_denominator": 0,
+            "activity_denominator": 0,
+            "selected_node_id": None,
+            "selected_edge_uid": None,
+            "local_focus_hint": WORKFLOW_LOCAL_FOCUS_HINT,
+            "renderer_role": WORKFLOW_RENDERER_ROLE,
+            "process_map_payload": _build_process_map_payload(
+                nodes_df=empty_nodes,
+                edges_df=empty_edges,
+                legend_df=legend,
+                trace_profiles_df=pd.DataFrame(),
+                summary=empty_summary,
+                renderer_role=WORKFLOW_RENDERER_ROLE,
+            ),
             "renderer_capabilities": {"svg": True, "html_explorer": True, "cytoscape": True},
         }
 
@@ -946,7 +1035,8 @@ def _build_workflow_payload(
     total_event_occurrences = 0
 
     for trace_index, trace in enumerate(log, start=1):
-        events = [event for event in trace if event.get("concept:name")]
+        indexed_events = [(index, event) for index, event in enumerate(trace) if event.get("concept:name")]
+        events = [event for _, event in sorted(indexed_events, key=lambda item: _workflow_event_sort_key(item[1], item[0]))]
         raw_activities = [str(event.get("concept:name")) for event in events]
         if not raw_activities:
             continue
@@ -954,9 +1044,9 @@ def _build_workflow_payload(
         case_id = _workflow_case_alias(trace_index)
         throughput_days_value: Optional[float] = None
         if len(events) >= 2:
-            first_ts = events[0].get("time:timestamp")
-            last_ts = events[-1].get("time:timestamp")
-            if hasattr(first_ts, "timestamp") and hasattr(last_ts, "timestamp"):
+            first_ts = _workflow_timestamp(events[0].get("time:timestamp"))
+            last_ts = _workflow_timestamp(events[-1].get("time:timestamp"))
+            if first_ts is not None and last_ts is not None:
                 throughput_days_value = max(0.0, (last_ts - first_ts).total_seconds() / 86400)
                 throughput_days.append(throughput_days_value)
 
@@ -965,7 +1055,7 @@ def _build_workflow_payload(
             raw_activity = str(event.get("concept:name"))
             step = activity_step_lookup.get(raw_activity)
             node_id = _canonical_node_id(raw_activity)
-            canonical_events.append((raw_activity, node_id, event.get("time:timestamp"), step))
+            canonical_events.append((raw_activity, node_id, _workflow_timestamp(event.get("time:timestamp")), step))
             node_occurrences[node_id] += 1
             node_raw_activity_counts[node_id][raw_activity] += 1
 
@@ -1002,9 +1092,7 @@ def _build_workflow_payload(
             if edge_key not in seen_edges and len(edge_case_refs[edge_key]) < 5:
                 edge_case_refs[edge_key].append(case_id)
                 seen_edges.add(edge_key)
-            current_ts = current_ts
-            next_ts = next_ts
-            if hasattr(current_ts, "timestamp") and hasattr(next_ts, "timestamp"):
+            if current_ts is not None and next_ts is not None:
                 delta = (next_ts - current_ts).total_seconds()
                 if delta >= 0:
                     edge_delays[edge_key].append(delta / 86400)
@@ -1044,7 +1132,9 @@ def _build_workflow_payload(
         )
 
     dominant_variant_share = (
-        round(canonical_variant_counts.most_common(1)[0][1] / len(log) * 100, 1) if canonical_variant_counts and len(log) else 0.0
+        round(canonical_variant_counts.most_common(1)[0][1] / len(trace_profiles) * 100, 1)
+        if canonical_variant_counts and trace_profiles
+        else 0.0
     )
     overall_delay_values = [delay for delays in edge_delays.values() for delay in delays]
     overall_median = float(pd.Series(overall_delay_values).median()) if overall_delay_values else 0.0
@@ -1053,7 +1143,8 @@ def _build_workflow_payload(
     neighbor_lookup: defaultdict[str, set[str]] = defaultdict(set)
 
     node_rows = []
-    path_denominator = max(len(log), 1)
+    processed_case_count = len(trace_profiles)
+    path_denominator = max(processed_case_count, 1)
     activity_denominator = max(total_event_occurrences, 1)
     for node_id in ordered_nodes:
         step = node_id if node_id in step_rank_lookup else None
@@ -1074,7 +1165,7 @@ def _build_workflow_payload(
         model_move_cases = _safe_int(mix_stats.get("model_move_cases"))
         mix_total_cases = _safe_int(mix_stats.get("conformance_mix_total_cases"))
         if mix_total_cases <= 0:
-            fallback_cases = max(cases, occurrences, 0)
+            fallback_cases = max(cases, 0)
             bucket_value = "Model deviation" if step is None else "Conformant"
             if bucket_value == "Conformant":
                 sync_cases = fallback_cases
@@ -1110,7 +1201,7 @@ def _build_workflow_payload(
                 "parent_branch": None if step is not None else "mainline",
                 "coverage_pct": coverage_pct,
                 "activity_pct": activity_pct,
-                "path_denominator": int(len(log)),
+                "path_denominator": int(processed_case_count),
                 "activity_denominator": int(total_event_occurrences),
                 "coverage_rank": 0,
                 "coverage_group": _coverage_group(coverage_pct),
@@ -1305,6 +1396,46 @@ def _build_workflow_payload(
         )
 
     trace_profiles_df = pd.DataFrame(trace_profiles)
+    visible_case_count = int(processed_case_count)
+    excluded_case_count = max(int(len(log)) - visible_case_count, 0)
+    workflow_summary = {
+        "cases_covered": visible_case_count,
+        "events_covered": int(total_event_occurrences),
+        "visible_case_count": visible_case_count,
+        "excluded_case_count": excluded_case_count,
+        "path_denominator": visible_case_count,
+        "path_denominator_label": "cases in evaluation log",
+        "activity_denominator": int(total_event_occurrences),
+        "activity_denominator_label": "events in evaluation log",
+        "transition_denominator": int(observed_transition_count),
+        "transition_denominator_label": "observed transitions in evaluation log",
+        "dominant_path_share": dominant_variant_share,
+        "deviation_share": (
+            round(
+                (sum(1 for profile in trace_profiles if bool(profile.get("has_deviation"))) / len(trace_profiles) * 100),
+                1,
+            )
+            if trace_profiles
+            else 0.0
+        ),
+        "log_deviation_share": (
+            round(
+                (sum(1 for profile in trace_profiles if bool(profile.get("has_log_deviation"))) / len(trace_profiles) * 100),
+                1,
+            )
+            if trace_profiles
+            else 0.0
+        ),
+        "model_deviation_share": (
+            round(
+                (sum(1 for profile in trace_profiles if bool(profile.get("has_model_deviation"))) / len(trace_profiles) * 100),
+                1,
+            )
+            if trace_profiles
+            else 0.0
+        ),
+        "median_throughput_days": round(float(pd.Series(throughput_days).median()), 1) if throughput_days else None,
+    }
 
     return {
         "nodes": nodes_df,
@@ -1312,40 +1443,73 @@ def _build_workflow_payload(
         "legend": legend,
         "trace_profiles": trace_profiles_df,
         "overall_median_delay_days": overall_median,
-        "summary": {
-            "cases_covered": int(len(log)),
-            "events_covered": int(sum(len(trace) for trace in log)),
-            "path_denominator": int(len(log)),
-            "path_denominator_label": "cases in evaluation log",
-            "activity_denominator": int(total_event_occurrences),
-            "activity_denominator_label": "events in evaluation log",
-            "transition_denominator": int(observed_transition_count),
-            "transition_denominator_label": "observed transitions in evaluation log",
-            "dominant_path_share": dominant_variant_share,
-            "deviation_share": round(
-                (sum(1 for profile in trace_profiles if bool(profile.get("has_deviation"))) / len(trace_profiles) * 100),
-                1,
-            )
-            if trace_profiles
-            else 0.0,
-            "log_deviation_share": round(
-                (sum(1 for profile in trace_profiles if bool(profile.get("has_log_deviation"))) / len(trace_profiles) * 100),
-                1,
-            )
-            if trace_profiles
-            else 0.0,
-            "model_deviation_share": round(
-                (sum(1 for profile in trace_profiles if bool(profile.get("has_model_deviation"))) / len(trace_profiles) * 100),
-                1,
-            )
-            if trace_profiles
-            else 0.0,
-            "median_throughput_days": round(float(pd.Series(throughput_days).median()), 1) if throughput_days else None,
-        },
+        "summary": workflow_summary,
+        "visible_case_count": visible_case_count,
+        "excluded_case_count": excluded_case_count,
+        "path_denominator": visible_case_count,
+        "activity_denominator": int(total_event_occurrences),
+        "selected_node_id": None,
+        "selected_edge_uid": None,
+        "local_focus_hint": WORKFLOW_LOCAL_FOCUS_HINT,
+        "renderer_role": WORKFLOW_RENDERER_ROLE,
+        "process_map_payload": _build_process_map_payload(
+            nodes_df=nodes_df,
+            edges_df=edges_df,
+            legend_df=legend,
+            trace_profiles_df=trace_profiles_df,
+            summary=workflow_summary,
+            renderer_role=WORKFLOW_RENDERER_ROLE,
+        ),
         "renderer_capabilities": {
             "svg": True,
             "html_explorer": True,
             "cytoscape": True,
+        },
+    }
+
+
+def _build_process_map_payload(
+    *,
+    nodes_df: pd.DataFrame,
+    edges_df: pd.DataFrame,
+    legend_df: pd.DataFrame,
+    trace_profiles_df: pd.DataFrame,
+    summary: Mapping[str, Any],
+    renderer_role: str,
+) -> dict[str, Any]:
+    """Return the normalized process-map contract shared by workflow renderers."""
+
+    def _summary_int(key: str, fallback: int = 0) -> int:
+        try:
+            value = summary.get(key, fallback)
+            if value is None or pd.isna(value):
+                return int(fallback)
+            return int(value)
+        except Exception:
+            return int(fallback)
+
+    visible_case_count = _summary_int("visible_case_count", _summary_int("cases_covered", 0))
+    excluded_case_count = _summary_int("excluded_case_count", 0)
+    path_denominator = _summary_int("path_denominator", visible_case_count)
+    activity_denominator = _summary_int("activity_denominator", 0)
+    transition_denominator = _summary_int("transition_denominator", 0)
+    return {
+        "renderer_role": renderer_role,
+        "nodes": nodes_df,
+        "edges": edges_df,
+        "legend": legend_df,
+        "trace_profiles": trace_profiles_df,
+        "summary": dict(summary),
+        "denominators": {
+            "visible_case_count": visible_case_count,
+            "excluded_case_count": excluded_case_count,
+            "path_denominator": path_denominator,
+            "activity_denominator": activity_denominator,
+            "transition_denominator": transition_denominator,
+        },
+        "selection": {
+            "selected_node_id": None,
+            "selected_edge_uid": None,
         },
     }
 

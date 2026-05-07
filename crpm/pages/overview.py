@@ -188,7 +188,7 @@ def _render_overview_pathway_preview(snapshot: AnalysisSnapshot) -> None:
     )
     workflow = _workflow_from_snapshot(snapshot)
     if _workflow_available(workflow):
-        board_markup = render_workflow_conformance_svg(workflow, layout_mode="horizontal", detail_level="executive")
+        board_markup = render_workflow_conformance_svg(workflow, layout_mode="vertical", detail_level="executive")
         st.markdown(
             f"<div class='crpm-overview-map-frame'>{board_markup}</div>",
             unsafe_allow_html=True,
