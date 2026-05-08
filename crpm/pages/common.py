@@ -239,9 +239,11 @@ def render_html_ranked_table(
                 )
             elif chip_column and column == chip_column:
                 class_name += " crpm-table__cell--chip"
-                chip_slug = _slugify(str(raw_value))
+                full_value = str(raw_value)
+                chip_slug = _slugify(full_value)
                 cell_html = (
-                    f"<td class='{class_name}'><span class='crpm-chip crpm-chip--{chip_slug}'>{html.escape(str(raw_value))}</span></td>"
+                    f"<td class='{class_name}'><span class='crpm-chip crpm-chip--{chip_slug}' "
+                    f"title='{html.escape(full_value)}'>{html.escape(full_value)}</span></td>"
                 )
             else:
                 if any(keyword in column.lower() for keyword in numeric_keywords):

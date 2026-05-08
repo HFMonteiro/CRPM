@@ -262,7 +262,7 @@ def render_dfg_to_svg(dfg: Dict, start_activities: Dict, end_activities: Dict, v
     svg_text = sanitize_svg_markup(svg_bytes.decode("utf-8", errors="replace"))
     svg_text = svg_text.replace(
         "<svg ",
-        '<svg style="width:auto; min-width:100%; height:clamp(240px, 30vh, 340px); display:block;" ',
+        '<svg preserveAspectRatio="xMidYMid meet" style="width:100%; max-width:100%; min-width:0; height:clamp(240px, 30vh, 340px); display:block;" ',
         1,
     )
     return svg_text

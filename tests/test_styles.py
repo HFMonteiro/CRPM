@@ -88,7 +88,10 @@ def test_overview_and_bi_card_styles_exist() -> None:
 def test_dfg_map_canvas_has_desktop_height_guard() -> None:
     css = get_custom_css()
     assert ".crpm-dfg-map-canvas" in css
+    assert "overflow: hidden;" in css
+    assert "justify-content: center;" in css
     assert "min-height: 272px;" in css
+    assert "max-width: 100%;" in css
     assert "height: clamp(240px, 30vh, 340px);" in css
 
 
@@ -117,3 +120,25 @@ def test_dense_filter_text_keeps_readable_minimum_sizes() -> None:
     assert ".crpm-active-filter-summary__title {\n        font-size: 0.74rem;" in css
     assert ".crpm-active-filter-summary__chip span {\n        font-size: 0.72rem;" in css
     assert ".crpm-conformance-hero__badge span {\n        font-size: 0.72rem;" in css
+
+
+def test_conformance_model_cards_stay_inside_narrow_rails() -> None:
+    css = get_custom_css()
+    assert ".crpm-model-card-grid {\n        display: grid;\n        gap: 0.6rem;\n        width: 100%;" in css
+    assert ".crpm-model-card {\n        box-sizing: border-box;" in css
+    assert "grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr));" in css
+
+
+def test_ranked_tables_do_not_force_right_rail_overflow() -> None:
+    css = get_custom_css()
+    assert ".crpm-ranked-table {\n        border: 1px solid rgba(71, 88, 79, 0.1);" in css
+    assert "max-width: 100%;" in css
+    assert ".crpm-ranked-table__scroller {\n        width: 100%;" in css
+    assert "overflow-x: hidden;" in css
+    assert "table-layout: fixed;" in css
+    assert "overflow-wrap: anywhere;" in css
+    assert "white-space: normal;" in css
+    assert ".crpm-ranked-table .crpm-table__cell--label {" in css
+    assert ".crpm-ranked-table .crpm-table__metric-track {\n        min-width: 0;" in css
+    assert ".crpm-ranked-table .crpm-chip {\n        width: 100%;" in css
+    assert "text-overflow: ellipsis;" in css

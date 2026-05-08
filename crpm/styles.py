@@ -1294,10 +1294,18 @@ def get_custom_css() -> str:
     .crpm-model-card-grid {
         display: grid;
         gap: 0.6rem;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
     }
 
     .crpm-model-card {
+        box-sizing: border-box;
         position: relative;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        overflow: hidden;
         padding: 0.82rem 0.9rem;
         border-radius: 16px;
         border: 1px solid rgba(71, 88, 79, 0.12);
@@ -1323,11 +1331,13 @@ def get_custom_css() -> str:
 
     .crpm-model-card__grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr));
         gap: 0.55rem;
+        min-width: 0;
     }
 
     .crpm-model-card__grid div {
+        box-sizing: border-box;
         min-width: 0;
         padding: 0.46rem 0.52rem;
         border-radius: 12px;
@@ -1368,6 +1378,8 @@ def get_custom_css() -> str:
         border-radius: 16px;
         background: rgba(252, 251, 253, 0.98);
         box-shadow: var(--crpm-shadow-soft);
+        max-width: 100%;
+        min-width: 0;
         overflow: hidden;
     }
 
@@ -1379,16 +1391,19 @@ def get_custom_css() -> str:
     }
 
     .crpm-ranked-table__scroller {
+        width: 100%;
         max-width: 100%;
+        min-width: 0;
         max-height: 360px;
-        overflow-x: auto;
+        overflow-x: hidden;
         overflow-y: auto;
         border-top: 1px solid rgba(71, 88, 79, 0.08);
     }
 
     .crpm-ranked-table table {
-        width: max-content;
+        width: 100%;
         min-width: 100%;
+        table-layout: fixed;
         border-collapse: separate;
         border-spacing: 0;
         font-size: 0.66rem;
@@ -1406,7 +1421,15 @@ def get_custom_css() -> str:
         font-weight: 700;
         letter-spacing: 0.02em;
         border-bottom: 1px solid rgba(71, 88, 79, 0.12);
-        white-space: nowrap;
+        overflow-wrap: anywhere;
+        white-space: normal;
+    }
+
+    .crpm-ranked-table th,
+    .crpm-ranked-table td {
+        max-width: 0;
+        overflow-wrap: anywhere;
+        word-break: normal;
     }
 
     .crpm-ranked-table tbody tr:nth-child(odd) {
@@ -1657,6 +1680,20 @@ def get_custom_css() -> str:
         white-space: nowrap;
     }
 
+    .crpm-ranked-table .crpm-table__cell--label {
+        max-width: none;
+        min-width: 0;
+    }
+
+    .crpm-ranked-table .crpm-table__cell--chip,
+    .crpm-ranked-table .crpm-table__cell--num {
+        white-space: normal;
+    }
+
+    .crpm-ranked-table .crpm-table__metric-track {
+        min-width: 0;
+    }
+
     .crpm-rank-pill {
         display: inline-flex;
         align-items: center;
@@ -1712,6 +1749,17 @@ def get_custom_css() -> str:
         line-height: 1;
         white-space: nowrap;
         border: 1px solid transparent;
+    }
+
+    .crpm-ranked-table .crpm-chip {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        overflow: hidden;
+        line-height: 1.12;
+        text-align: center;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .crpm-chip--conformant {
@@ -1797,17 +1845,21 @@ def get_custom_css() -> str:
         border: 1px solid rgba(71, 88, 79, 0.12);
         background: rgba(252, 251, 253, 0.98);
         box-shadow: var(--crpm-shadow-soft);
-        overflow: auto;
+        overflow: hidden;
     }
 
     .crpm-dfg-map-canvas {
+        display: flex;
+        align-items: center;
+        justify-content: center;
         min-height: 272px;
     }
 
     .crpm-dfg-vector svg {
-        min-width: 100%;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
         height: clamp(240px, 30vh, 340px);
-        width: auto;
     }
 
     .stMarkdown ul, .stMarkdown ol {
