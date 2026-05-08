@@ -6,7 +6,7 @@ per-variant conformance metrics.
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Dict, Tuple, Optional
 import logging
 
 import pandas as pd
@@ -52,9 +52,9 @@ def get_variant_statistics(
     try:
         _, variant_counts = _get_variant_index(log, variant_index)
         return _variant_statistics_from_counts(variant_counts, top_n=top_n)
-    except Exception:
+    except Exception as exc:
         # Fallback: manual variant extraction
-        logger.debug("PM4Py variant statistics failed, using manual fallback: %s", e)
+        logger.debug("PM4Py variant statistics failed, using manual fallback: %s", exc)
         return _manual_variant_statistics(log, top_n)
 
 
@@ -219,11 +219,11 @@ def compute_variant_conformance(
             aln = alignments.apply_log(variant_log_sample, net, im, fm)
             if aln:
                 adf = pd.DataFrame(aln)
-                align_fitness = float(pd.to_numeric(adf.get("fitness", pd.Series([None]*len(adf))), errors="coerce").mean())
-                align_cost = float(pd.to_numeric(adf.get("cost", pd.Series([None]*len(adf))), errors="coerce").mean())
-                moves_on_model = float(pd.to_numeric(adf.get("bwc", pd.Series([0]*len(adf))), errors="coerce").mean())
-                moves_on_log = float(pd.to_numeric(adf.get("bwt", pd.Series([0]*len(adf))), errors="coerce").mean())
-                perfect_pct = float((pd.to_numeric(adf.get("fitness", pd.Series([0]*len(adf))), errors="coerce") == 1.0).mean() * 100)
+                align_fitness = float(pd.to_numeric(adf.get("fitness", pd.Series([None] * len(adf))), errors="coerce").mean())
+                align_cost = float(pd.to_numeric(adf.get("cost", pd.Series([None] * len(adf))), errors="coerce").mean())
+                moves_on_model = float(pd.to_numeric(adf.get("bwc", pd.Series([0] * len(adf))), errors="coerce").mean())
+                moves_on_log = float(pd.to_numeric(adf.get("bwt", pd.Series([0] * len(adf))), errors="coerce").mean())
+                perfect_pct = float((pd.to_numeric(adf.get("fitness", pd.Series([0] * len(adf))), errors="coerce") == 1.0).mean() * 100)
             else:
                 align_fitness = align_cost = moves_on_model = moves_on_log = perfect_pct = None
         except Exception:
@@ -233,17 +233,19 @@ def compute_variant_conformance(
         # Variant string
         variant_str = " → ".join(variant) if isinstance(variant, (list, tuple)) else str(variant)
 
-        rows.append({
-            "variant": variant_str,
-            "frequency": frequency,
-            "percentage": (frequency / len(log) * 100) if len(log) > 0 else 0,
-            "token_fitness": token_fitness,
-            "align_fitness": align_fitness,
-            "align_cost": align_cost,
-            "moves_on_model": moves_on_model,
-            "moves_on_log": moves_on_log,
-            "perfect_fit_pct": perfect_pct
-        })
+        rows.append(
+            {
+                "variant": variant_str,
+                "frequency": frequency,
+                "percentage": (frequency / len(log) * 100) if len(log) > 0 else 0,
+                "token_fitness": token_fitness,
+                "align_fitness": align_fitness,
+                "align_cost": align_cost,
+                "moves_on_model": moves_on_model,
+                "moves_on_log": moves_on_log,
+                "perfect_fit_pct": perfect_pct,
+            }
+        )
 
     return pd.DataFrame(rows, columns=VARIANT_CONFORMANCE_COLUMNS)
 

@@ -21,7 +21,7 @@ from crpm.pages.common import (
     format_metric_value,
     render_empty_state,
     render_html_ranked_table,
-    render_inline_empty,
+    render_inline_empty as render_inline_empty,
     render_metric_card_grid,
     render_quiet_note,
     store_cache_entry,
@@ -49,7 +49,9 @@ def render_dfg_page(snapshot: AnalysisSnapshot) -> None:
         key="dfg_coverage_range",
         help="100 keeps the most frequent edges and 0 keeps the least frequent edges. Narrow windows isolate a band of ranked edges.",
     )
-    st.caption("Coverage keeps a ranked band of directly-follows edges: raise the lower bound for dominant behavior and lower the upper bound for rare paths.")
+    st.caption(
+        "Coverage keeps a ranked band of directly-follows edges: raise the lower bound for dominant behavior and lower the upper bound for rare paths."
+    )
     if coverage_range != (0, 100):
         render_quiet_note(
             f"DFG filtered to ranked edge coverage {coverage_range[0]}%–{coverage_range[1]}%. "
@@ -101,7 +103,7 @@ def render_dfg_page(snapshot: AnalysisSnapshot) -> None:
             try:
                 svg_markup = render_dfg_to_svg(dfg, starts, ends, variant=vis_variant)
                 st.markdown(
-                    f'<div class="crpm-dfg-vector">{svg_markup}</div>',
+                    f'<div class="crpm-dfg-vector crpm-dfg-map-canvas">{svg_markup}</div>',
                     unsafe_allow_html=True,
                 )
             except Exception:
@@ -172,9 +174,7 @@ def render_dfg_page(snapshot: AnalysisSnapshot) -> None:
                     "From": row["source"],
                     "To": row["target"],
                     value_label: (
-                        format_metric_value(row["value"], kind="count")
-                        if dfg_mode == "Frequency"
-                        else _format_dfg_duration(row["value"])
+                        format_metric_value(row["value"], kind="count") if dfg_mode == "Frequency" else _format_dfg_duration(row["value"])
                     ),
                 }
                 for row in ranked_rows[:25]

@@ -15,12 +15,21 @@ from crpm.app_runtime import (
     compute_analysis_signature,
     compute_log_stats,
     first_event_names,
+    list_safe_local_xes_files,
     preview_csv_dataframe,
     resolve_csv_log,
     resolve_xes_log,
     run_discovery_comparison_pipeline,
 )
-from crpm.app_state import PREVIEW_PAGES, AnalysisSnapshot, CRPMState, build_analysis_snapshot, get_crpm_state, initialize_shell_state
+from crpm.app_state import (
+    PREVIEW_PAGES,
+    WORKFLOW_COHORT_FIRST_EVENT_DIRECT,
+    AnalysisSnapshot,
+    CRPMState,
+    build_analysis_snapshot,
+    get_crpm_state,
+    initialize_shell_state,
+)
 from crpm.pages.common import render_quiet_note
 from crpm.pages import PAGE_REGISTRY
 from crpm.styles import apply_custom_styling
@@ -33,8 +42,7 @@ UP_SYMBOL_URL = "https://sigarra.up.pt/up/pt/imagens/LogotipoSI"
 UP_HOME_URL = "https://sigarra.up.pt/up/pt/web_page.inicial"
 AUTHOR_WEBSITE = "https://hfmonteiro.com"
 LEGAL_NOTICE = (
-    "For research and operational monitoring support only. "
-    "Not a substitute for clinical judgment or institutional decision-making."
+    "For research and operational monitoring support only. Not a substitute for clinical judgment or institutional decision-making."
 )
 
 
@@ -78,15 +86,14 @@ def render_app() -> None:
 
     apply_custom_styling()
     _render_header_brand()
-    _render_analysis_controls(state)
-    snapshot = build_analysis_snapshot(st.session_state)
-    _render_sidebar_session_info(snapshot)
-
     page = st.sidebar.radio(
         "Page",
         PREVIEW_PAGES,
         key="crpm_preview_page",
     )
+    _render_analysis_controls(state)
+    snapshot = build_analysis_snapshot(st.session_state)
+    _render_sidebar_session_info(snapshot)
 
     _render_header(snapshot, page=page)
     PAGE_REGISTRY[page](snapshot)
@@ -110,14 +117,20 @@ def _safe_set_page_config() -> None:
 def _render_sidebar_session_info(snapshot: AnalysisSnapshot) -> None:
     """Show compact session info beneath the analysis controls."""
     preflight_warnings = st.session_state.get("crpm_preflight_warnings", [])
+    source_meta = dict(snapshot.source_metadata or {})
     if snapshot.analysis_complete:
-        if snapshot.input_name or snapshot.active_followup_label:
+        if snapshot.input_name or snapshot.active_followup_label or snapshot.workflow_cohort_policy:
             context_bits = []
             if snapshot.input_name:
                 context_bits.append(f"Input: {snapshot.input_name}")
+            if snapshot.workflow_cohort_policy == WORKFLOW_COHORT_FIRST_EVENT_DIRECT:
+                context_bits.append("Mode: Direct workflow")
             if snapshot.active_followup_label:
                 context_bits.append(f"Follow-up: {snapshot.active_followup_label}")
             st.sidebar.caption(" · ".join(context_bits))
+        if source_meta:
+            validation = source_meta.get("validation_status", "validated")
+            st.sidebar.caption(f"Source validation: {validation}")
         st.sidebar.caption(
             f"✓ {snapshot.model_count} model(s) discovered · {snapshot.case_count:,} cases · {snapshot.event_count:,} events"
         )
@@ -191,18 +204,19 @@ def _shell_intro_copy(page: str) -> str:
 # Branding / footer / legal
 # ---------------------------------------------------------------------------
 
+
 def _render_header_brand() -> None:
     """Render a persistent UP badge in the sticky header area."""
     st.markdown(
         f"""
-        <div class="crpm-header-badges">
-            <a class="crpm-author-badge" href="{AUTHOR_WEBSITE}" target="_blank" aria-label="hfmonteiro.com">
+            <div class="crpm-header-badges">
+            <a class="crpm-author-badge" href="{AUTHOR_WEBSITE}" target="_blank" rel="noopener noreferrer" aria-label="hfmonteiro.com">
                 <span>www.hfmonteiro.com</span>
             </a>
-            <a class="crpm-fmup-badge" href="{FMUP_HOME_URL}" target="_blank" aria-label="Faculdade de Medicina da Universidade do Porto">
+            <a class="crpm-fmup-badge" href="{FMUP_HOME_URL}" target="_blank" rel="noopener noreferrer" aria-label="Faculdade de Medicina da Universidade do Porto">
                 <img src="{FMUP_BADGE_SRC}" alt="FMUP symbol" />
             </a>
-            <a class="crpm-up-badge" href="{UP_HOME_URL}" target="_blank" aria-label="Universidade do Porto">
+            <a class="crpm-up-badge" href="{UP_HOME_URL}" target="_blank" rel="noopener noreferrer" aria-label="Universidade do Porto">
                 <img src="{UP_BADGE_SRC}" alt="U.Porto symbol" />
             </a>
         </div>
@@ -226,12 +240,12 @@ def _render_footer() -> None:
         f"""
         <div class="crpm-footer">
             <div class="crpm-footer__row">
-                <a class="crpm-footer__logo-link" href="{FMUP_HOME_URL}" target="_blank" aria-label="Faculdade de Medicina da Universidade do Porto">
+                <a class="crpm-footer__logo-link" href="{FMUP_HOME_URL}" target="_blank" rel="noopener noreferrer" aria-label="Faculdade de Medicina da Universidade do Porto">
                     <img class="crpm-footer__logo" src="{FMUP_BADGE_SRC}" alt="FMUP symbol" />
                 </a>
                 <div class="crpm-footer__text">
                     Developed in the context of PhD work by Hugo Monteiro &middot;
-                    <a href="{AUTHOR_WEBSITE}" target="_blank">hfmonteiro.com</a>
+                    <a href="{AUTHOR_WEBSITE}" target="_blank" rel="noopener noreferrer">hfmonteiro.com</a>
                 </div>
             </div>
         </div>
@@ -240,17 +254,28 @@ def _render_footer() -> None:
     )
 
 
+def _render_input_validation_error(source_type: str, exc: Exception) -> None:
+    logger.warning("%s input rejected during validation: %s", source_type, exc.__class__.__name__)
+    if source_type == "CSV":
+        message = (
+            "The CSV log could not be validated. Check required columns, blank IDs, "
+            "timestamp parsing, and timezone consistency before retrying."
+        )
+    else:
+        message = "The XES log could not be validated or loaded. Check the file structure and retry."
+    st.sidebar.error(message)
+
+
 def _render_analysis_controls(state: CRPMState) -> None:
     st.sidebar.markdown("### Analysis Setup")
     config = state.config
     results = state.results
+    st.sidebar.caption("Run badge: Direct workflow mode · First-event gate")
+    run_button_slot = st.sidebar.empty()
     with st.sidebar.expander("How to use this sidebar", expanded=False):
         st.caption(
-            "1. Load a log. 2. Choose filters and algorithms. 3. Run analysis. "
-            "If you change settings after a successful run, the current results are invalidated until you rerun."
-        )
-        st.caption(
-            "Use case-cohort date filtering for most screening analyses. Event clipping is an advanced mode that can change trace structure."
+            "Load a log, confirm the first-event gate, then run analysis. "
+            "Advanced date, algorithm, split, and follow-up controls stay below."
         )
 
     source_type = st.sidebar.radio(
@@ -264,13 +289,14 @@ def _render_analysis_controls(state: CRPMState) -> None:
     loaded_log = None
 
     if source_type == "XES":
-        config.xes_logs_directory = st.sidebar.text_input(
-            "Folder containing .xes files",
-            value=config.xes_logs_directory,
-            key="crpm_xes_logs_directory",
-        )
-        logs_dir = Path(config.xes_logs_directory)
-        xes_options = [str(path) for path in sorted(logs_dir.glob("*.xes"))] if logs_dir.exists() else []
+        with st.sidebar.expander("Local XES folder", expanded=False):
+            config.xes_logs_directory = st.text_input(
+                "Folder containing .xes files",
+                value=config.xes_logs_directory,
+                key="crpm_xes_logs_directory",
+                help="Local paths are used only for loading; run metadata shown in the UI is redacted.",
+            )
+        xes_options = list_safe_local_xes_files(config.xes_logs_directory)
         uploaded_xes = st.sidebar.file_uploader("Upload XES log", type=["xes"], key="crpm_xes_upload")
 
         if xes_options:
@@ -280,6 +306,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
                 xes_options,
                 index=default_index,
                 key="crpm_xes_file_choice",
+                format_func=lambda value: Path(value).name,
             )
         elif uploaded_xes is None:
             st.sidebar.caption("Place XES logs in the selected folder or upload one directly.")
@@ -294,7 +321,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
             )
         except Exception as exc:
             if config.selected_log_path or uploaded_xes is not None:
-                st.sidebar.error(str(exc))
+                _render_input_validation_error("XES", exc)
     else:
         uploaded_csv = st.sidebar.file_uploader("Upload CSV log", type=["csv"], key="crpm_csv_upload")
         if uploaded_csv is None:
@@ -331,7 +358,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
                         timestamp_col=config.csv_timestamp_col,
                     )
             except Exception as exc:
-                st.sidebar.error(str(exc))
+                _render_input_validation_error("CSV", exc)
 
     if loaded_log is None:
         return
@@ -339,91 +366,97 @@ def _render_analysis_controls(state: CRPMState) -> None:
     if not results.analysis_complete:
         results.input_name = loaded_log.input_name
         results.log_signature = loaded_log.log_signature
+        results.source_metadata = loaded_log.metadata()
+        results.workflow_cohort_policy = config.workflow_cohort_policy
 
     log_stats = compute_log_stats(loaded_log.log)
     start_options = ["All"] + first_event_names(loaded_log.log)
+    if config.workflow_cohort_policy == WORKFLOW_COHORT_FIRST_EVENT_DIRECT and config.start_filter == "All" and len(start_options) > 1:
+        config.start_filter = start_options[1]
     config.start_filter = st.sidebar.selectbox(
-        "Filter by first event",
+        "First-event workflow gate",
         start_options,
         index=start_options.index(config.start_filter) if config.start_filter in start_options else 0,
         key="crpm_start_filter",
+        help="Production discovery/conformance/DFG mode keeps cases whose first event matches this gate. Use All only outside the paper-aligned production workflow.",
     )
-    config.apply_date_filter = st.sidebar.checkbox(
-        "Apply date filter",
-        value=config.apply_date_filter,
-        key="crpm_apply_date_filter",
-        help="Filter the loaded log to a date-bounded cohort or event slice before discovery and conformance.",
-    )
-
-    if config.apply_date_filter:
-        config.date_filter_mode = st.sidebar.selectbox(
-            "Date filter mode",
-            options=["case", "event"],
-            index=0 if config.date_filter_mode != "event" else 1,
-            format_func=lambda value: "Case cohort (recommended)" if value == "case" else "Event clipping (advanced)",
-            key="crpm_date_filter_mode",
-            help="Case cohort keeps whole traces whose earliest timestamp falls inside the range. Event clipping removes events outside the range and is intended for advanced use only.",
+    with st.sidebar.expander("Advanced setup", expanded=False):
+        config.apply_date_filter = st.checkbox(
+            "Apply date filter",
+            value=config.apply_date_filter,
+            key="crpm_apply_date_filter",
+            help="Filter the loaded log to a date-bounded cohort or event slice before discovery and conformance.",
         )
-        default_start = log_stats["start"].date() if log_stats.get("start") else date.today()
-        default_end = log_stats["end"].date() if log_stats.get("end") else default_start
-        config.start_date = st.sidebar.date_input(
-            "Start date",
-            value=config.start_date or default_start,
-            key="crpm_filter_start_date",
-        )
-        config.end_date = st.sidebar.date_input(
-            "End date",
-            value=config.end_date or default_end,
-            key="crpm_filter_end_date",
-        )
-    else:
-        config.date_filter_mode = "case"
-        config.start_date = None
-        config.end_date = None
 
-    selected_algorithms = st.sidebar.multiselect(
-        "Discovery algorithms",
-        options=list(AVAILABLE_ALGORITHMS.keys()),
-        default=config.selected_algorithms,
-        key="crpm_selected_algorithms",
-        help="Select the process discovery algorithms to compare. Fewer algorithms reduce runtime on large logs.",
-    )
-    config.selected_algorithms = selected_algorithms or ["Heuristics (Classic)"]
-
-    config.apply_followup_window = st.sidebar.checkbox(
-        "Apply follow-up horizon",
-        value=config.apply_followup_window,
-        key="crpm_apply_followup_window",
-        help="Censor each case to a fixed observation window from its anchor event. Useful for comparability studies.",
-    )
-    if config.apply_followup_window:
-        config.followup_days = int(
-            st.sidebar.number_input(
-                "Follow-up horizon (days)",
-                min_value=30,
-                max_value=730,
-                value=config.followup_days,
-                step=5,
-                key="crpm_followup_days",
+        if config.apply_date_filter:
+            config.date_filter_mode = st.selectbox(
+                "Date filter mode",
+                options=["case", "event"],
+                index=0 if config.date_filter_mode != "event" else 1,
+                format_func=lambda value: "Case cohort (recommended)" if value == "case" else "Event clipping (advanced)",
+                key="crpm_date_filter_mode",
+                help="Case cohort keeps whole traces whose earliest timestamp falls inside the range. Event clipping removes events outside the range and is intended for advanced use only.",
             )
-        )
-
-    config.enable_train_test = st.sidebar.checkbox(
-        "Enable train/test split (80/20)",
-        value=config.enable_train_test,
-        key="crpm_enable_train_test",
-        help="Recommended when you want less optimistic conformance estimates. Small logs may produce unstable test results.",
-    )
-    if config.enable_train_test:
-        config.random_seed = int(
-            st.sidebar.number_input(
-                "Random seed",
-                min_value=1,
-                max_value=9999,
-                value=config.random_seed,
-                key="crpm_random_seed",
+            default_start = log_stats["start"].date() if log_stats.get("start") else date.today()
+            default_end = log_stats["end"].date() if log_stats.get("end") else default_start
+            config.start_date = st.date_input(
+                "Start date",
+                value=config.start_date or default_start,
+                key="crpm_filter_start_date",
             )
+            config.end_date = st.date_input(
+                "End date",
+                value=config.end_date or default_end,
+                key="crpm_filter_end_date",
+            )
+        else:
+            config.date_filter_mode = "case"
+            config.start_date = None
+            config.end_date = None
+
+        selected_algorithms = st.multiselect(
+            "Discovery algorithms",
+            options=list(AVAILABLE_ALGORITHMS.keys()),
+            default=config.selected_algorithms,
+            key="crpm_selected_algorithms",
+            help="Select the process discovery algorithms to compare. Fewer algorithms reduce runtime on large logs.",
         )
+        config.selected_algorithms = selected_algorithms or ["Heuristics (Classic)"]
+
+        config.apply_followup_window = st.checkbox(
+            "Apply follow-up horizon",
+            value=config.apply_followup_window,
+            key="crpm_apply_followup_window",
+            help="Secondary sensitivity mode. Censors each case to a fixed horizon from the selected first-event gate.",
+        )
+        if config.apply_followup_window:
+            config.followup_days = int(
+                st.number_input(
+                    "Follow-up horizon (days)",
+                    min_value=30,
+                    max_value=730,
+                    value=config.followup_days,
+                    step=5,
+                    key="crpm_followup_days",
+                )
+            )
+
+        config.enable_train_test = st.checkbox(
+            "Enable train/test split (80/20)",
+            value=config.enable_train_test,
+            key="crpm_enable_train_test",
+            help="Recommended when you want less optimistic conformance estimates. Small logs may produce unstable test results.",
+        )
+        if config.enable_train_test:
+            config.random_seed = int(
+                st.number_input(
+                    "Random seed",
+                    min_value=1,
+                    max_value=9999,
+                    value=config.random_seed,
+                    key="crpm_random_seed",
+                )
+            )
 
     st.sidebar.markdown("### Log Statistics")
     st.sidebar.caption(f"Traces: {log_stats['traces']:,}")
@@ -435,6 +468,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
 
     current_signature = compute_analysis_signature(
         log_signature=loaded_log.log_signature,
+        workflow_cohort_policy=config.workflow_cohort_policy,
         start_filter=config.start_filter,
         date_filter_mode=config.date_filter_mode,
         start_date=config.start_date,
@@ -444,19 +478,17 @@ def _render_analysis_controls(state: CRPMState) -> None:
         random_seed=config.random_seed,
         followup_days=followup_days,
     )
-    if (
-        results.last_analysis_signature is not None
-        and current_signature != results.last_analysis_signature
-        and results.analysis_complete
-    ):
+    if results.last_analysis_signature is not None and current_signature != results.last_analysis_signature and results.analysis_complete:
         results.reset(
             input_name=loaded_log.input_name,
             log_signature=loaded_log.log_signature,
             active_followup_label="Pending rerun",
+            source_metadata=loaded_log.metadata(),
+            workflow_cohort_policy=config.workflow_cohort_policy,
             config_change_message="Analysis settings changed. Click Run analysis to refresh the stabilized shell results.",
         )
 
-    if st.sidebar.button("Run analysis", type="primary", use_container_width=True, key="crpm_run_analysis"):
+    if run_button_slot.button("Run analysis", type="primary", use_container_width=True, key="crpm_run_analysis"):
         try:
             run_discovery_comparison_pipeline(
                 state,
@@ -470,12 +502,14 @@ def _render_analysis_controls(state: CRPMState) -> None:
                 random_seed=config.random_seed,
                 followup_days=followup_days,
             )
-        except Exception:
-            logger.exception("Analysis run failed")
+        except Exception as exc:
+            logger.warning("Analysis run failed: %s", exc.__class__.__name__)
             results.reset(
                 input_name=loaded_log.input_name,
                 log_signature=loaded_log.log_signature,
                 active_followup_label="Run failed",
+                source_metadata=loaded_log.metadata(),
+                workflow_cohort_policy=config.workflow_cohort_policy,
                 filter_error_message="The analysis could not be completed. Review the current settings and try again.",
             )
     if results.config_change_message:

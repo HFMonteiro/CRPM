@@ -1,4 +1,5 @@
 """Tests for crpm.variants — variant statistics, coverage, filtering."""
+
 from __future__ import annotations
 
 from collections import defaultdict

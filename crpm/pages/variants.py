@@ -142,8 +142,12 @@ def _format_variant_ranked_table(coverage: pd.DataFrame) -> pd.DataFrame:
             "Rank": [index + 1 for index in range(len(working))],
             "Variant": working.get("variant_str", pd.Series([""] * len(working))),
             "Cases": working.get("frequency", pd.Series([0] * len(working))).map(lambda value: format_metric_value(value, kind="count")),
-            "Share (%)": working.get("percentage", pd.Series([None] * len(working))).map(lambda value: format_metric_value(value, kind="percent")),
-            "Coverage (%)": working.get("cumulative_percentage", pd.Series([None] * len(working))).map(lambda value: format_metric_value(value, kind="percent")),
+            "Share (%)": working.get("percentage", pd.Series([None] * len(working))).map(
+                lambda value: format_metric_value(value, kind="percent")
+            ),
+            "Coverage (%)": working.get("cumulative_percentage", pd.Series([None] * len(working))).map(
+                lambda value: format_metric_value(value, kind="percent")
+            ),
         }
     )
 
@@ -175,9 +179,15 @@ def _format_variant_conformance_table(conformance_df: pd.DataFrame) -> pd.DataFr
             "Rank": [index + 1 for index in range(len(working))],
             "Variant": working.get("variant", pd.Series([""] * len(working))),
             "Cases": working.get("frequency", pd.Series([0] * len(working))).map(lambda value: format_metric_value(value, kind="count")),
-            "Alignment": working.get("align_fitness", pd.Series([None] * len(working))).map(lambda value: format_metric_value(value, kind="score")),
-            "Token": working.get("token_fitness", pd.Series([None] * len(working))).map(lambda value: format_metric_value(value, kind="score")),
-            "Perfect fit": working.get("perfect_fit_pct", pd.Series([None] * len(working))).map(lambda value: format_metric_value(value, kind="percent")),
+            "Alignment": working.get("align_fitness", pd.Series([None] * len(working))).map(
+                lambda value: format_metric_value(value, kind="score")
+            ),
+            "Token": working.get("token_fitness", pd.Series([None] * len(working))).map(
+                lambda value: format_metric_value(value, kind="score")
+            ),
+            "Perfect fit": working.get("perfect_fit_pct", pd.Series([None] * len(working))).map(
+                lambda value: format_metric_value(value, kind="percent")
+            ),
             "Fit status": fit_status,
         }
     )

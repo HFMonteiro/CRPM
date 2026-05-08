@@ -1,4 +1,5 @@
 """Tests for crpm.discovery — algorithm wrappers and utilities."""
+
 from __future__ import annotations
 
 from types import SimpleNamespace

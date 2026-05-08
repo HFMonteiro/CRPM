@@ -72,12 +72,27 @@ def test_render_discovery_page_renders_summary_table(monkeypatch) -> None:
     calls = {"notes": []}
     monkeypatch.setattr(discovery_page.st, "subheader", lambda text: calls.setdefault("subheader", text))
     monkeypatch.setattr(discovery_page.st, "caption", lambda text: calls.setdefault("caption", text))
-    monkeypatch.setattr(discovery_page.st, "columns", lambda n, **kwargs: [_DummyContext() for _ in range(n if isinstance(n, int) else len(n))])
+    monkeypatch.setattr(
+        discovery_page.st,
+        "columns",
+        lambda n, **kwargs: [_DummyContext() for _ in range(n if isinstance(n, int) else len(n))],
+    )
     monkeypatch.setattr(discovery_page.st, "container", lambda border=False: _DummyContext())
     monkeypatch.setattr(discovery_page.st, "markdown", lambda *args, **kwargs: None)
     monkeypatch.setattr(discovery_page.st, "metric", lambda *args, **kwargs: None)
-    monkeypatch.setattr(discovery_page, "render_html_ranked_table", lambda df, **kwargs: calls.setdefault("table", (df, kwargs)))
-    result = SimpleNamespace(algorithm="Inductive Miner", variant="IMf", discovery_time_s=0.5, num_transitions=3, num_places=2, num_arcs=4)
+    monkeypatch.setattr(
+        discovery_page,
+        "render_html_ranked_table",
+        lambda df, **kwargs: calls.setdefault("table", (df, kwargs)),
+    )
+    result = SimpleNamespace(
+        algorithm="Inductive Miner",
+        variant="IMf",
+        discovery_time_s=0.5,
+        num_transitions=3,
+        num_places=2,
+        num_arcs=4,
+    )
     discovery_page.render_discovery_page(_snapshot(discovery_results={"Inductive": result}))
 
     assert calls["subheader"] == "Discovery"
@@ -85,8 +100,44 @@ def test_render_discovery_page_renders_summary_table(monkeypatch) -> None:
     assert calls["table"][1]["label_column"] == "Model"
 
 
-def test_render_overview_page_uses_cards_instead_of_status_dataframe(monkeypatch) -> None:
-    calls = {"markdown": [], "notes": [], "metrics": []}
+def test_dashboard_helpers_escape_and_redact_sensitive_values(monkeypatch) -> None:
+    calls = {"markdown": []}
+    monkeypatch.setattr(
+        common_page.st,
+        "markdown",
+        lambda text, **kwargs: calls["markdown"].append(text),
+    )
+
+    common_page.render_dashboard_topbar(
+        title="<script>Run</script>",
+        subtitle=r"C:\Users\Researcher\Secret cohort\screening cohort.csv",
+        badges=[{"label": "Mode", "value": "Direct workflow <default>", "tone": "accent"}],
+        meta=[r"C:\Users\Researcher\Secret cohort\local.xes"],
+    )
+    topbar_markup = calls["markdown"][-1]
+
+    assert "crpm-dashboard-topbar" in topbar_markup
+    assert "&lt;script&gt;Run&lt;/script&gt;" in topbar_markup
+    assert "Direct workflow &lt;default&gt;" in topbar_markup
+    assert r"C:\Users" not in topbar_markup
+    assert "screening cohort.csv" in topbar_markup
+    assert "local.xes" in topbar_markup
+
+    common_page.render_dashboard_bar_list(
+        "Distribution <unsafe>",
+        [{"label": "Deviation <script>", "value": 66.2, "tone": "watch"}],
+    )
+    bar_markup = calls["markdown"][-1]
+
+    assert "crpm-dashboard-bar-list" in bar_markup
+    assert "Distribution &lt;unsafe&gt;" in bar_markup
+    assert "Deviation &lt;script&gt;" in bar_markup
+    assert "width:66.2%" in bar_markup
+    assert "<script>" not in bar_markup
+
+
+def test_render_overview_page_uses_dashboard_command_center(monkeypatch) -> None:
+    calls = {"markdown": [], "workflow": []}
     snapshot = AnalysisSnapshot(
         analysis_complete=True,
         input_name="screening_conformance_demo.xes",
@@ -119,30 +170,90 @@ def test_render_overview_page_uses_cards_instead_of_status_dataframe(monkeypatch
         variant_cache={"v": {}},
         dfg_cache={"d": {}},
         conformance_results={},
-        conformance_workspace={"workflow": {"nodes": pd.DataFrame(), "edges": pd.DataFrame()}},
+        conformance_workspace={
+            "workflow": {
+                "nodes": pd.DataFrame(
+                    [
+                        {
+                            "activity": "Invitation_mail",
+                            "display_name": "Invitation",
+                            "cases": 1000,
+                        },
+                        {
+                            "activity": "FIT_mail",
+                            "display_name": "FIT mailed",
+                            "cases": 900,
+                        },
+                    ]
+                ),
+                "edges": pd.DataFrame(
+                    [
+                        {
+                            "source": "Invitation_mail",
+                            "target": "FIT_mail",
+                            "frequency": 900,
+                            "share_pct": 90.0,
+                        }
+                    ]
+                ),
+            }
+        },
         selected_algorithms=("Heuristics (Classic)",),
         stage_timings={},
     )
 
-    monkeypatch.setattr(overview_page.st, "markdown", lambda text, **kwargs: calls["markdown"].append(text))
+    monkeypatch.setattr(
+        overview_page.st,
+        "markdown",
+        lambda text, **kwargs: calls["markdown"].append(text),
+    )
     monkeypatch.setattr(overview_page.st, "columns", _columns)
     monkeypatch.setattr(overview_page.st, "expander", lambda *args, **kwargs: _DummyContext())
+    monkeypatch.setattr(
+        overview_page,
+        "render_workflow_conformance_svg",
+        lambda workflow, **kwargs: (
+            calls["workflow"].append({"workflow": workflow, "kwargs": kwargs})
+            or "<div class='crpm-workflow-board'><svg>overview</svg></div>"
+        ),
+        raising=False,
+    )
     overview_page.render_overview_page(snapshot)
 
-    assert any("crpm-overview-hero" in text for text in calls["markdown"])
+    assert any("crpm-dashboard-topbar" in text for text in calls["markdown"])
+    assert any("Direct workflow mode" in text for text in calls["markdown"])
+    assert any("crpm-overview-command-center" in text for text in calls["markdown"])
+    assert any("crpm-overview-map-frame" in text for text in calls["markdown"])
+    assert any("crpm-dashboard-bar-list" in text for text in calls["markdown"])
+    assert not any("crpm-overview-hero" in text for text in calls["markdown"])
     assert any("crpm-reading-order-band" in text for text in calls["markdown"])
     assert any("crpm-page-card-grid" in text for text in calls["markdown"])
+    assert calls["workflow"]
+    assert calls["workflow"][0]["kwargs"]["layout_mode"] == "vertical"
+    assert calls["workflow"][0]["kwargs"]["detail_level"] == "executive"
 
 
 def test_render_comparison_page_renders_ranked_table_and_charts(monkeypatch) -> None:
     calls = {"charts": []}
-    monkeypatch.setattr(comparison_page.st, "subheader", lambda text: calls.setdefault("subheader", text))
+    monkeypatch.setattr(
+        comparison_page.st,
+        "subheader",
+        lambda text: calls.setdefault("subheader", text),
+    )
     monkeypatch.setattr(comparison_page.st, "markdown", lambda *args, **kwargs: None)
-    monkeypatch.setattr(comparison_page, "render_html_ranked_table", lambda df, **kwargs: calls.setdefault("table", (df, kwargs)))
+    monkeypatch.setattr(
+        comparison_page,
+        "render_html_ranked_table",
+        lambda df, **kwargs: calls.setdefault("table", (df, kwargs)),
+    )
     monkeypatch.setattr(comparison_page.st, "columns", lambda n: [_DummyContext() for _ in range(n)])
     monkeypatch.setattr(comparison_page.st, "metric", lambda *args, **kwargs: None)
     monkeypatch.setattr(comparison_page.st, "caption", lambda *args, **kwargs: None)
-    monkeypatch.setattr(comparison_page, "render_plotly_chart", lambda fig, key: calls["charts"].append(key))
+    monkeypatch.setattr(
+        comparison_page,
+        "render_plotly_chart",
+        lambda fig, key: calls["charts"].append(key),
+    )
     monkeypatch.setattr(comparison_page, "create_fitness_precision_scatter", lambda df: object())
     monkeypatch.setattr(comparison_page, "create_model_comparison_heatmap", lambda df, metrics: object())
 
@@ -176,26 +287,56 @@ def test_render_operational_flow_page_renders_charts(monkeypatch) -> None:
     calls = {"charts": [], "notes": [], "captions": []}
     log = [
         [
-            {"concept:name": "Invitation_mail", "time:timestamp": pd.Timestamp("2024-01-01")},
+            {
+                "concept:name": "Invitation_mail",
+                "time:timestamp": pd.Timestamp("2024-01-01"),
+            },
             {"concept:name": "FIT_mail", "time:timestamp": pd.Timestamp("2024-01-03")},
-            {"concept:name": "FIT_return", "time:timestamp": pd.Timestamp("2024-01-10")},
+            {
+                "concept:name": "FIT_return",
+                "time:timestamp": pd.Timestamp("2024-01-10"),
+            },
         ]
     ]
 
-    monkeypatch.setattr(operational_flow_page.st, "subheader", lambda text: calls.setdefault("subheader", text))
+    monkeypatch.setattr(
+        operational_flow_page.st,
+        "subheader",
+        lambda text: calls.setdefault("subheader", text),
+    )
     monkeypatch.setattr(operational_flow_page.st, "markdown", lambda *args, **kwargs: None)
     monkeypatch.setattr(operational_flow_page.st, "columns", _columns)
     monkeypatch.setattr(operational_flow_page.st, "selectbox", _guarded_selectbox({"View": "Full log"}))
-    monkeypatch.setattr(operational_flow_page.st, "segmented_control", lambda label, options, **kwargs: "Stage flow")
+    monkeypatch.setattr(
+        operational_flow_page.st,
+        "segmented_control",
+        lambda label, options, **kwargs: "Stage flow",
+    )
     monkeypatch.setattr(operational_flow_page.st, "checkbox", lambda *args, **kwargs: False)
     monkeypatch.setattr(operational_flow_page.st, "slider", lambda *args, **kwargs: 13)
     monkeypatch.setattr(operational_flow_page.st, "expander", lambda *args, **kwargs: _DummyContext())
     monkeypatch.setattr(operational_flow_page.st, "dataframe", lambda *args, **kwargs: None)
     monkeypatch.setattr(operational_flow_page.st, "warning", lambda *args, **kwargs: None)
-    monkeypatch.setattr(operational_flow_page.st, "caption", lambda text, **kwargs: calls["captions"].append(text))
-    monkeypatch.setattr(operational_flow_page, "render_quiet_note", lambda message: calls["notes"].append(message))
-    monkeypatch.setattr(operational_flow_page, "render_inline_empty", lambda message: calls["notes"].append(message))
-    monkeypatch.setattr(operational_flow_page, "render_plotly_chart", lambda fig, key: calls["charts"].append(key))
+    monkeypatch.setattr(
+        operational_flow_page.st,
+        "caption",
+        lambda text, **kwargs: calls["captions"].append(text),
+    )
+    monkeypatch.setattr(
+        operational_flow_page,
+        "render_quiet_note",
+        lambda message: calls["notes"].append(message),
+    )
+    monkeypatch.setattr(
+        operational_flow_page,
+        "render_inline_empty",
+        lambda message: calls["notes"].append(message),
+    )
+    monkeypatch.setattr(
+        operational_flow_page,
+        "render_plotly_chart",
+        lambda fig, key: calls["charts"].append(key),
+    )
 
     snapshot = AnalysisSnapshot(
         analysis_complete=True,
@@ -225,15 +366,23 @@ def test_render_operational_flow_page_renders_charts(monkeypatch) -> None:
     assert any("weekly case volumes" in text.lower() for text in calls["captions"])
 
 
-def test_render_operational_flow_page_uses_data_driven_period_defaults(monkeypatch) -> None:
+def test_render_operational_flow_page_uses_data_driven_period_defaults(
+    monkeypatch,
+) -> None:
     calls = {"charts": [], "date_inputs": [], "notes": []}
     log = [
         [
-            {"concept:name": "Invitation_mail", "time:timestamp": pd.Timestamp("2010-12-30")},
+            {
+                "concept:name": "Invitation_mail",
+                "time:timestamp": pd.Timestamp("2010-12-30"),
+            },
             {"concept:name": "FIT_mail", "time:timestamp": pd.Timestamp("2010-12-31")},
         ],
         [
-            {"concept:name": "Invitation_mail", "time:timestamp": pd.Timestamp("2011-01-12")},
+            {
+                "concept:name": "Invitation_mail",
+                "time:timestamp": pd.Timestamp("2011-01-12"),
+            },
             {"concept:name": "FIT_mail", "time:timestamp": pd.Timestamp("2011-01-24")},
         ],
     ]
@@ -242,11 +391,23 @@ def test_render_operational_flow_page_uses_data_driven_period_defaults(monkeypat
         calls["date_inputs"].append((label, value))
         return value
 
-    monkeypatch.setattr(operational_flow_page.st, "subheader", lambda text: calls.setdefault("subheader", text))
+    monkeypatch.setattr(
+        operational_flow_page.st,
+        "subheader",
+        lambda text: calls.setdefault("subheader", text),
+    )
     monkeypatch.setattr(operational_flow_page.st, "markdown", lambda *args, **kwargs: None)
     monkeypatch.setattr(operational_flow_page.st, "columns", _columns)
-    monkeypatch.setattr(operational_flow_page.st, "selectbox", _guarded_selectbox({"View": "PRE vs POST"}))
-    monkeypatch.setattr(operational_flow_page.st, "segmented_control", lambda label, options, **kwargs: "Stage flow")
+    monkeypatch.setattr(
+        operational_flow_page.st,
+        "selectbox",
+        _guarded_selectbox({"View": "PRE vs POST"}),
+    )
+    monkeypatch.setattr(
+        operational_flow_page.st,
+        "segmented_control",
+        lambda label, options, **kwargs: "Stage flow",
+    )
     monkeypatch.setattr(operational_flow_page.st, "checkbox", lambda *args, **kwargs: False)
     monkeypatch.setattr(operational_flow_page.st, "slider", lambda *args, **kwargs: 13)
     monkeypatch.setattr(operational_flow_page.st, "date_input", _date_input)
@@ -254,8 +415,16 @@ def test_render_operational_flow_page_uses_data_driven_period_defaults(monkeypat
     monkeypatch.setattr(operational_flow_page.st, "dataframe", lambda *args, **kwargs: None)
     monkeypatch.setattr(operational_flow_page.st, "warning", lambda *args, **kwargs: None)
     monkeypatch.setattr(operational_flow_page.st, "caption", lambda *args, **kwargs: None)
-    monkeypatch.setattr(operational_flow_page, "render_quiet_note", lambda message: calls["notes"].append(message))
-    monkeypatch.setattr(operational_flow_page, "render_plotly_chart", lambda fig, key: calls["charts"].append(key))
+    monkeypatch.setattr(
+        operational_flow_page,
+        "render_quiet_note",
+        lambda message: calls["notes"].append(message),
+    )
+    monkeypatch.setattr(
+        operational_flow_page,
+        "render_plotly_chart",
+        lambda fig, key: calls["charts"].append(key),
+    )
 
     snapshot = AnalysisSnapshot(
         analysis_complete=True,
@@ -286,14 +455,20 @@ def test_render_operational_flow_page_uses_data_driven_period_defaults(monkeypat
     assert any("default pre/post windows are derived" in text.lower() for text in calls["notes"])
 
 
-def test_render_operational_flow_page_uses_inline_placeholder_for_empty_aging(monkeypatch) -> None:
+def test_render_operational_flow_page_uses_inline_placeholder_for_empty_aging(
+    monkeypatch,
+) -> None:
     calls = {"charts": [], "inline_empty": []}
 
     monkeypatch.setattr(operational_flow_page.st, "subheader", lambda text: None)
     monkeypatch.setattr(operational_flow_page.st, "markdown", lambda *args, **kwargs: None)
     monkeypatch.setattr(operational_flow_page.st, "columns", _columns)
     monkeypatch.setattr(operational_flow_page.st, "selectbox", _guarded_selectbox({"View": "Full log"}))
-    monkeypatch.setattr(operational_flow_page.st, "segmented_control", lambda label, options, **kwargs: "Stage aging")
+    monkeypatch.setattr(
+        operational_flow_page.st,
+        "segmented_control",
+        lambda label, options, **kwargs: "Stage aging",
+    )
     monkeypatch.setattr(operational_flow_page.st, "checkbox", lambda *args, **kwargs: False)
     monkeypatch.setattr(operational_flow_page.st, "slider", lambda *args, **kwargs: 13)
     monkeypatch.setattr(operational_flow_page.st, "expander", lambda *args, **kwargs: _DummyContext())
@@ -301,8 +476,16 @@ def test_render_operational_flow_page_uses_inline_placeholder_for_empty_aging(mo
     monkeypatch.setattr(operational_flow_page.st, "warning", lambda *args, **kwargs: None)
     monkeypatch.setattr(operational_flow_page.st, "caption", lambda *args, **kwargs: None)
     monkeypatch.setattr(operational_flow_page, "render_quiet_note", lambda *args, **kwargs: None)
-    monkeypatch.setattr(operational_flow_page, "render_inline_empty", lambda message: calls["inline_empty"].append(message))
-    monkeypatch.setattr(operational_flow_page, "render_plotly_chart", lambda fig, key: calls["charts"].append(key))
+    monkeypatch.setattr(
+        operational_flow_page,
+        "render_inline_empty",
+        lambda message: calls["inline_empty"].append(message),
+    )
+    monkeypatch.setattr(
+        operational_flow_page,
+        "render_plotly_chart",
+        lambda fig, key: calls["charts"].append(key),
+    )
 
     monkeypatch.setattr(
         operational_flow_page,
@@ -326,8 +509,14 @@ def test_render_operational_flow_page_uses_inline_placeholder_for_empty_aging(mo
         filter_key="filter",
         filtered_log=[
             [
-                {"concept:name": "Invitation_mail", "time:timestamp": pd.Timestamp("2024-01-01")},
-                {"concept:name": "FIT_mail", "time:timestamp": pd.Timestamp("2024-01-02")},
+                {
+                    "concept:name": "Invitation_mail",
+                    "time:timestamp": pd.Timestamp("2024-01-01"),
+                },
+                {
+                    "concept:name": "FIT_mail",
+                    "time:timestamp": pd.Timestamp("2024-01-02"),
+                },
             ]
         ],
         discovery_results={},
@@ -352,7 +541,19 @@ def test_render_operational_flow_page_uses_inline_placeholder_for_empty_aging(mo
 
 
 def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
-    calls = {"metrics": [], "captions": [], "markdown": [], "notes": [], "inline_empty": [], "workflow": [], "selectbox": [], "html": [], "tabs": [], "expanders": [], "columns": []}
+    calls = {
+        "metrics": [],
+        "captions": [],
+        "markdown": [],
+        "notes": [],
+        "inline_empty": [],
+        "workflow": [],
+        "selectbox": [],
+        "html": [],
+        "tabs": [],
+        "expanders": [],
+        "columns": [],
+    }
     workspace = {
         "model_summary_df": pd.DataFrame(
             [
@@ -426,54 +627,117 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
             ),
             "legend": pd.DataFrame(
                 [
-                    {"bucket": "Conformant", "meaning": "No meaningful delay deviation detected", "severity": "Low"}
+                    {
+                        "bucket": "Conformant",
+                        "meaning": "No meaningful delay deviation detected",
+                        "severity": "Low",
+                    }
                 ]
             ),
         },
     }
 
-    monkeypatch.setattr(conformance_page.st, "subheader", lambda text: calls.setdefault("subheader", text))
+    monkeypatch.setattr(
+        conformance_page.st,
+        "subheader",
+        lambda text: calls.setdefault("subheader", text),
+    )
     monkeypatch.setattr(conformance_page.st, "caption", lambda text: calls["captions"].append(text))
-    monkeypatch.setattr(conformance_page.st, "markdown", lambda text, **kwargs: calls["markdown"].append(text))
-    monkeypatch.setattr(conformance_page.st, "dataframe", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("conformance inspector should not use st.dataframe")))
-    monkeypatch.setattr(conformance_page.st, "metric", lambda *args, **kwargs: calls["metrics"].append(args))
+    monkeypatch.setattr(
+        conformance_page.st,
+        "markdown",
+        lambda text, **kwargs: calls["markdown"].append(text),
+    )
+    monkeypatch.setattr(
+        conformance_page.st,
+        "dataframe",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("conformance inspector should not use st.dataframe")),
+    )
+    monkeypatch.setattr(
+        conformance_page.st,
+        "metric",
+        lambda *args, **kwargs: calls["metrics"].append(args),
+    )
     monkeypatch.setattr(
         conformance_page.st,
         "columns",
-        lambda n, **kwargs: calls["columns"].append(tuple(n) if not isinstance(n, int) else n) or [_DummyContext() for _ in range(n if isinstance(n, int) else len(n))],
+        lambda n, **kwargs: (
+            calls["columns"].append(tuple(n) if not isinstance(n, int) else n)
+            or [_DummyContext() for _ in range(n if isinstance(n, int) else len(n))]
+        ),
     )
     monkeypatch.setattr(conformance_page.st, "container", lambda *args, **kwargs: _DummyContext())
-    monkeypatch.setattr(conformance_page.st, "expander", lambda *args, **kwargs: _DummyContext())
-    monkeypatch.setattr(conformance_page.st, "tabs", lambda labels: calls["tabs"].append(tuple(labels)) or [_DummyContext() for _ in labels])
+    monkeypatch.setattr(
+        conformance_page.st,
+        "expander",
+        lambda label, *args, **kwargs: calls["expanders"].append((label, kwargs)) or _DummyContext(),
+    )
+    monkeypatch.setattr(
+        conformance_page.st,
+        "tabs",
+        lambda labels: calls["tabs"].append(tuple(labels)) or [_DummyContext() for _ in labels],
+    )
     monkeypatch.setattr(
         conformance_page.st,
         "segmented_control",
-        lambda label, options, **kwargs: calls.setdefault("segmented", []).append((label, tuple(options)))
-        or {
-            "Path view": "All",
-            "Deviation focus": "All",
-            "Density": "Analyst",
-            "Lens": "% of paths",
-            "Pin type": "Overview",
-        }.get(label, options[0]),
+        lambda label, options, **kwargs: (
+            calls.setdefault("segmented", []).append((label, tuple(options)))
+            or {
+                "Filter category": "Pathway",
+                "Path view": "All",
+                "Deviation focus": "All",
+                "Density": "Analyst",
+                "Lens": "% of paths",
+                "Pinned metric type": "Overview",
+            }.get(label, options[0])
+        ),
     )
-    monkeypatch.setattr(conformance_page.st, "selectbox", lambda label, options, index=0, **kwargs: calls["selectbox"].append((label, tuple(options))) or options[index])
-    monkeypatch.setattr(conformance_page.st, "button", lambda label, *args, **kwargs: calls.setdefault("buttons", []).append(label) or False)
-    monkeypatch.setattr(conformance_page, "render_quiet_note", lambda message: calls["notes"].append(message))
-    monkeypatch.setattr(conformance_page, "render_legend_note", lambda message: calls["notes"].append(message))
-    monkeypatch.setattr(conformance_page, "render_inline_empty", lambda message: calls["inline_empty"].append(message))
+    monkeypatch.setattr(
+        conformance_page.st,
+        "selectbox",
+        lambda label, options, index=0, **kwargs: calls["selectbox"].append((label, tuple(options))) or options[index],
+    )
+    monkeypatch.setattr(
+        conformance_page.st,
+        "button",
+        lambda label, *args, **kwargs: calls.setdefault("buttons", []).append(label) or False,
+    )
+    monkeypatch.setattr(
+        conformance_page,
+        "render_quiet_note",
+        lambda message: calls["notes"].append(message),
+    )
+    monkeypatch.setattr(
+        conformance_page,
+        "render_legend_note",
+        lambda message: calls["notes"].append(message),
+    )
+    monkeypatch.setattr(
+        conformance_page,
+        "render_inline_empty",
+        lambda message: calls["inline_empty"].append(message),
+    )
     monkeypatch.setattr(
         conformance_page,
         "render_workflow_conformance_svg",
-        lambda workflow, **kwargs: calls["workflow"].append({"workflow": workflow, "kwargs": kwargs}) or "<div class='crpm-workflow-board'><svg>mock</svg></div>",
+        lambda workflow, **kwargs: (
+            calls["workflow"].append({"workflow": workflow, "kwargs": kwargs}) or "<div class='crpm-workflow-board'><svg>mock</svg></div>"
+        ),
     )
     monkeypatch.setattr(
         conformance_page,
         "render_workflow_explorer_html",
-        lambda payload: (calls.setdefault("explorer_payload", payload), "<div>interactive explorer</div>")[1],
+        lambda payload: (
+            calls.setdefault("explorer_payload", payload),
+            "<div>interactive explorer</div>",
+        )[1],
     )
     monkeypatch.setattr(conformance_page, "streamlit_cytoscape", None)
-    monkeypatch.setattr(conformance_page.components, "html", lambda html, **kwargs: calls["html"].append({"html": html, "kwargs": kwargs}))
+    monkeypatch.setattr(
+        conformance_page.components,
+        "html",
+        lambda html, **kwargs: calls["html"].append({"html": html, "kwargs": kwargs}),
+    )
 
     snapshot = _snapshot(comparison_df=pd.DataFrame())
     snapshot = AnalysisSnapshot(
@@ -508,41 +772,53 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
     explanatory_text = " ".join(str(text).lower() for text in [*calls["captions"], *calls["markdown"], *calls["notes"]])
     assert "interactive workflow explorer" in explanatory_text
     assert "workflow pathway board" not in explanatory_text
+    assert "direct workflow mode" in explanatory_text
     assert not any(label == "Mode" for label, _ in calls["segmented"])
+    assert {"Pathway", "Deviation", "Display", "Actions"}.issubset(set(calls["buttons"]))
     assert any(label == "Path view" for label, _ in calls["segmented"])
-    assert any(label == "Deviation focus" for label, _ in calls["segmented"])
-    assert any(label == "Density" for label, _ in calls["segmented"])
-    assert any(label == "Lens" for label, _ in calls["segmented"])
-    assert any(label == "Pin type" for label, _ in calls["segmented"])
-    assert any(label == "Color" for label, _ in calls["selectbox"])
-    assert "Clear" in calls["buttons"]
-    assert "Reset filters" in calls["buttons"]
-    assert "Reset" in calls["buttons"]
-    assert (0.72, 2.0, 1.12) in calls["columns"]
+    assert not any(label == "Deviation focus" for label, _ in calls["segmented"])
+    assert not any(label == "Density" for label, _ in calls["segmented"])
+    assert not any(label == "Lens" for label, _ in calls["segmented"])
+    assert any(label == "Pinned metric type" for label, _ in calls["segmented"])
+    assert not any(label == "Color" for label, _ in calls["selectbox"])
+    assert "Clear pinned metrics" in calls["buttons"]
+    assert "Reset filters" not in calls["buttons"]
+    assert "Reset graph view" in calls["buttons"]
+    assert (0.72, 2.55, 0.73) in calls["columns"]
+    assert (0.48, 0.26, 0.26) in calls["columns"]
     assert any("crpm-selection-card" in text for text in calls["markdown"])
     assert any("crpm-model-card-grid" in text for text in calls["markdown"])
     assert any("crpm-ranked-table" in text for text in calls["markdown"])
     assert not any("crpm-mode-banner" in text for text in calls["markdown"])
     assert any("overview mode is active" in note.lower() for note in calls["notes"])
-    assert any("crpm-conformance-hero" in str(text) for text in calls["markdown"])
+    assert any("crpm-dashboard-topbar" in str(text) for text in calls["markdown"])
+    assert not any("crpm-conformance-hero" in str(text) for text in calls["markdown"])
     assert not any("crpm-conformance-report-band" in str(text) for text in calls["markdown"])
-    assert any("crpm-conformance-side-rail--filters" in str(text) for text in calls["markdown"])
     assert any("crpm-conformance-side-rail--inspector" in str(text) for text in calls["markdown"])
     assert any("crpm-conformance-panel--rail" in str(text) for text in calls["markdown"])
-    inspector_index = next(
-        idx for idx, text in enumerate(calls["markdown"]) if "crpm-conformance-side-title--inspector" in str(text)
-    )
-    selection_index = next(
-        idx for idx, text in enumerate(calls["markdown"]) if "Selection focus</div>" in str(text)
-    )
+    assert any("crpm-filter-parent-label" in str(text) for text in calls["markdown"])
+    assert any("crpm-filter-composer" in str(text) for text in calls["markdown"])
+    assert any("crpm-active-filter-summary" in str(text) for text in calls["markdown"])
+    assert any("crpm-dashboard-bar-list" in str(text) for text in calls["markdown"])
+    assert any(label == "Report/export view" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
+    inspector_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-conformance-side-title--inspector" in str(text))
+    selection_index = next(idx for idx, text in enumerate(calls["markdown"]) if "Selection focus</div>" in str(text))
     pinned_index = next(
         idx for idx, text in enumerate(calls["markdown"]) if idx > selection_index and "Pinned exact metrics</div>" in str(text)
     )
-    context_index = next(
-        idx for idx, text in enumerate(calls["markdown"]) if idx > pinned_index and "Context</div>" in str(text)
+    lead_time_index = next(
+        idx for idx, text in enumerate(calls["markdown"]) if idx > pinned_index and "Lead-time watchlist</div>" in str(text)
     )
-    assert inspector_index < selection_index < pinned_index < context_index
-    assert any("crpm-conformance-side-title--rail" in str(text) for text in calls["markdown"])
+    assert inspector_index < selection_index < pinned_index < lead_time_index
+    assert any(label == "Context" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
+    assert not any("Evidence rail</div>" in str(text) for text in calls["markdown"])
+    top_transitions_index = next(
+        idx for idx, text in enumerate(calls["markdown"]) if "Top transitions" in str(text) or "Top activities" in str(text)
+    )
+    filter_parent_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-filter-parent-label" in str(text))
+    composer_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-filter-composer" in str(text))
+    active_filter_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-active-filter-summary" in str(text))
+    assert top_transitions_index < filter_parent_index < composer_index < active_filter_index
 
 
 def test_conformance_label_helpers_humanize_raw_workflow_labels() -> None:
@@ -562,15 +838,37 @@ def test_conformance_label_helpers_humanize_raw_workflow_names() -> None:
 
 
 def test_conformance_option_labels_humanize_raw_activity_names() -> None:
-    node_row = pd.Series({"activity": "PCC_observation", "cases": 28, "conformance_bucket": "Model deviation"})
-    edge_row = pd.Series({"source": "Lab_return", "target": "PCC_observation", "frequency": 28, "conformance_bucket": "Model deviation"})
+    node_row = pd.Series(
+        {
+            "activity": "PCC_observation",
+            "cases": 28,
+            "conformance_bucket": "Model deviation",
+        }
+    )
+    edge_row = pd.Series(
+        {
+            "source": "Lab_return",
+            "target": "PCC_observation",
+            "frequency": 28,
+            "conformance_bucket": "Model deviation",
+        }
+    )
 
     assert conformance_page._node_option_label(node_row).startswith("PCC observation")
     assert conformance_page._edge_option_label(edge_row).startswith("Lab return → PCC observation")
 
 
-def test_render_conformance_page_falls_back_to_comparison_dataframe(monkeypatch) -> None:
-    calls = {"dataframes": [], "metrics": [], "markdown": [], "workflow": [], "inline_empty": [], "tabs": []}
+def test_render_conformance_page_falls_back_to_comparison_dataframe(
+    monkeypatch,
+) -> None:
+    calls = {
+        "dataframes": [],
+        "metrics": [],
+        "markdown": [],
+        "workflow": [],
+        "inline_empty": [],
+        "tabs": [],
+    }
     comparison_df = pd.DataFrame(
         [
             {
@@ -585,15 +883,39 @@ def test_render_conformance_page_falls_back_to_comparison_dataframe(monkeypatch)
         ]
     )
 
-    monkeypatch.setattr(conformance_page.st, "subheader", lambda text: calls.setdefault("subheader", text))
+    monkeypatch.setattr(
+        conformance_page.st,
+        "subheader",
+        lambda text: calls.setdefault("subheader", text),
+    )
     monkeypatch.setattr(conformance_page.st, "caption", lambda *args, **kwargs: None)
-    monkeypatch.setattr(conformance_page.st, "markdown", lambda text, **kwargs: calls["markdown"].append(text))
-    monkeypatch.setattr(conformance_page.st, "dataframe", lambda df, **kwargs: calls["dataframes"].append(df))
-    monkeypatch.setattr(conformance_page.st, "metric", lambda *args, **kwargs: calls["metrics"].append(args))
-    monkeypatch.setattr(conformance_page.st, "columns", lambda n, **kwargs: [_DummyContext() for _ in range(n if isinstance(n, int) else len(n))])
+    monkeypatch.setattr(
+        conformance_page.st,
+        "markdown",
+        lambda text, **kwargs: calls["markdown"].append(text),
+    )
+    monkeypatch.setattr(
+        conformance_page.st,
+        "dataframe",
+        lambda df, **kwargs: calls["dataframes"].append(df),
+    )
+    monkeypatch.setattr(
+        conformance_page.st,
+        "metric",
+        lambda *args, **kwargs: calls["metrics"].append(args),
+    )
+    monkeypatch.setattr(
+        conformance_page.st,
+        "columns",
+        lambda n, **kwargs: [_DummyContext() for _ in range(n if isinstance(n, int) else len(n))],
+    )
     monkeypatch.setattr(conformance_page.st, "container", lambda *args, **kwargs: _DummyContext())
     monkeypatch.setattr(conformance_page.st, "expander", lambda *args, **kwargs: _DummyContext())
-    monkeypatch.setattr(conformance_page.st, "tabs", lambda labels: calls["tabs"].append(tuple(labels)) or [_DummyContext() for _ in labels])
+    monkeypatch.setattr(
+        conformance_page.st,
+        "tabs",
+        lambda labels: calls["tabs"].append(tuple(labels)) or [_DummyContext() for _ in labels],
+    )
     monkeypatch.setattr(
         conformance_page.st,
         "segmented_control",
@@ -601,14 +923,26 @@ def test_render_conformance_page_falls_back_to_comparison_dataframe(monkeypatch)
             "Path view": "All",
             "Deviation focus": "All",
             "Density": "Analyst",
-            "Pin type": "Overview",
+            "Pinned metric type": "Overview",
         }.get(label, options[0]),
     )
-    monkeypatch.setattr(conformance_page.st, "selectbox", lambda label, options, index=0, **kwargs: options[index])
+    monkeypatch.setattr(
+        conformance_page.st,
+        "selectbox",
+        lambda label, options, index=0, **kwargs: options[index],
+    )
     monkeypatch.setattr(conformance_page.st, "button", lambda *args, **kwargs: False)
     monkeypatch.setattr(conformance_page, "render_legend_note", lambda *args, **kwargs: None)
-    monkeypatch.setattr(conformance_page, "render_inline_empty", lambda message: calls["inline_empty"].append(message))
-    monkeypatch.setattr(conformance_page, "render_workflow_conformance_svg", lambda workflow: calls["workflow"].append(workflow) or "<svg>mock</svg>")
+    monkeypatch.setattr(
+        conformance_page,
+        "render_inline_empty",
+        lambda message: calls["inline_empty"].append(message),
+    )
+    monkeypatch.setattr(
+        conformance_page,
+        "render_workflow_conformance_svg",
+        lambda workflow: calls["workflow"].append(workflow) or "<svg>mock</svg>",
+    )
 
     snapshot = AnalysisSnapshot(
         analysis_complete=True,
@@ -639,8 +973,17 @@ def test_render_conformance_page_falls_back_to_comparison_dataframe(monkeypatch)
     assert ("Legend", "Deviations", "Trace") in calls["tabs"]
 
 
-def test_render_conformance_page_interactive_mode_degrades_gracefully(monkeypatch) -> None:
-    calls = {"dataframes": [], "notes": [], "warnings": [], "workflow": [], "markdown": [], "html": []}
+def test_render_conformance_page_interactive_mode_degrades_gracefully(
+    monkeypatch,
+) -> None:
+    calls = {
+        "dataframes": [],
+        "notes": [],
+        "warnings": [],
+        "workflow": [],
+        "markdown": [],
+        "html": [],
+    }
 
     workspace = {
         "model_summary_df": pd.DataFrame(
@@ -692,13 +1035,33 @@ def test_render_conformance_page_interactive_mode_degrades_gracefully(monkeypatc
         },
     }
 
-    monkeypatch.setattr(conformance_page.st, "subheader", lambda text: calls.setdefault("subheader", text))
+    monkeypatch.setattr(
+        conformance_page.st,
+        "subheader",
+        lambda text: calls.setdefault("subheader", text),
+    )
     monkeypatch.setattr(conformance_page.st, "caption", lambda text: None)
-    monkeypatch.setattr(conformance_page.st, "markdown", lambda text, **kwargs: calls["markdown"].append(text))
-    monkeypatch.setattr(conformance_page.st, "dataframe", lambda df, **kwargs: calls["dataframes"].append(df))
+    monkeypatch.setattr(
+        conformance_page.st,
+        "markdown",
+        lambda text, **kwargs: calls["markdown"].append(text),
+    )
+    monkeypatch.setattr(
+        conformance_page.st,
+        "dataframe",
+        lambda df, **kwargs: calls["dataframes"].append(df),
+    )
     monkeypatch.setattr(conformance_page.st, "metric", lambda *args, **kwargs: None)
-    monkeypatch.setattr(conformance_page.st, "warning", lambda text, **kwargs: calls["warnings"].append(text))
-    monkeypatch.setattr(conformance_page.st, "columns", lambda n, **kwargs: [_DummyContext() for _ in range(n if isinstance(n, int) else len(n))])
+    monkeypatch.setattr(
+        conformance_page.st,
+        "warning",
+        lambda text, **kwargs: calls["warnings"].append(text),
+    )
+    monkeypatch.setattr(
+        conformance_page.st,
+        "columns",
+        lambda n, **kwargs: [_DummyContext() for _ in range(n if isinstance(n, int) else len(n))],
+    )
     monkeypatch.setattr(conformance_page.st, "container", lambda *args, **kwargs: _DummyContext())
     monkeypatch.setattr(conformance_page.st, "expander", lambda *args, **kwargs: _DummyContext())
     monkeypatch.setattr(conformance_page.st, "tabs", lambda labels: [_DummyContext() for _ in labels])
@@ -709,17 +1072,37 @@ def test_render_conformance_page_interactive_mode_degrades_gracefully(monkeypatc
             "Path view": "All",
             "Deviation focus": "All",
             "Density": "Analyst",
-            "Pin type": "Overview",
+            "Pinned metric type": "Overview",
         }.get(label, options[0]),
     )
-    monkeypatch.setattr(conformance_page.st, "selectbox", lambda label, options, index=0, **kwargs: options[index])
+    monkeypatch.setattr(
+        conformance_page.st,
+        "selectbox",
+        lambda label, options, index=0, **kwargs: options[index],
+    )
     monkeypatch.setattr(conformance_page.st, "button", lambda *args, **kwargs: False)
-    monkeypatch.setattr(conformance_page, "render_quiet_note", lambda message: calls["notes"].append(message))
-    monkeypatch.setattr(conformance_page, "render_legend_note", lambda message: calls["notes"].append(message))
+    monkeypatch.setattr(
+        conformance_page,
+        "render_quiet_note",
+        lambda message: calls["notes"].append(message),
+    )
+    monkeypatch.setattr(
+        conformance_page,
+        "render_legend_note",
+        lambda message: calls["notes"].append(message),
+    )
     monkeypatch.setattr(conformance_page, "render_inline_empty", lambda *args, **kwargs: None)
     monkeypatch.setattr(conformance_page, "streamlit_cytoscape", None)
-    monkeypatch.setattr(conformance_page.components, "html", lambda html, **kwargs: calls["html"].append(html))
-    monkeypatch.setattr(conformance_page, "create_workflow_interactive_payload", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(
+        conformance_page.components,
+        "html",
+        lambda html, **kwargs: calls["html"].append(html),
+    )
+    monkeypatch.setattr(
+        conformance_page,
+        "create_workflow_interactive_payload",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
     monkeypatch.setattr(
         conformance_page,
         "render_workflow_conformance_svg",
@@ -758,7 +1141,9 @@ def test_render_conformance_page_interactive_mode_degrades_gracefully(monkeypatc
     assert any("interactive workflow mode could not be rendered" in text.lower() for text in calls["warnings"])
 
 
-def test_render_conformance_page_renders_html_explorer_without_selection(monkeypatch) -> None:
+def test_render_conformance_page_renders_html_explorer_without_selection(
+    monkeypatch,
+) -> None:
     calls = {"workflow": [], "html": [], "warnings": [], "fallback_svg": []}
 
     workspace = {
@@ -813,11 +1198,27 @@ def test_render_conformance_page_renders_html_explorer_without_selection(monkeyp
 
     monkeypatch.setattr(conformance_page.st, "subheader", lambda *args, **kwargs: None)
     monkeypatch.setattr(conformance_page.st, "caption", lambda *args, **kwargs: None)
-    monkeypatch.setattr(conformance_page.st, "markdown", lambda text, **kwargs: calls["workflow"].append(text))
-    monkeypatch.setattr(conformance_page.st, "dataframe", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("conformance inspector should not use st.dataframe")))
+    monkeypatch.setattr(
+        conformance_page.st,
+        "markdown",
+        lambda text, **kwargs: calls["workflow"].append(text),
+    )
+    monkeypatch.setattr(
+        conformance_page.st,
+        "dataframe",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("conformance inspector should not use st.dataframe")),
+    )
     monkeypatch.setattr(conformance_page.st, "metric", lambda *args, **kwargs: None)
-    monkeypatch.setattr(conformance_page.st, "warning", lambda text, **kwargs: calls["warnings"].append(text))
-    monkeypatch.setattr(conformance_page.st, "columns", lambda n, **kwargs: [_DummyContext() for _ in range(n if isinstance(n, int) else len(n))])
+    monkeypatch.setattr(
+        conformance_page.st,
+        "warning",
+        lambda text, **kwargs: calls["warnings"].append(text),
+    )
+    monkeypatch.setattr(
+        conformance_page.st,
+        "columns",
+        lambda n, **kwargs: [_DummyContext() for _ in range(n if isinstance(n, int) else len(n))],
+    )
     monkeypatch.setattr(conformance_page.st, "container", lambda *args, **kwargs: _DummyContext())
     monkeypatch.setattr(conformance_page.st, "expander", lambda *args, **kwargs: _DummyContext())
     monkeypatch.setattr(conformance_page.st, "tabs", lambda labels: [_DummyContext() for _ in labels])
@@ -828,26 +1229,50 @@ def test_render_conformance_page_renders_html_explorer_without_selection(monkeyp
             "Path view": "All",
             "Deviation focus": "All",
             "Density": "Analyst",
-            "Pin type": "Overview",
+            "Pinned metric type": "Overview",
         }.get(label, options[0]),
     )
-    monkeypatch.setattr(conformance_page.st, "selectbox", lambda label, options, index=0, **kwargs: options[index])
+    monkeypatch.setattr(
+        conformance_page.st,
+        "selectbox",
+        lambda label, options, index=0, **kwargs: options[index],
+    )
     monkeypatch.setattr(conformance_page.st, "button", lambda *args, **kwargs: False)
     monkeypatch.setattr(conformance_page, "render_quiet_note", lambda *args, **kwargs: None)
     monkeypatch.setattr(conformance_page, "render_legend_note", lambda *args, **kwargs: None)
     monkeypatch.setattr(conformance_page, "render_inline_empty", lambda *args, **kwargs: None)
     monkeypatch.setattr(conformance_page, "streamlit_cytoscape", None)
-    monkeypatch.setattr(conformance_page.components, "html", lambda html, **kwargs: calls["html"].append({"html": html, "kwargs": kwargs}))
+    monkeypatch.setattr(
+        conformance_page.components,
+        "html",
+        lambda html, **kwargs: calls["html"].append({"html": html, "kwargs": kwargs}),
+    )
     monkeypatch.setattr(
         conformance_page,
         "create_workflow_interactive_payload",
-        lambda *args, **kwargs: {"nodes": [], "edges": [], "height": 520, "frame_height": 712, "metric_coloring": "Conformance bucket"},
+        lambda *args, **kwargs: {
+            "nodes": [],
+            "edges": [],
+            "height": 520,
+            "frame_height": 712,
+            "metric_coloring": "Conformance bucket",
+        },
     )
-    monkeypatch.setattr(conformance_page, "render_workflow_explorer_html", lambda payload: (calls.setdefault("explorer_payload", payload), "<div>interactive explorer</div>")[1])
+    monkeypatch.setattr(
+        conformance_page,
+        "render_workflow_explorer_html",
+        lambda payload: (
+            calls.setdefault("explorer_payload", payload),
+            "<div>interactive explorer</div>",
+        )[1],
+    )
     monkeypatch.setattr(
         conformance_page,
         "render_workflow_conformance_svg",
-        lambda workflow, **kwargs: calls["fallback_svg"].append({"workflow": workflow, "kwargs": kwargs}) or "<div class='crpm-workflow-board'><svg>fallback</svg></div>",
+        lambda workflow, **kwargs: (
+            calls["fallback_svg"].append({"workflow": workflow, "kwargs": kwargs})
+            or "<div class='crpm-workflow-board'><svg>fallback</svg></div>"
+        ),
     )
 
     snapshot = AnalysisSnapshot(
@@ -882,14 +1307,20 @@ def test_render_conformance_page_renders_html_explorer_without_selection(monkeyp
     assert any("Interactive workflow explorer" in text for text in calls["workflow"])
 
 
-def test_render_workflow_controls_sanitizes_invalid_metric_coloring(monkeypatch) -> None:
+def test_render_workflow_controls_sanitizes_invalid_metric_coloring(
+    monkeypatch,
+) -> None:
     snapshot = SimpleNamespace(filter_key="filter", input_name="sample.xes", workflow_view_mode="interactive")
     metric_key = conformance_page._widget_key(snapshot, "workflow_metric_coloring")
     session_state = {metric_key: "Not a real metric"}
     selectbox_calls: list[tuple[str, tuple[str, ...], int]] = []
 
     monkeypatch.setattr(conformance_page.st, "session_state", session_state)
-    monkeypatch.setattr(conformance_page.st, "columns", lambda n, **kwargs: [_DummyContext() for _ in range(n if isinstance(n, int) else len(n))])
+    monkeypatch.setattr(
+        conformance_page.st,
+        "columns",
+        lambda n, **kwargs: [_DummyContext() for _ in range(n if isinstance(n, int) else len(n))],
+    )
     monkeypatch.setattr(
         conformance_page,
         "_render_choice_control",
@@ -906,16 +1337,142 @@ def test_render_workflow_controls_sanitizes_invalid_metric_coloring(monkeypatch)
 
     assert controls["workflow_mode"] == "interactive"
     assert controls["metric_coloring"] == "Conformance bucket"
-    assert ("Color", ("Conformance bucket", "Frequency", "Median delay", "P90 delay"), 0) in selectbox_calls
+    assert (
+        "Color",
+        ("Conformance bucket", "Frequency", "Median delay", "P90 delay"),
+        0,
+    ) in selectbox_calls
     assert controls["conformance_lens"] == "% of paths"
     assert controls["reset_filters"] is False
     assert controls["reset_graph_viewport"] is False
 
 
-def test_workflow_controls_from_state_surfaces_pending_filter_reset(monkeypatch) -> None:
+def test_render_workflow_controls_rail_uses_progressive_filter_categories(
+    monkeypatch,
+) -> None:
+    snapshot = SimpleNamespace(filter_key="filter", input_name="sample.xes", workflow_view_mode="interactive")
+    session_state = {
+        conformance_page._widget_key(snapshot, "workflow_filter_category"): "Display",
+        conformance_page._widget_key(snapshot, "workflow_coverage"): "Rare",
+        conformance_page._widget_key(snapshot, "workflow_deviation"): "Log deviations",
+        conformance_page._widget_key(snapshot, "workflow_metric_coloring"): "Median delay",
+        conformance_page._widget_key(snapshot, "workflow_detail_level"): "Research",
+        conformance_page._widget_key(snapshot, "workflow_lens"): "% of activities",
+    }
+    segmented_calls: list[tuple[str, tuple[str, ...]]] = []
+    button_calls: list[str] = []
+    selectbox_calls: list[tuple[str, tuple[str, ...], int]] = []
+    markdown_calls: list[str] = []
+
+    def _segmented(label, options, **kwargs):
+        segmented_calls.append((label, tuple(options)))
+        return {
+            "Filter category": "Display",
+            "Density": "Research",
+            "Lens": "% of activities",
+        }.get(label, kwargs.get("default", options[0]))
+
+    monkeypatch.setattr(conformance_page.st, "session_state", session_state)
+    monkeypatch.setattr(conformance_page.st, "markdown", lambda text, **kwargs: markdown_calls.append(str(text)))
+    monkeypatch.setattr(conformance_page.st, "segmented_control", _segmented)
+    monkeypatch.setattr(
+        conformance_page.st,
+        "selectbox",
+        lambda label, options, index=0, **kwargs: selectbox_calls.append((label, tuple(options), index)) or options[index],
+    )
+    monkeypatch.setattr(conformance_page.st, "button", lambda label, *args, **kwargs: button_calls.append(label) or False)
+
+    controls = conformance_page._render_workflow_controls(snapshot, layout="rail")
+
+    assert {"Pathway", "Deviation", "Display", "Actions"}.issubset(set(button_calls))
+    assert "Reset filters" not in button_calls
+    assert not any(label == "Filter category" for label, _ in segmented_calls)
+    assert ("Density", ("Executive", "Analyst", "Research")) in segmented_calls
+    assert ("Lens", ("% of activities", "% of paths")) in segmented_calls
+    assert not any(label == "Path view" for label, _ in segmented_calls)
+    assert not any(label == "Deviation focus" for label, _ in segmented_calls)
+    assert (
+        "Color",
+        ("Conformance bucket", "Frequency", "Median delay", "P90 delay"),
+        2,
+    ) in selectbox_calls
+    assert controls["coverage_view"] == "rare"
+    assert controls["deviation_view"] == "Log deviations"
+    assert controls["metric_coloring"] == "Median delay"
+    assert controls["detail_level"] == "research"
+    assert controls["conformance_lens"] == "% of activities"
+    assert any("crpm-filter-parent-label" in text for text in markdown_calls)
+    assert any("crpm-filter-composer" in text for text in markdown_calls)
+    assert any("crpm-active-filter-summary" in text for text in markdown_calls)
+
+
+def test_render_workflow_controls_rail_actions_category_surfaces_reset(
+    monkeypatch,
+) -> None:
+    snapshot = SimpleNamespace(filter_key="filter", input_name="sample.xes", workflow_view_mode="interactive")
+    session_state = {
+        conformance_page._widget_key(snapshot, "workflow_filter_category"): "Actions",
+        conformance_page._widget_key(snapshot, "workflow_coverage"): "Rare",
+        conformance_page._widget_key(snapshot, "workflow_deviation"): "Log deviations",
+        conformance_page._widget_key(snapshot, "workflow_metric_coloring"): "Median delay",
+        conformance_page._widget_key(snapshot, "workflow_detail_level"): "Research",
+        conformance_page._widget_key(snapshot, "workflow_lens"): "% of activities",
+    }
+    button_calls: list[str] = []
+
+    monkeypatch.setattr(conformance_page.st, "session_state", session_state)
+    monkeypatch.setattr(conformance_page.st, "markdown", lambda *args, **kwargs: None)
+    monkeypatch.setattr(conformance_page.st, "button", lambda label, *args, **kwargs: button_calls.append(label) or False)
+
+    controls = conformance_page._render_workflow_controls(snapshot, layout="rail")
+
+    assert {"Pathway", "Deviation", "Display", "Actions", "Reset filters"}.issubset(set(button_calls))
+    assert controls["filter_category"] == "Actions"
+    assert controls["coverage_view"] == "rare"
+    assert controls["deviation_view"] == "Log deviations"
+
+
+def test_filtered_workflow_cache_key_includes_denominator_lens(monkeypatch) -> None:
+    snapshot = SimpleNamespace(filter_key="filter", input_name="sample.xes")
+    session_state: dict[str, object] = {}
+    filter_calls: list[tuple[str, str, str]] = []
+
+    def _fake_filter_workflow_payload(workflow, *, coverage_view, deviation_view, detail_level):
+        filter_calls.append((coverage_view, deviation_view, detail_level))
+        return {"summary": {"call_count": len(filter_calls)}}
+
+    monkeypatch.setattr(conformance_page.st, "session_state", session_state)
+    monkeypatch.setattr(conformance_page, "filter_workflow_payload", _fake_filter_workflow_payload)
+
+    base_controls = {
+        "coverage_view": "all",
+        "deviation_view": "All",
+        "metric_coloring": "Conformance bucket",
+        "detail_level": "analyst",
+    }
+    first = conformance_page._get_filtered_workflow(
+        snapshot,
+        {},
+        {**base_controls, "conformance_lens": "% of paths"},
+    )
+    second = conformance_page._get_filtered_workflow(
+        snapshot,
+        {},
+        {**base_controls, "conformance_lens": "% of activities"},
+    )
+
+    assert first["summary"]["call_count"] == 1
+    assert second["summary"]["call_count"] == 2
+    assert len(filter_calls) == 2
+
+
+def test_workflow_controls_from_state_surfaces_pending_filter_reset(
+    monkeypatch,
+) -> None:
     snapshot = SimpleNamespace(filter_key="filter", input_name="sample.xes", workflow_view_mode="interactive")
     session_state = {
         conformance_page._widget_key(snapshot, "workflow_reset_pending"): True,
+        conformance_page._widget_key(snapshot, "workflow_filter_category"): "Display",
         conformance_page._widget_key(snapshot, "workflow_coverage"): "Rare",
         conformance_page._widget_key(snapshot, "workflow_deviation"): "Model deviations",
         conformance_page._widget_key(snapshot, "workflow_metric_coloring"): "P90 delay",
@@ -934,14 +1491,19 @@ def test_workflow_controls_from_state_surfaces_pending_filter_reset(monkeypatch)
     assert controls["metric_coloring"] == "Conformance bucket"
     assert controls["detail_level"] == "analyst"
     assert controls["conformance_lens"] == "% of paths"
+    assert controls["filter_category"] == "Pathway"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_reset_pending")] is False
+    assert session_state[conformance_page._widget_key(snapshot, "workflow_filter_category")] == "Pathway"
 
 
-def test_reset_workflow_filters_clears_selection_and_restores_defaults(monkeypatch) -> None:
+def test_reset_workflow_filters_clears_selection_and_restores_defaults(
+    monkeypatch,
+) -> None:
     snapshot = SimpleNamespace(filter_key="filter", input_name="sample.xes", workflow_view_mode="interactive")
     session_state = {
         conformance_page._widget_key(snapshot, "selected_node"): "FIT_mail",
         conformance_page._widget_key(snapshot, "selected_edge"): "invitation -> fit_mail",
+        conformance_page._widget_key(snapshot, "workflow_filter_category"): "Display",
         conformance_page._widget_key(snapshot, "workflow_coverage"): "Rare",
         conformance_page._widget_key(snapshot, "workflow_deviation"): "Log deviations",
         conformance_page._widget_key(snapshot, "workflow_metric_coloring"): "Median delay",
@@ -961,10 +1523,13 @@ def test_reset_workflow_filters_clears_selection_and_restores_defaults(monkeypat
     assert session_state[conformance_page._widget_key(snapshot, "workflow_metric_coloring")] == "Conformance bucket"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_detail_level")] == "Analyst"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_lens")] == "% of paths"
+    assert session_state[conformance_page._widget_key(snapshot, "workflow_filter_category")] == "Pathway"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_reset_pending")] is False
 
 
-def test_reset_workflow_view_increments_viewport_nonce_without_mutating_filters_or_selection(monkeypatch) -> None:
+def test_reset_workflow_view_increments_viewport_nonce_without_mutating_filters_or_selection(
+    monkeypatch,
+) -> None:
     snapshot = SimpleNamespace(filter_key="filter", input_name="sample.xes")
     session_state = {
         conformance_page._widget_key(snapshot, "selected_node"): "FIT_mail",
@@ -1012,7 +1577,7 @@ def test_render_event_process_details_limits_rows_for_analyst(monkeypatch) -> No
                 "occurrences": 110 - idx,
                 "median_next_delay_days": float(20 - idx),
                 "p90_next_delay_days": float(25 - idx),
-                "conformance_bucket": "Conformant" if idx % 2 == 0 else "Model deviation",
+                "conformance_bucket": ("Conformant" if idx % 2 == 0 else "Model deviation"),
             }
             for idx in range(1, 10)
         ]
@@ -1020,10 +1585,10 @@ def test_render_event_process_details_limits_rows_for_analyst(monkeypatch) -> No
     edges_df = pd.DataFrame(
         [
             {
-                "edge_id": f"step_{idx} -> step_{idx+1}",
+                "edge_id": f"step_{idx} -> step_{idx + 1}",
                 "source": f"step_{idx}",
-                "target": f"step_{idx+1}",
-                "business_label": f"Step {idx} → Step {idx+1}",
+                "target": f"step_{idx + 1}",
+                "business_label": f"Step {idx} → Step {idx + 1}",
                 "frequency": 90 - idx,
                 "share_pct": float(10 - idx * 0.5),
                 "median_days": float(15 - idx),
@@ -1034,11 +1599,27 @@ def test_render_event_process_details_limits_rows_for_analyst(monkeypatch) -> No
         ]
     )
 
-    monkeypatch.setattr(conformance_page, "render_legend_note", lambda message: calls["notes"].append(message))
+    monkeypatch.setattr(
+        conformance_page,
+        "render_legend_note",
+        lambda message: calls["notes"].append(message),
+    )
     monkeypatch.setattr(conformance_page, "render_inline_empty", lambda *args, **kwargs: None)
-    monkeypatch.setattr(conformance_page.st, "tabs", lambda labels: calls["tabs"].append(tuple(labels)) or [_DummyContext() for _ in labels])
-    monkeypatch.setattr(conformance_page.st, "markdown", lambda text, **kwargs: calls["markdown"].append(text))
-    monkeypatch.setattr(conformance_page.st, "expander", lambda label, **kwargs: calls["expanders"].append(label) or _DummyContext())
+    monkeypatch.setattr(
+        conformance_page.st,
+        "tabs",
+        lambda labels: calls["tabs"].append(tuple(labels)) or [_DummyContext() for _ in labels],
+    )
+    monkeypatch.setattr(
+        conformance_page.st,
+        "markdown",
+        lambda text, **kwargs: calls["markdown"].append(text),
+    )
+    monkeypatch.setattr(
+        conformance_page.st,
+        "expander",
+        lambda label, **kwargs: calls["expanders"].append(label) or _DummyContext(),
+    )
 
     conformance_page._render_event_process_details(
         model_summary_df=pd.DataFrame(),
@@ -1061,8 +1642,18 @@ def test_render_variant_page_renders_guidance_and_charts(monkeypatch) -> None:
     calls = {"guidance": [], "charts": [], "markdown": [], "tabs": []}
     variant_stats = pd.DataFrame(
         [
-            {"variant_str": "A,B", "frequency": 5, "percentage": 50.0, "cumulative_percentage": 50.0},
-            {"variant_str": "A,C", "frequency": 5, "percentage": 50.0, "cumulative_percentage": 100.0},
+            {
+                "variant_str": "A,B",
+                "frequency": 5,
+                "percentage": 50.0,
+                "cumulative_percentage": 50.0,
+            },
+            {
+                "variant_str": "A,C",
+                "frequency": 5,
+                "percentage": 50.0,
+                "cumulative_percentage": 100.0,
+            },
         ]
     )
     coverage = variant_stats.copy()
@@ -1071,16 +1662,36 @@ def test_render_variant_page_renders_guidance_and_charts(monkeypatch) -> None:
     monkeypatch.setattr(variants_page.st, "subheader", lambda text: None)
     monkeypatch.setattr(variants_page.st, "warning", lambda *args, **kwargs: None)
     monkeypatch.setattr(variants_page.st, "metric", lambda *args, **kwargs: None)
-    monkeypatch.setattr(variants_page.st, "markdown", lambda text, **kwargs: calls["markdown"].append(text))
+    monkeypatch.setattr(
+        variants_page.st,
+        "markdown",
+        lambda text, **kwargs: calls["markdown"].append(text),
+    )
     monkeypatch.setattr(variants_page.st, "columns", _columns)
     monkeypatch.setattr(variants_page.st, "caption", lambda *args, **kwargs: None)
-    monkeypatch.setattr(variants_page.st, "tabs", lambda labels: calls["tabs"].append(tuple(labels)) or [_DummyContext() for _ in labels])
-    monkeypatch.setattr(variants_page, "render_plotly_chart", lambda fig, key: calls["charts"].append(key))
+    monkeypatch.setattr(
+        variants_page.st,
+        "tabs",
+        lambda labels: calls["tabs"].append(tuple(labels)) or [_DummyContext() for _ in labels],
+    )
+    monkeypatch.setattr(
+        variants_page,
+        "render_plotly_chart",
+        lambda fig, key: calls["charts"].append(key),
+    )
     monkeypatch.setattr(variants_page, "store_cache_entry", lambda *args, **kwargs: None)
     monkeypatch.setattr(variants_page, "build_variant_index", lambda log: ("grouped", {"A": 5}))
-    monkeypatch.setattr(variants_page, "get_variant_statistics", lambda log, variant_index=None: variant_stats)
+    monkeypatch.setattr(
+        variants_page,
+        "get_variant_statistics",
+        lambda log, variant_index=None: variant_stats,
+    )
     monkeypatch.setattr(variants_page, "compute_variant_coverage", lambda stats: coverage)
-    monkeypatch.setattr(variants_page, "compute_variant_conformance", lambda *args, **kwargs: conformance_df)
+    monkeypatch.setattr(
+        variants_page,
+        "compute_variant_conformance",
+        lambda *args, **kwargs: conformance_df,
+    )
 
     snapshot = _snapshot(discovery_results={"Inductive": SimpleNamespace(net=object(), initial_marking=object(), final_marking=object())})
 
@@ -1094,8 +1705,16 @@ def test_render_variant_page_renders_guidance_and_charts(monkeypatch) -> None:
 def test_render_plotly_chart_shows_user_warning_on_failure(monkeypatch) -> None:
     calls = {"warnings": []}
 
-    monkeypatch.setattr(render_plotly_chart.__module__.split(".")[-1] == "common" and render_plotly_chart.__globals__["st"], "plotly_chart", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
-    monkeypatch.setattr(render_plotly_chart.__globals__["st"], "warning", lambda text, **kwargs: calls["warnings"].append(text))
+    monkeypatch.setattr(
+        render_plotly_chart.__module__.split(".")[-1] == "common" and render_plotly_chart.__globals__["st"],
+        "plotly_chart",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    monkeypatch.setattr(
+        render_plotly_chart.__globals__["st"],
+        "warning",
+        lambda text, **kwargs: calls["warnings"].append(text),
+    )
 
     render_plotly_chart(object(), key="demo-chart")
 
@@ -1119,7 +1738,13 @@ def test_note_helpers_escape_html_content(monkeypatch) -> None:
 
 
 def test_render_performance_page_reuses_timing_buckets(monkeypatch) -> None:
-    calls = {"timing_buckets": 0, "case_buckets": None, "charts": [], "notes": [], "empties": []}
+    calls = {
+        "timing_buckets": 0,
+        "case_buckets": None,
+        "charts": [],
+        "notes": [],
+        "empties": [],
+    }
     log = [
         [
             {"concept:name": "A", "time:timestamp": pd.Timestamp("2024-01-01")},
@@ -1132,9 +1757,21 @@ def test_render_performance_page_reuses_timing_buckets(monkeypatch) -> None:
     monkeypatch.setattr(performance_page.st, "columns", _columns)
     monkeypatch.setattr(performance_page.st, "dataframe", lambda *args, **kwargs: None)
     monkeypatch.setattr(performance_page.st, "caption", lambda *args, **kwargs: None)
-    monkeypatch.setattr(performance_page, "render_plotly_chart", lambda fig, key: calls["charts"].append(key))
-    monkeypatch.setattr(performance_page, "render_quiet_note", lambda message: calls["notes"].append(message))
-    monkeypatch.setattr(performance_page, "render_inline_empty", lambda message: calls["empties"].append(message))
+    monkeypatch.setattr(
+        performance_page,
+        "render_plotly_chart",
+        lambda fig, key: calls["charts"].append(key),
+    )
+    monkeypatch.setattr(
+        performance_page,
+        "render_quiet_note",
+        lambda message: calls["notes"].append(message),
+    )
+    monkeypatch.setattr(
+        performance_page,
+        "render_inline_empty",
+        lambda message: calls["empties"].append(message),
+    )
 
     real_collect = performance_page.collect_timing_buckets
     real_compute_case_durations = performance_page.compute_case_durations
@@ -1183,24 +1820,48 @@ def test_render_performance_page_uses_bi_case_duration_summary(monkeypatch) -> N
     calls = {"markdown": [], "charts": [], "notes": []}
     log = [
         [
-            {"concept:name": "Invitation", "time:timestamp": pd.Timestamp("2024-01-01")},
+            {
+                "concept:name": "Invitation",
+                "time:timestamp": pd.Timestamp("2024-01-01"),
+            },
             {"concept:name": "FIT_mail", "time:timestamp": pd.Timestamp("2024-01-15")},
-            {"concept:name": "FIT_return", "time:timestamp": pd.Timestamp("2024-02-10")},
+            {
+                "concept:name": "FIT_return",
+                "time:timestamp": pd.Timestamp("2024-02-10"),
+            },
         ],
         [
-            {"concept:name": "Invitation", "time:timestamp": pd.Timestamp("2024-01-03")},
+            {
+                "concept:name": "Invitation",
+                "time:timestamp": pd.Timestamp("2024-01-03"),
+            },
             {"concept:name": "FIT_mail", "time:timestamp": pd.Timestamp("2024-01-12")},
-            {"concept:name": "FIT_return", "time:timestamp": pd.Timestamp("2024-03-10")},
+            {
+                "concept:name": "FIT_return",
+                "time:timestamp": pd.Timestamp("2024-03-10"),
+            },
         ],
     ]
 
     monkeypatch.setattr(performance_page.st, "subheader", lambda *args, **kwargs: None)
     monkeypatch.setattr(performance_page.st, "caption", lambda *args, **kwargs: None)
     monkeypatch.setattr(performance_page.st, "columns", _columns)
-    monkeypatch.setattr(performance_page.st, "markdown", lambda text, **kwargs: calls["markdown"].append(text))
+    monkeypatch.setattr(
+        performance_page.st,
+        "markdown",
+        lambda text, **kwargs: calls["markdown"].append(text),
+    )
     monkeypatch.setattr(performance_page.st, "dataframe", lambda *args, **kwargs: None)
-    monkeypatch.setattr(performance_page, "render_plotly_chart", lambda fig, key: calls["charts"].append(key))
-    monkeypatch.setattr(performance_page, "render_quiet_note", lambda message: calls["notes"].append(message))
+    monkeypatch.setattr(
+        performance_page,
+        "render_plotly_chart",
+        lambda fig, key: calls["charts"].append(key),
+    )
+    monkeypatch.setattr(
+        performance_page,
+        "render_quiet_note",
+        lambda message: calls["notes"].append(message),
+    )
     monkeypatch.setattr(performance_page, "render_inline_empty", lambda *args, **kwargs: None)
 
     snapshot = AnalysisSnapshot(

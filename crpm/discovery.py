@@ -8,7 +8,7 @@ This module provides wrappers for multiple discovery algorithms:
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 import logging
 import time
@@ -77,7 +77,7 @@ def discover_heuristics_classic(log: EventLog) -> DiscoveryResult:
         num_transitions=len(net.transitions),
         num_places=len(net.places),
         num_arcs=len(net.arcs),
-        heuristics_net=heu_net
+        heuristics_net=heu_net,
     )
 
 
@@ -120,7 +120,7 @@ def discover_heuristics_plus(log: EventLog) -> DiscoveryResult:
         num_transitions=len(net.transitions),
         num_places=len(net.places),
         num_arcs=len(net.arcs),
-        heuristics_net=heu_net
+        heuristics_net=heu_net,
     )
 
 
@@ -147,6 +147,7 @@ def discover_inductive_im(log: EventLog) -> DiscoveryResult:
     # Discover process tree
     try:
         from pm4py.algo.discovery.inductive.algorithm import Variants
+
         tree = inductive_miner.apply(log, variant=Variants.IM if hasattr(Variants, "IM") else None)
     except Exception:
         logger.debug("IM variant unavailable, using default", exc_info=True)
@@ -170,7 +171,7 @@ def discover_inductive_im(log: EventLog) -> DiscoveryResult:
         discovery_time_s=discovery_time,
         num_transitions=len(net.transitions),
         num_places=len(net.places),
-        num_arcs=len(net.arcs)
+        num_arcs=len(net.arcs),
     )
 
 
@@ -192,6 +193,7 @@ def discover_inductive_imf(log: EventLog) -> DiscoveryResult:
     # Discover process tree with IMf variant
     try:
         from pm4py.algo.discovery.inductive.algorithm import Variants
+
         tree = inductive_miner.apply(log, variant=Variants.IMf if hasattr(Variants, "IMf") else Variants.IMF)
         variant_name = "IMf"
     except Exception:
@@ -217,7 +219,7 @@ def discover_inductive_imf(log: EventLog) -> DiscoveryResult:
         discovery_time_s=discovery_time,
         num_transitions=len(net.transitions),
         num_places=len(net.places),
-        num_arcs=len(net.arcs)
+        num_arcs=len(net.arcs),
     )
 
 
@@ -239,6 +241,7 @@ def discover_inductive_imd(log: EventLog) -> DiscoveryResult:
     # Discover process tree with IMd variant
     try:
         from pm4py.algo.discovery.inductive.algorithm import Variants
+
         tree = inductive_miner.apply(log, variant=Variants.IMd if hasattr(Variants, "IMd") else Variants.IMD)
         variant_name = "IMd"
     except Exception:
@@ -264,7 +267,7 @@ def discover_inductive_imd(log: EventLog) -> DiscoveryResult:
         discovery_time_s=discovery_time,
         num_transitions=len(net.transitions),
         num_places=len(net.places),
-        num_arcs=len(net.arcs)
+        num_arcs=len(net.arcs),
     )
 
 
@@ -300,7 +303,7 @@ def discover_alpha_classic(log: EventLog) -> DiscoveryResult:
         discovery_time_s=discovery_time,
         num_transitions=len(net.transitions),
         num_places=len(net.places),
-        num_arcs=len(net.arcs)
+        num_arcs=len(net.arcs),
     )
 
 
@@ -320,6 +323,7 @@ def discover_alpha_plus(log: EventLog) -> DiscoveryResult:
     # Try Alpha+ variant if available
     try:
         from pm4py.algo.discovery.alpha.algorithm import Variants
+
         variant = Variants.ALPHA_PLUS if hasattr(Variants, "ALPHA_PLUS") else None
         if variant:
             net, im, fm = alpha_miner.apply(log, variant=variant)
@@ -344,7 +348,7 @@ def discover_alpha_plus(log: EventLog) -> DiscoveryResult:
         discovery_time_s=discovery_time,
         num_transitions=len(net.transitions),
         num_places=len(net.places),
-        num_arcs=len(net.arcs)
+        num_arcs=len(net.arcs),
     )
 
 
@@ -386,10 +390,7 @@ def discover_with_algorithm(log: EventLog, algorithm_name: str) -> Optional[Disc
         return None
 
 
-def discover_all_algorithms(
-    log: EventLog,
-    selected_algorithms: Optional[List[str]] = None
-) -> Dict[str, DiscoveryResult]:
+def discover_all_algorithms(log: EventLog, selected_algorithms: Optional[List[str]] = None) -> Dict[str, DiscoveryResult]:
     """Discover process models using multiple algorithms.
 
     Args:
@@ -451,7 +452,7 @@ def compute_model_complexity(result: DiscoveryResult) -> Dict[str, float]:
         "decision_points": decision_points,
         "splits": splits,
         "joins": joins,
-        "complexity_score": arc_degree + decision_points  # Simple complexity metric
+        "complexity_score": arc_degree + decision_points,  # Simple complexity metric
     }
 
 

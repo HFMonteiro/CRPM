@@ -1,4 +1,5 @@
 """Tests for crpm.analytics — activity stats, transitions, bottlenecks, durations."""
+
 from __future__ import annotations
 
 import pytest

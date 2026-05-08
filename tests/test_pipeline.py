@@ -7,6 +7,7 @@ from datetime import datetime, date
 from pathlib import Path
 
 import pytest
+import pandas as pd
 
 pm4py = pytest.importorskip("pm4py")
 from pm4py.objects.log.obj import EventLog, Trace
@@ -79,6 +80,57 @@ def test_filter_date_range_can_clip_events_in_event_mode() -> None:
     assert len(filtered) == 1
     assert len(filtered[0]) == 1
     assert filtered[0][0]["concept:name"] == "A"
+
+
+def test_csv_to_event_log_rejects_null_case_ids() -> None:
+    df = pd.DataFrame(
+        [
+            {"case_id": "case-1", "activity": "A", "timestamp": "2024-01-01T10:00:00"},
+            {"case_id": None, "activity": "B", "timestamp": "2024-01-01T11:00:00"},
+        ]
+    )
+
+    with pytest.raises(ValueError, match="case IDs"):
+        pipeline.csv_to_event_log(df, "case_id", "activity", "timestamp")
+
+
+def test_csv_to_event_log_rejects_invalid_timestamps() -> None:
+    df = pd.DataFrame(
+        [
+            {"case_id": "case-1", "activity": "A", "timestamp": "2024-01-01T10:00:00"},
+            {"case_id": "case-1", "activity": "B", "timestamp": "not-a-date"},
+        ]
+    )
+
+    with pytest.raises(ValueError, match="timestamp column"):
+        pipeline.csv_to_event_log(df, "case_id", "activity", "timestamp")
+
+
+def test_csv_to_event_log_rejects_mixed_timezone_semantics() -> None:
+    df = pd.DataFrame(
+        [
+            {"case_id": "case-1", "activity": "A", "timestamp": "2024-01-01T10:00:00"},
+            {"case_id": "case-1", "activity": "B", "timestamp": "2024-01-01T11:00:00Z"},
+        ]
+    )
+
+    with pytest.raises(ValueError, match="timezone"):
+        pipeline.csv_to_event_log(df, "case_id", "activity", "timestamp")
+
+
+def test_csv_to_event_log_sorts_by_case_and_timestamp() -> None:
+    df = pd.DataFrame(
+        [
+            {"case_id": "case-b", "activity": "B2", "timestamp": "2024-01-02T10:00:00"},
+            {"case_id": "case-a", "activity": "A2", "timestamp": "2024-01-01T11:00:00"},
+            {"case_id": "case-a", "activity": "A1", "timestamp": "2024-01-01T10:00:00"},
+        ]
+    )
+
+    log = pipeline.csv_to_event_log(df, "case_id", "activity", "timestamp")
+
+    assert [trace.attributes["concept:name"] for trace in log] == ["case-a", "case-b"]
+    assert [event["concept:name"] for event in log[0]] == ["A1", "A2"]
 
 
 def test_split_log_random_is_reproducible_across_python_hash_seeds() -> None:

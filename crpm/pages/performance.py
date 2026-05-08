@@ -8,7 +8,13 @@ import time
 import pandas as pd
 import streamlit as st
 
-from crpm.analytics import collect_timing_buckets, compute_activity_statistics, compute_case_durations, compute_transition_statistics, detect_bottlenecks
+from crpm.analytics import (
+    collect_timing_buckets,
+    compute_activity_statistics,
+    compute_case_durations,
+    compute_transition_statistics,
+    detect_bottlenecks,
+)
 from crpm.app_state import AnalysisSnapshot
 from crpm.pages.common import (
     format_metric_value,
@@ -116,8 +122,20 @@ def render_performance_page(snapshot: AnalysisSnapshot) -> None:
                     lambda value: round(float(value) / 86400, 1) if pd.notna(value) else None
                 )
             if "bottleneck_score" in bottleneck_table.columns:
-                bottleneck_table["Score"] = bottleneck_table["bottleneck_score"].map(lambda value: round(float(value), 2) if pd.notna(value) else None)
-            bottleneck_table = bottleneck_table[[column for column in ["Transition", "Events", "Median delay (days)", "P90 delay (days)", "Score"] if column in bottleneck_table.columns]].head(8).reset_index(drop=True)
+                bottleneck_table["Score"] = bottleneck_table["bottleneck_score"].map(
+                    lambda value: round(float(value), 2) if pd.notna(value) else None
+                )
+            bottleneck_table = (
+                bottleneck_table[
+                    [
+                        column
+                        for column in ["Transition", "Events", "Median delay (days)", "P90 delay (days)", "Score"]
+                        if column in bottleneck_table.columns
+                    ]
+                ]
+                .head(8)
+                .reset_index(drop=True)
+            )
             bottleneck_table.insert(0, "Rank", range(1, len(bottleneck_table) + 1))
             render_html_ranked_table(
                 bottleneck_table,
@@ -148,8 +166,20 @@ def render_performance_page(snapshot: AnalysisSnapshot) -> None:
                     lambda value: round(float(value) / 86400, 1) if pd.notna(value) else None
                 )
             if "coefficient_of_variation" in activity_table.columns:
-                activity_table["Variation"] = activity_table["coefficient_of_variation"].map(lambda value: round(float(value), 2) if pd.notna(value) else None)
-            activity_table = activity_table[[column for column in ["Activity", "Events", "Median delay (days)", "P90 delay (days)", "Variation"] if column in activity_table.columns]].head(8).reset_index(drop=True)
+                activity_table["Variation"] = activity_table["coefficient_of_variation"].map(
+                    lambda value: round(float(value), 2) if pd.notna(value) else None
+                )
+            activity_table = (
+                activity_table[
+                    [
+                        column
+                        for column in ["Activity", "Events", "Median delay (days)", "P90 delay (days)", "Variation"]
+                        if column in activity_table.columns
+                    ]
+                ]
+                .head(8)
+                .reset_index(drop=True)
+            )
             activity_table.insert(0, "Rank", range(1, len(activity_table) + 1))
             render_html_ranked_table(
                 activity_table,
