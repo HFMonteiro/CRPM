@@ -156,7 +156,7 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
             grid_class="crpm-conformance-kpi-strip crpm-conformance-kpi-strip--cockpit",
         )
 
-    filter_col, main_col, detail_col = st.columns([0.72, 2.55, 0.73], gap="small")
+    filter_col, main_col, detail_col = st.columns([0.62, 2.72, 0.66], gap="small")
 
     with filter_col:
         _render_conformance_filter_rail(
@@ -381,6 +381,8 @@ def _render_right_panel(
     else:
         render_legend_note("Overview mode is active. Use Pinned exact metrics to persist a node or transition from this rail.")
 
+    _render_root_cause_watchlist(snapshot)
+
     st.markdown(
         "<div class='crpm-conformance-side-subtitle'>Lead-time watchlist</div>",
         unsafe_allow_html=True,
@@ -389,6 +391,7 @@ def _render_right_panel(
 
     with st.expander("Context", expanded=False):
         _render_workflow_scope_rail(workflow)
+        _render_resource_perspective(snapshot)
         _render_insight_action_panel(workflow, controls)
 
     with st.expander("Drilldown", expanded=False):
@@ -410,6 +413,88 @@ def _render_right_panel(
 def _render_workflow_evidence_rail(*, workflow: dict[str, Any], nodes_df: pd.DataFrame, edges_df: pd.DataFrame) -> None:
     _render_workflow_scope_rail(workflow)
     _render_workflow_lead_time_rail(workflow=workflow, nodes_df=nodes_df, edges_df=edges_df)
+
+
+def _render_root_cause_watchlist(snapshot: AnalysisSnapshot) -> None:
+    workspace = _get_workspace(snapshot)
+    root_causes = workspace.get("conformance_root_causes", {}) if isinstance(workspace, dict) else {}
+    top_causes = root_causes.get("top_causes", []) if isinstance(root_causes, dict) else []
+    if isinstance(top_causes, list) and top_causes:
+        rows = []
+        for cause in top_causes[:4]:
+            if not isinstance(cause, dict):
+                continue
+            rows.append(
+                {
+                    "label": str(cause.get("label") or cause.get("issue") or "Conformance issue"),
+                    "value": _coerce_float(cause.get("count")) or 0.0,
+                    "display": _format_number(cause.get("count")),
+                    "tone": str(cause.get("severity") or cause.get("issue") or "neutral"),
+                }
+            )
+        if rows:
+            render_dashboard_bar_list("Root-cause watchlist", rows, value_label="")
+            return
+
+    summary = root_causes.get("summary", {}) if isinstance(root_causes, dict) else {}
+    if not isinstance(summary, dict) or not any(_coerce_int(summary.get(key)) for key in summary):
+        return
+    render_dashboard_bar_list(
+        "Root-cause watchlist",
+        [
+            {
+                "label": "Deviating traces",
+                "value": float(_coerce_int(summary.get("deviating_trace_count"))),
+                "display": _format_number(summary.get("deviating_trace_count")),
+                "tone": "warning",
+            },
+            {
+                "label": "Model-deviation activities",
+                "value": float(_coerce_int(summary.get("model_deviation_activity_count"))),
+                "display": _format_number(summary.get("model_deviation_activity_count")),
+                "tone": "danger",
+            },
+            {
+                "label": "Log-deviation transitions",
+                "value": float(_coerce_int(summary.get("log_deviation_transition_count"))),
+                "display": _format_number(summary.get("log_deviation_transition_count")),
+                "tone": "watch",
+            },
+        ],
+        value_label="",
+    )
+
+
+def _render_resource_perspective(snapshot: AnalysisSnapshot) -> None:
+    workspace = _get_workspace(snapshot)
+    perspective = workspace.get("resource_perspective", {}) if isinstance(workspace, dict) else {}
+    summary = perspective.get("summary", {}) if isinstance(perspective, dict) else {}
+    if not isinstance(summary, dict) or not any(_coerce_int(summary.get(key)) for key in summary):
+        return
+    render_dashboard_bar_list(
+        "Resource perspective",
+        [
+            {
+                "label": "Resources",
+                "value": float(_coerce_int(summary.get("resource_count"))),
+                "display": _format_number(summary.get("resource_count")),
+                "tone": "neutral",
+            },
+            {
+                "label": "Handoffs",
+                "value": float(_coerce_int(summary.get("handoff_count"))),
+                "display": _format_number(summary.get("handoff_count")),
+                "tone": "accent",
+            },
+            {
+                "label": "Resource coverage",
+                "value": _coerce_float(summary.get("resource_coverage_pct")) or 0.0,
+                "display": f"{(_coerce_float(summary.get('resource_coverage_pct')) or 0.0):.1f}%",
+                "tone": "success",
+            },
+        ],
+        value_label="",
+    )
 
 
 def _render_workflow_scope_rail(workflow: dict[str, Any]) -> None:
@@ -882,6 +967,13 @@ def _render_workflow_controls(
             lens_label=lens_label,
             filter_category=filter_category,
         )
+        if filter_category != "Actions":
+            reset_filters = st.button(
+                "Reset filters",
+                key=_widget_key(snapshot, "workflow_reset_filters"),
+                help="Clear pathway, deviation, and display filters without resetting the graph viewport.",
+                use_container_width=True,
+            )
     else:
         coverage_view = _render_choice_control(
             "Path view",
@@ -1003,9 +1095,7 @@ def _render_workflow_top_transition_rail(workflow: dict[str, Any]) -> None:
 
 
 def _render_filter_context_note() -> None:
-    render_legend_note(
-        "Subset and lens controls change only the visible workflow view. The first-event direct workflow gate remains fixed for the run."
-    )
+    st.caption("Subset filters change only the visible workflow. The first-event direct gate remains fixed.")
 
 
 def _render_conformance_side_intro(*, title: str, lead: str, variant: str) -> None:
@@ -1023,7 +1113,7 @@ def _render_conformance_side_intro(*, title: str, lead: str, variant: str) -> No
 
 
 def _render_workflow_stage_toolbar(snapshot: AnalysisSnapshot) -> dict[str, bool]:
-    header_col, clear_col, reset_col = st.columns([0.48, 0.26, 0.26], gap="small")
+    header_col, clear_col, reset_col = st.columns([0.58, 0.21, 0.21], gap="small")
     with header_col:
         st.markdown(
             (

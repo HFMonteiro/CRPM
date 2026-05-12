@@ -51,17 +51,41 @@ def render_discovery_page(snapshot: AnalysisSnapshot) -> None:
 
     rows = []
     for model_name, result in snapshot.discovery_results.items():
-        rows.append(
-            {
-                "Model": model_name,
-                "Algorithm": getattr(result, "algorithm", "N/A"),
-                "Variant": getattr(result, "variant", "N/A"),
-                "Discovery time (s)": round(float(getattr(result, "discovery_time_s", 0.0)), 3),
-                "Transitions": getattr(result, "num_transitions", 0),
-                "Places": getattr(result, "num_places", 0),
-                "Arcs": getattr(result, "num_arcs", 0),
-            }
-        )
+        model_row = {
+            "Model": model_name,
+            "Algorithm": getattr(result, "algorithm", "N/A"),
+            "Variant": getattr(result, "variant", "N/A"),
+            "Discovery time (s)": round(float(getattr(result, "discovery_time_s", 0.0)), 3),
+            "Transitions": getattr(result, "num_transitions", 0),
+            "Places": getattr(result, "num_places", 0),
+            "Arcs": getattr(result, "num_arcs", 0),
+        }
+        if not snapshot.comparison_df.empty and "model_name" in snapshot.comparison_df.columns:
+            row_df = snapshot.comparison_df[snapshot.comparison_df["model_name"] == model_name]
+            if not row_df.empty:
+                row = row_df.iloc[0]
+                quality_score = row.get("quality_score")
+                quality_band = row.get("quality_band")
+                parameter_profile_name = row.get("parameter_profile_name")
+                pm4py_variant = row.get("pm4py_variant")
+                fitness_quality = row.get("fitness_quality")
+                precision_quality = row.get("precision_quality")
+                quadrant = row.get("quadrant")
+                if pd.notna(quality_score):
+                    model_row["Quality score"] = round(float(quality_score), 3)
+                if pd.notna(quality_band):
+                    model_row["Quality band"] = str(quality_band)
+                if pd.notna(parameter_profile_name):
+                    model_row["Parameter profile"] = str(parameter_profile_name)
+                if pd.notna(pm4py_variant):
+                    model_row["PM4Py variant"] = str(pm4py_variant)
+                if pd.notna(fitness_quality):
+                    model_row["Fitness quality"] = str(fitness_quality)
+                if pd.notna(precision_quality):
+                    model_row["Precision quality"] = str(precision_quality)
+                if pd.notna(quadrant):
+                    model_row["Quadrant"] = str(quadrant)
+        rows.append(model_row)
 
     st.markdown("#### Model summary table")
     render_html_ranked_table(pd.DataFrame(rows), title="Discovered model summary", label_column="Model")

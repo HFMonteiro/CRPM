@@ -1553,7 +1553,7 @@ def get_custom_css() -> str:
 
     .crpm-conformance-side-rail {
         margin: 0 0 0.06rem 0;
-        padding: 0.42rem 0.5rem 0.34rem 0.5rem;
+        padding: 0.34rem 0.42rem 0.28rem 0.42rem;
         border-radius: 8px;
         border: 1px solid rgba(157, 173, 190, 0.26);
         background: #ffffff;
@@ -1581,7 +1581,7 @@ def get_custom_css() -> str:
     .crpm-conformance-report-band,
     .crpm-conformance-evidence-band {
         margin: 0 0 0.12rem 0;
-        padding: 0.38rem 0.54rem;
+        padding: 0.3rem 0.46rem;
         border-radius: 8px;
         border: 1px solid rgba(157, 173, 190, 0.26);
         background: #ffffff;
@@ -1609,7 +1609,7 @@ def get_custom_css() -> str:
 
     .crpm-conformance-hero__title,
     .crpm-conformance-stage-header__title {
-        font-size: 0.88rem;
+        font-size: 0.84rem;
         font-weight: 800;
         line-height: 1.08;
         color: var(--crpm-forest-strong);
@@ -1620,7 +1620,7 @@ def get_custom_css() -> str:
     .crpm-conformance-stage-header__body,
     .crpm-conformance-report-band__body,
     .crpm-conformance-evidence-band {
-        font-size: 0.68rem;
+        font-size: 0.66rem;
         line-height: 1.16;
         color: var(--crpm-text-soft);
     }
@@ -1850,7 +1850,7 @@ def get_custom_css() -> str:
 
     .crpm-dfg-map-canvas {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: center;
         min-height: 272px;
     }

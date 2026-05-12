@@ -45,6 +45,48 @@ def load_petri_net_from_pnml(pnml_path: Path | str) -> Tuple[Any, Any, Any]:
         raise Exception(f"Failed to load PNML file from {pnml_path}: {e}")
 
 
+def inspect_pnml_model(pnml_path: Path | str) -> dict[str, Any]:
+    """Load a PNML file and return a path-redacted interoperability report."""
+
+    try:
+        net, initial_marking, final_marking = load_petri_net_from_pnml(pnml_path)
+    except Exception as exc:
+        return {
+            "status": "error",
+            "error_type": type(exc).__name__,
+            "message": "PNML model could not be loaded.",
+        }
+    return _petri_net_report(net, initial_marking, final_marking, status="ok")
+
+
+def export_petri_net_to_pnml(net: Any, im: Any, fm: Any, output_path: Path | str) -> dict[str, Any]:
+    """Export a Petri net to PNML and return a path-redacted shape report."""
+
+    from pm4py.objects.petri_net.exporter import exporter as pnml_exporter
+
+    pnml_exporter.apply(net, im, str(output_path), final_marking=fm)
+    return _petri_net_report(net, im, fm, status="ok")
+
+
+def _petri_net_report(net: Any, im: Any, fm: Any, *, status: str) -> dict[str, Any]:
+    transitions = list(getattr(net, "transitions", []) or [])
+    places = list(getattr(net, "places", []) or [])
+    arcs = list(getattr(net, "arcs", []) or [])
+    labeled_transition_count = sum(1 for transition in transitions if getattr(transition, "label", None))
+    return {
+        "status": status,
+        "transition_count": len(transitions),
+        "labeled_transition_count": labeled_transition_count,
+        "silent_transition_count": max(len(transitions) - labeled_transition_count, 0),
+        "place_count": len(places),
+        "arc_count": len(arcs),
+        "initial_marking_size": len(im or {}),
+        "final_marking_size": len(fm or {}),
+        "has_initial_marking": bool(im),
+        "has_final_marking": bool(fm),
+    }
+
+
 def filter_start_event(log: EventLog, event_name: str | None) -> EventLog:
     """Return a copy of the log containing only traces starting with `event_name`."""
     if not event_name:
@@ -162,6 +204,8 @@ def summarize_metrics(align_res: Dict[str, Any], token_res: Dict[str, Any]) -> D
 __all__ = [
     "load_log",
     "load_petri_net_from_pnml",
+    "inspect_pnml_model",
+    "export_petri_net_to_pnml",
     "filter_start_event",
     "filter_date_range",
     "run_heuristics_miner",

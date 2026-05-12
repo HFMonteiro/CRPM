@@ -10,6 +10,7 @@ pm4py = pytest.importorskip("pm4py")
 from pm4py.objects.log.importer.xes import importer as xes_importer
 
 from crpm.dfg_utils import (
+    build_dfg_process_map_payload,
     discover_dfg_frequency,
     discover_dfg_performance,
     filter_dfg_by_frequency,
@@ -137,6 +138,25 @@ def test_filter_dfg_by_coverage_handles_empty_input():
     assert filtered_dfg == {}
     assert filtered_start == {}
     assert filtered_end == {}
+
+
+def test_build_dfg_process_map_payload_joins_frequency_and_performance() -> None:
+    payload = build_dfg_process_map_payload(
+        frequency_dfg={("A", "B"): 10, ("B", "C"): 5},
+        performance_dfg={("A", "B"): 86400.0, ("B", "C"): 43200.0},
+        start_activities={"A": 10},
+        end_activities={"C": 5},
+    )
+
+    edges = payload["edges"]
+    assert payload["summary"]["transition_count"] == 15
+    assert payload["schema_version"] == 1
+    assert payload["map_kind"] == "directly_follows_graph"
+    assert payload["selection_context"]["renderer_role"] == "dfg"
+    assert payload["kpi_rows"][0]["key"] == "activity_denominator"
+    assert set(edges.columns).issuperset({"frequency", "frequency_share_pct", "median_wait_s", "edge_uid"})
+    assert float(edges.loc[edges["edge_uid"] == "A->B", "median_wait_s"].iloc[0]) == 86400.0
+    assert float(edges.loc[edges["edge_uid"] == "A->B", "frequency_share_pct"].iloc[0]) == 66.67
 
 
 def test_dfg_statistics_returns_expected_keys(log):

@@ -27,7 +27,7 @@ classifiers = [
 dependencies = [
   "streamlit>=1.44",
   "streamlit-cytoscape",
-  "pm4py>=2.7",
+  "pm4py>=2.7.22,<2.8",
   "pandas>=2.2",
   "numpy>=2.0",
   "matplotlib>=3.9",
@@ -48,6 +48,12 @@ dev = [
 [project.urls]
 Repository = "https://github.com/HFMonteiro/CRPM"
 Issues = "https://github.com/HFMonteiro/CRPM/issues"
+
+[project.scripts]
+crpm-preflight = "crpm.preflight:main"
+crpm-release-check = "crpm.release_check:main"
+crpm-generate-screening-demo = "crpm.synthetic_screening:main"
+crpm-analyze = "crpm.batch_cli:main"
 
 [tool.setuptools]
 packages = ["crpm", "crpm.assets", "crpm.pages"]

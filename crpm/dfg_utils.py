@@ -12,11 +12,14 @@ from typing import Dict, Tuple
 import tempfile
 from pathlib import Path
 
+import pandas as pd
 from pm4py.objects.log.obj import EventLog
 from pm4py.algo.discovery.dfg import algorithm as dfg_discovery
 from pm4py.visualization.dfg import visualizer as dfg_visualizer
 from pm4py.statistics.start_activities.log import get as start_activities_get
 from pm4py.statistics.end_activities.log import get as end_activities_get
+
+from crpm.process_map import build_process_map_kpis, build_selection_context
 
 _SVG_SCRIPT_RE = re.compile(r"<\s*script\b[^>]*>.*?<\s*/\s*script\s*>", re.IGNORECASE | re.DOTALL)
 _SVG_EVENT_ATTR_RE = re.compile(r"\s+on[a-zA-Z]+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)")
@@ -320,6 +323,82 @@ def get_dfg_statistics(dfg: Dict, start_activities: Dict, end_activities: Dict) 
     }
 
 
+def build_dfg_process_map_payload(
+    *,
+    frequency_dfg: Dict,
+    performance_dfg: Dict | None = None,
+    start_activities: Dict | None = None,
+    end_activities: Dict | None = None,
+    renderer_role: str = "dfg",
+) -> dict[str, object]:
+    """Return a normalized process-map payload for DFG renderers."""
+
+    start_activities = start_activities or {}
+    end_activities = end_activities or {}
+    performance_dfg = performance_dfg or {}
+    activities = sorted({activity for edge in frequency_dfg for activity in edge} | set(start_activities) | set(end_activities))
+    total_frequency = sum(int(value or 0) for value in frequency_dfg.values())
+    nodes = pd.DataFrame(
+        [
+            {
+                "node_id": activity,
+                "label": activity,
+                "start_count": int(start_activities.get(activity, 0) or 0),
+                "end_count": int(end_activities.get(activity, 0) or 0),
+            }
+            for activity in activities
+        ]
+    )
+    edges = pd.DataFrame(
+        [
+            {
+                "edge_uid": f"{source}->{target}",
+                "source": source,
+                "target": target,
+                "frequency": int(frequency or 0),
+                "frequency_share_pct": round((int(frequency or 0) / total_frequency) * 100, 2) if total_frequency else 0.0,
+                "median_wait_s": _safe_float(performance_dfg.get((source, target))),
+            }
+            for (source, target), frequency in sorted(
+                frequency_dfg.items(), key=lambda item: (-int(item[1] or 0), str(item[0][0]), str(item[0][1]))
+            )
+        ]
+    )
+    denominators = {
+        "transition_denominator": int(total_frequency),
+        "activity_denominator": int(len(nodes.index)),
+    }
+    return {
+        "schema_version": 1,
+        "map_kind": "directly_follows_graph",
+        "renderer_role": renderer_role,
+        "nodes": nodes,
+        "edges": edges,
+        "summary": {
+            "activity_count": int(len(nodes.index)),
+            "edge_count": int(len(edges.index)),
+            "transition_count": int(total_frequency),
+            "start_activity_count": int(len(start_activities)),
+            "end_activity_count": int(len(end_activities)),
+        },
+        "denominators": denominators,
+        "kpi_rows": build_process_map_kpis(denominators),
+        "selection_context": build_selection_context(
+            source_page="DFG Visualizations",
+            renderer_role=renderer_role,
+        ),
+    }
+
+
+def _safe_float(value: object) -> float | None:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 __all__ = [
     "discover_dfg_frequency",
     "discover_dfg_performance",
@@ -330,4 +409,5 @@ __all__ = [
     "render_dfg_to_png",
     "sanitize_svg_markup",
     "get_dfg_statistics",
+    "build_dfg_process_map_payload",
 ]

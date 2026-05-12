@@ -11,6 +11,7 @@ from crpm.app_state import AnalysisSnapshot
 from crpm.dfg_utils import (
     discover_dfg_frequency,
     discover_dfg_performance,
+    build_dfg_process_map_payload,
     filter_dfg_by_coverage,
     get_dfg_statistics,
     rank_dfg_edges,
@@ -65,19 +66,41 @@ def render_dfg_page(snapshot: AnalysisSnapshot) -> None:
             started = time.perf_counter()
             if dfg_mode == "Performance":
                 dfg, starts, ends = discover_dfg_performance(log)
+                frequency_dfg, frequency_starts, frequency_ends = discover_dfg_frequency(log)
                 vis_variant = "performance"
             else:
                 dfg, starts, ends = discover_dfg_frequency(log)
+                frequency_dfg, frequency_starts, frequency_ends = dfg, starts, ends
                 vis_variant = "frequency"
 
             if coverage_range != (0, 100):
                 dfg, starts, ends = filter_dfg_by_coverage(dfg, starts, ends, coverage_range=coverage_range)
+                if vis_variant == "performance":
+                    retained_edges = set(dfg)
+                    frequency_dfg = {edge: value for edge, value in frequency_dfg.items() if edge in retained_edges}
+                    activities = {activity for edge in retained_edges for activity in edge}
+                    frequency_starts = {key: value for key, value in frequency_starts.items() if key in activities}
+                    frequency_ends = {key: value for key, value in frequency_ends.items() if key in activities}
+                else:
+                    frequency_dfg, frequency_starts, frequency_ends = filter_dfg_by_coverage(
+                        frequency_dfg,
+                        frequency_starts,
+                        frequency_ends,
+                        coverage_range=coverage_range,
+                    )
 
             cached_payload = {
                 "dfg": dfg,
                 "starts": starts,
                 "ends": ends,
                 "vis_variant": vis_variant,
+                "process_map_payload": build_dfg_process_map_payload(
+                    frequency_dfg=frequency_dfg,
+                    performance_dfg=dfg if vis_variant == "performance" else {},
+                    start_activities=frequency_starts,
+                    end_activities=frequency_ends,
+                    renderer_role="dfg",
+                ),
                 "timings": {"dfg_page_s": time.perf_counter() - started},
             }
             try:

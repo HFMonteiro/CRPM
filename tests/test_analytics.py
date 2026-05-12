@@ -6,13 +6,14 @@ import pytest
 
 pm4py = pytest.importorskip("pm4py")
 from pm4py.objects.log.importer.xes import importer as xes_importer
-from pm4py.objects.log.obj import EventLog
+from pm4py.objects.log.obj import EventLog, Trace
 
 from crpm.analytics import (
     collect_timing_buckets,
     compute_activity_statistics,
     compute_case_durations,
     compute_case_statistics,
+    compute_loop_rework_metrics,
     compute_transition_statistics,
     detect_bottlenecks,
 )
@@ -83,3 +84,33 @@ def test_compute_case_durations_reuses_provided_buckets(log):
     df = compute_case_durations(log, timing_buckets=buckets)
     assert not df.empty
     assert len(df) == len(buckets["case_durations"])
+
+
+def test_compute_loop_rework_metrics_separates_self_loop_and_rework() -> None:
+    trace_a = Trace(attributes={"concept:name": "case-a"})
+    for activity in ["A", "B", "A", "C"]:
+        trace_a.append({"concept:name": activity})
+    trace_b = Trace(attributes={"concept:name": "case-b"})
+    for activity in ["A", "A", "C"]:
+        trace_b.append({"concept:name": activity})
+    trace_c = Trace(attributes={"concept:name": "case-c"})
+    for activity in ["A", "B", "C"]:
+        trace_c.append({"concept:name": activity})
+
+    metrics = compute_loop_rework_metrics(EventLog([trace_a, trace_b, trace_c]))
+
+    assert metrics["case_count"] == 3
+    assert metrics["self_loop_cases"] == 1
+    assert metrics["rework_cases"] == 2
+    assert metrics["loop_cases"] == 2
+    assert metrics["self_loop_cases_pct"] == 33.33
+    assert metrics["rework_cases_pct"] == 66.67
+    assert metrics["top_rework_activities"][0]["activity"] == "A"
+
+
+def test_compute_loop_rework_metrics_handles_empty_log() -> None:
+    metrics = compute_loop_rework_metrics(EventLog())
+
+    assert metrics["case_count"] == 0
+    assert metrics["self_loop_cases_pct"] == 0.0
+    assert metrics["rework_cases_pct"] == 0.0

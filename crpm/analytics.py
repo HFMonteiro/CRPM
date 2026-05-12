@@ -17,6 +17,8 @@ import pandas as pd
 import numpy as np
 from pm4py.objects.log.obj import EventLog
 
+from crpm.model_quality import compute_loop_rework_metrics
+
 logger = logging.getLogger(__name__)
 
 
@@ -428,4 +430,5 @@ __all__ = [
     "compute_case_durations",
     "compute_case_statistics",
     "extract_model_transitions",
+    "compute_loop_rework_metrics",
 ]

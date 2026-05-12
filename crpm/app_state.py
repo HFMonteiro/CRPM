@@ -27,7 +27,7 @@ WORKFLOW_COHORT_POLICIES = {
     WORKFLOW_COHORT_EXPLICIT_FOLLOWUP_ANCHOR,
 }
 
-STATE_VERSION = 6
+STATE_VERSION = 7
 CACHE_LIMITS = {
     "log_cache": 4,
     "dataframe_cache": 2,
@@ -41,6 +41,7 @@ CACHE_LIMITS = {
     "dfg_cache": 8,
     "screening_cache": 4,
     "workflow_view_cache": 16,
+    "log_quality_cache": 8,
 }
 
 
@@ -84,6 +85,9 @@ class AnalysisResults:
     conformance_workspace: dict[str, Any] = field(default_factory=dict)
     split_info: dict[str, Any] = field(default_factory=dict)
     analysis_summary: dict[str, Any] = field(default_factory=dict)
+    denominator_registry: dict[str, Any] = field(default_factory=dict)
+    log_quality: dict[str, Any] = field(default_factory=dict)
+    run_manifest: dict[str, Any] = field(default_factory=dict)
     train_log: Any = None
     test_log: Any = None
     active_followup_label: Optional[str] = None
@@ -124,6 +128,9 @@ class AnalysisResults:
         self.conformance_workspace = {}
         self.split_info = {}
         self.analysis_summary = {}
+        self.denominator_registry = {}
+        self.log_quality = {}
+        self.run_manifest = {}
         self.train_log = None
         self.test_log = None
         self.active_followup_label = active_followup_label
@@ -171,6 +178,9 @@ class AnalysisSnapshot:
     conformance_workspace: Mapping[str, Any]
     selected_algorithms: tuple[str, ...]
     stage_timings: Mapping[str, float]
+    denominator_registry: Mapping[str, Any] = field(default_factory=dict)
+    log_quality: Mapping[str, Any] = field(default_factory=dict)
+    run_manifest: Mapping[str, Any] = field(default_factory=dict)
     workflow_cohort_policy: str = WORKFLOW_COHORT_FIRST_EVENT_DIRECT
     source_metadata: Mapping[str, Any] = field(default_factory=dict)
     workflow_view_mode: str = "board"
@@ -291,6 +301,9 @@ def build_analysis_snapshot(session_state: Mapping[str, Any]) -> AnalysisSnapsho
         comparison_df=comparison_df,
         split_info=split_info,
         analysis_summary=results.analysis_summary if isinstance(getattr(results, "analysis_summary", {}), Mapping) else {},
+        denominator_registry=(results.denominator_registry if isinstance(getattr(results, "denominator_registry", {}), Mapping) else {}),
+        log_quality=results.log_quality if isinstance(getattr(results, "log_quality", {}), Mapping) else {},
+        run_manifest=results.run_manifest if isinstance(getattr(results, "run_manifest", {}), Mapping) else {},
         active_followup_label=results.active_followup_label,
         config_change_message=results.config_change_message,
         filter_error_message=results.filter_error_message,
@@ -350,6 +363,11 @@ def _migrate_or_create_state(session_state: Mapping[str, Any]) -> CRPMState:
         analysis_summary=(
             dict(session_state.get("analysis_summary", {})) if isinstance(session_state.get("analysis_summary"), Mapping) else {}
         ),
+        denominator_registry=(
+            dict(session_state.get("denominator_registry", {})) if isinstance(session_state.get("denominator_registry"), Mapping) else {}
+        ),
+        log_quality=dict(session_state.get("log_quality", {})) if isinstance(session_state.get("log_quality"), Mapping) else {},
+        run_manifest=dict(session_state.get("run_manifest", {})) if isinstance(session_state.get("run_manifest"), Mapping) else {},
         train_log=session_state.get("train_log"),
         test_log=session_state.get("test_log"),
         active_followup_label=session_state.get("active_followup_label"),

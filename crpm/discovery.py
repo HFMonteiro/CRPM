@@ -9,7 +9,7 @@ This module provides wrappers for multiple discovery algorithms:
 from __future__ import annotations
 
 from typing import Dict, List, Any, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 import time
 
@@ -38,6 +38,60 @@ class DiscoveryResult:
     num_places: int
     num_arcs: int
     heuristics_net: Optional[Any] = None  # For heuristics miner only
+    parameter_profile: dict[str, Any] = field(default_factory=dict)
+
+
+DISCOVERY_PARAMETER_PROFILES: dict[str, dict[str, Any]] = {
+    "Heuristics (Classic)": {
+        "profile_name": "heuristics-classic-default",
+        "algorithm_family": "Heuristics Miner",
+        "intended_use": "Dependency-aware discovery for operational logs where noise and loops are expected.",
+        "parameters": {
+            "dependency_threshold": "pm4py default",
+            "and_measure_threshold": "pm4py default",
+            "min_activity_count": "pm4py default",
+        },
+    },
+    "Heuristics (PLUS)": {
+        "profile_name": "heuristics-plus-default",
+        "algorithm_family": "Heuristics Miner",
+        "intended_use": "Sensitivity comparison when the installed PM4Py build exposes the PLUS variant.",
+        "parameters": {
+            "variant": "PLUS when available; Classic fallback otherwise",
+            "dependency_threshold": "pm4py default",
+        },
+    },
+    "Inductive (IM)": {
+        "profile_name": "inductive-structured",
+        "algorithm_family": "Inductive Miner",
+        "intended_use": "Structured baseline model discovery with a sound Petri net target.",
+        "parameters": {"noise_threshold": "pm4py default", "variant": "IM when available"},
+    },
+    "Inductive (IMf)": {
+        "profile_name": "inductive-noise-aware",
+        "algorithm_family": "Inductive Miner",
+        "intended_use": "Preferred robust baseline when screening logs contain rare deviations and local noise.",
+        "parameters": {"noise_threshold": "pm4py default", "variant": "IMf when available"},
+    },
+    "Inductive (IMd)": {
+        "profile_name": "inductive-dfg-driven",
+        "algorithm_family": "Inductive Miner",
+        "intended_use": "Directly-follows sensitivity path for comparing with DFG-first readings.",
+        "parameters": {"noise_threshold": "pm4py default", "variant": "IMd when available"},
+    },
+    "Alpha (Classic)": {
+        "profile_name": "alpha-classic-baseline",
+        "algorithm_family": "Alpha Miner",
+        "intended_use": "Didactic baseline and sensitivity check on clean, simple logs.",
+        "parameters": {"variant": "Classic"},
+    },
+    "Alpha+": {
+        "profile_name": "alpha-plus-sensitivity",
+        "algorithm_family": "Alpha Miner",
+        "intended_use": "Sensitivity check when Alpha+ is available in the installed PM4Py build.",
+        "parameters": {"variant": "Alpha+ when available; Classic fallback otherwise"},
+    },
+}
 
 
 # ---------------------------------------------------------------------------
@@ -384,6 +438,10 @@ def discover_with_algorithm(log: EventLog, algorithm_name: str) -> Optional[Disc
     try:
         discover_func = AVAILABLE_ALGORITHMS[algorithm_name]
         result = discover_func(log)
+        result.parameter_profile = get_algorithm_parameter_profile(
+            algorithm_name,
+            pm4py_variant=result.variant,
+        )
         return result
     except Exception:
         logger.exception("Error discovering with %s", algorithm_name)
@@ -409,6 +467,24 @@ def discover_all_algorithms(log: EventLog, selected_algorithms: Optional[List[st
             results[algo_name] = result
 
     return results
+
+
+def list_algorithm_parameter_profiles() -> dict[str, dict[str, Any]]:
+    """Return documented PM4Py discovery parameter profiles by UI algorithm key."""
+
+    return {key: dict(value) for key, value in DISCOVERY_PARAMETER_PROFILES.items()}
+
+
+def get_algorithm_parameter_profile(algorithm_name: str, *, pm4py_variant: str | None = None) -> dict[str, Any]:
+    """Return the documented discovery profile for one algorithm key."""
+
+    if algorithm_name not in DISCOVERY_PARAMETER_PROFILES:
+        raise ValueError(f"Unknown algorithm profile: {algorithm_name}")
+    profile = dict(DISCOVERY_PARAMETER_PROFILES[algorithm_name])
+    profile["parameters"] = dict(profile.get("parameters", {}))
+    profile["algorithm_key"] = algorithm_name
+    profile["pm4py_variant"] = pm4py_variant or str(profile["parameters"].get("variant") or "pm4py default")
+    return profile
 
 
 # ---------------------------------------------------------------------------
@@ -459,6 +535,7 @@ def compute_model_complexity(result: DiscoveryResult) -> Dict[str, float]:
 __all__ = [
     "DiscoveryResult",
     "AVAILABLE_ALGORITHMS",
+    "DISCOVERY_PARAMETER_PROFILES",
     "discover_with_algorithm",
     "discover_all_algorithms",
     "discover_heuristics_classic",
@@ -468,5 +545,7 @@ __all__ = [
     "discover_inductive_imd",
     "discover_alpha_classic",
     "discover_alpha_plus",
+    "get_algorithm_parameter_profile",
+    "list_algorithm_parameter_profiles",
     "compute_model_complexity",
 ]

@@ -243,6 +243,28 @@ def test_render_analysis_controls_places_run_button_before_advanced_and_log_stat
     assert run_index < advanced_index < log_stats_index
 
 
+def test_page_change_scroll_reset_is_only_emitted_on_page_change(monkeypatch) -> None:
+    import crpm.app_shell as app_shell
+
+    calls: list[dict[str, object]] = []
+    session_state = {"_crpm_last_rendered_page": "Overview"}
+    monkeypatch.setattr(app_shell, "st", SimpleNamespace(session_state=session_state))
+    monkeypatch.setattr(app_shell.components, "html", lambda html, **kwargs: calls.append({"html": html, **kwargs}))
+
+    app_shell._reset_page_scroll_on_change("Overview")
+
+    assert calls == []
+    assert session_state["_crpm_last_rendered_page"] == "Overview"
+
+    app_shell._reset_page_scroll_on_change("DFG Visualizations")
+
+    assert len(calls) == 1
+    assert "scrollTo" in str(calls[0]["html"])
+    assert calls[0]["height"] == 0
+    assert calls[0]["width"] == 0
+    assert session_state["_crpm_last_rendered_page"] == "DFG Visualizations"
+
+
 def test_render_header_prompts_rerun_with_note_and_toast(monkeypatch) -> None:
     import crpm.app_shell as app_shell
 
@@ -311,6 +333,41 @@ def test_render_header_renders_compact_shell_intro_for_non_conformance_pages(mon
     assert "Screening Program Process Mining Workbench" not in rendered
     assert "running-example.xes" in rendered
     assert len(calls["metrics"]) == 2
+
+
+def test_dfg_header_skips_global_metric_band_to_keep_map_first(monkeypatch) -> None:
+    import crpm.app_shell as app_shell
+
+    snapshot = SimpleNamespace(
+        case_count=11,
+        event_count=22,
+        model_count=3,
+        comparison_df=pd.DataFrame([{"model_name": "Model"}]),
+        input_name="running-example.xes",
+        active_followup_label="Full available follow-up",
+        config_change_message=None,
+        filter_error_message=None,
+        analysis_complete=True,
+    )
+    calls = {"markdown": []}
+    monkeypatch.setattr(
+        app_shell,
+        "st",
+        SimpleNamespace(
+            markdown=lambda text, **kwargs: calls["markdown"].append(text),
+            columns=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("DFG header should not render metric columns")),
+            caption=lambda *args, **kwargs: None,
+            error=lambda *args, **kwargs: None,
+            toast=lambda *args, **kwargs: None,
+        ),
+    )
+    monkeypatch.setattr(app_shell, "render_quiet_note", lambda text: None)
+
+    app_shell._render_header(snapshot, page="DFG Visualizations")
+
+    rendered = " ".join(calls["markdown"])
+    assert "crpm-shell-hero--compact" in rendered
+    assert "Read the directly-follows map first" in rendered
 
 
 def test_render_header_skips_shell_hero_on_conformance_page(monkeypatch) -> None:

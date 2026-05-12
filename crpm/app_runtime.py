@@ -17,12 +17,24 @@ import xml.etree.ElementTree as ET
 import pandas as pd
 from pm4py.objects.log.obj import EventLog
 
-from crpm.app_state import CRPMState, bounded_cache_get, bounded_cache_put
+from crpm.app_state import CACHE_LIMITS, CRPMState, bounded_cache_get, bounded_cache_put
 from crpm.conformance import compute_alignments, compute_token_replay, filter_date_range, filter_start_event, load_log, summarize_metrics
+from crpm.denominators import build_denominator_registry, build_preprocessing_impact
 from crpm.discovery import AVAILABLE_ALGORITHMS as AVAILABLE_ALGORITHMS, DiscoveryResult, compute_model_complexity, discover_all_algorithms
 from crpm.formatting import format_decimal
 from crpm.interpretations import assess_bottleneck_severity, assess_fitness, assess_precision, get_executive_summary, get_model_quadrant
+from crpm.log_quality import compute_event_log_quality
+from crpm.model_quality import build_model_quality_matrix, compute_loop_rework_metrics, summarize_model_quality
+from crpm.observability import build_cache_telemetry
 from crpm.pipeline import csv_to_event_log, split_log_random
+from crpm.process_intelligence import (
+    build_cohort_lenses,
+    build_conformance_root_cause_summary,
+    build_resource_perspective,
+    build_time_series_monitoring,
+)
+from crpm.process_map import build_process_map_kpis, build_selection_context
+from crpm.run_manifest import build_run_manifest
 from crpm.screening import describe_followup_window, filter_log_by_incident_period
 
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
@@ -569,6 +581,8 @@ def run_discovery_comparison_pipeline(
     comparison_started = time.perf_counter()
     comparison_df = build_model_comparison_dataframe(discovery_results, conformance_results)
     stage_timings["comparison_s"] = time.perf_counter() - comparison_started
+    model_quality_matrix = build_model_quality_matrix(comparison_df)
+    model_quality_summary = summarize_model_quality(model_quality_matrix)
 
     workspace_started = time.perf_counter()
     workspace_cache_key = f"{analysis_signature}::{evaluation_log_signature}::{CONFORMANCE_WORKSPACE_CACHE_VERSION}"
@@ -593,6 +607,41 @@ def run_discovery_comparison_pipeline(
         bounded_cache_put(state, "conformance_workspace_cache", workspace_cache_key, conformance_workspace)
     stage_timings["conformance_workspace_s"] = time.perf_counter() - workspace_started
 
+    quality_started = time.perf_counter()
+    semantic_profile = _semantic_profile_for_source(loaded_log)
+    log_quality_key = f"{filter_key}::{evaluation_log_signature}::{semantic_profile}::quality-v1"
+    log_quality = bounded_cache_get(state, "log_quality_cache", log_quality_key)
+    if log_quality is None:
+        log_quality = compute_event_log_quality(evaluation_log, semantic_profile=semantic_profile)
+        bounded_cache_put(state, "log_quality_cache", log_quality_key, log_quality)
+    stage_timings["log_quality_s"] = time.perf_counter() - quality_started
+
+    workflow = conformance_workspace.get("workflow", {}) if isinstance(conformance_workspace, Mapping) else {}
+    denominator_registry = build_denominator_registry(
+        filtered_log,
+        workflow=workflow if isinstance(workflow, Mapping) else {},
+        evaluation_log=evaluation_log,
+    )
+    loop_rework_metrics = compute_loop_rework_metrics(evaluation_log)
+    cohort_lenses = build_cohort_lenses(
+        evaluation_log,
+        workflow=workflow if isinstance(workflow, Mapping) else {},
+        loop_rework_metrics=loop_rework_metrics,
+    )
+    time_series_monitoring = build_time_series_monitoring(evaluation_log)
+    resource_perspective = conformance_workspace.get("resource_perspective", {}) if isinstance(conformance_workspace, Mapping) else {}
+    conformance_root_causes = conformance_workspace.get("conformance_root_causes", {}) if isinstance(conformance_workspace, Mapping) else {}
+    preprocessing_impact = build_preprocessing_impact(
+        source_log=loaded_log.log,
+        filtered_log=filtered_log,
+        evaluation_log=evaluation_log,
+    )
+    cache_telemetry = build_cache_telemetry(
+        caches=state.caches,
+        cache_limits=CACHE_LIMITS,
+        stage_timings=stage_timings,
+    )
+
     results.input_name = loaded_log.input_name
     results.log_signature = loaded_log.log_signature
     results.workflow_cohort_policy = workflow_cohort_policy
@@ -615,8 +664,19 @@ def run_discovery_comparison_pipeline(
             "evaluation_cases": int(len(evaluation_log)),
             "evaluation_events": int(sum(len(trace) for trace in evaluation_log)),
             "source_validation_status": source_metadata.get("validation_status"),
+            "log_quality_status": (log_quality.get("summary", {}) if isinstance(log_quality, Mapping) else {}).get("quality_status"),
+            "preprocessing_impact": preprocessing_impact,
+            "loop_rework_metrics": loop_rework_metrics,
+            "model_quality_matrix_summary": model_quality_summary,
+            "cohort_lenses": cohort_lenses,
+            "time_series_monitoring": time_series_monitoring,
+            "resource_perspective": resource_perspective,
+            "conformance_root_causes": conformance_root_causes,
+            "cache_telemetry": cache_telemetry,
         }
     )
+    results.denominator_registry = denominator_registry
+    results.log_quality = log_quality if isinstance(log_quality, dict) else {}
     results.train_log = train_log_out
     results.test_log = test_log_out
     results.split_info = split_info_out
@@ -626,6 +686,51 @@ def run_discovery_comparison_pipeline(
     results.filter_error_message = None
     results.stage_timings = stage_timings
     results.last_analysis_signature = analysis_signature
+    results.run_manifest = build_run_manifest(
+        input_name=loaded_log.input_name,
+        log_signature=loaded_log.log_signature,
+        source_metadata=source_metadata,
+        analysis_signature=analysis_signature,
+        filter_key=filter_key,
+        workflow_cohort_policy=workflow_cohort_policy,
+        start_filter=start_filter,
+        date_filter_mode=date_filter_mode,
+        start_date=start_date,
+        end_date=end_date,
+        selected_algorithms=selected_algorithms,
+        enable_train_test=enable_train_test,
+        random_seed=random_seed,
+        followup_days=followup_days,
+        split_info=split_info_out,
+        analysis_summary=results.analysis_summary,
+        denominator_registry=denominator_registry,
+        log_quality=results.log_quality,
+        preprocessing_impact=preprocessing_impact,
+        analytics_depth={
+            "loop_rework_summary": loop_rework_metrics,
+            "model_quality_matrix_summary": model_quality_summary,
+            "cohort_lenses_summary": cohort_lenses.get("summary", {}) if isinstance(cohort_lenses, Mapping) else {},
+            "time_series_monitoring_summary": (
+                time_series_monitoring.get("summary", {}) if isinstance(time_series_monitoring, Mapping) else {}
+            ),
+            "resource_perspective_summary": (resource_perspective.get("summary", {}) if isinstance(resource_perspective, Mapping) else {}),
+            "conformance_root_causes_summary": (
+                conformance_root_causes.get("summary", {}) if isinstance(conformance_root_causes, Mapping) else {}
+            ),
+        },
+        cache_telemetry=cache_telemetry,
+        stage_timings=stage_timings,
+        comparison_df=comparison_df,
+    )
+
+
+def _semantic_profile_for_source(loaded_log: LoadedLog) -> str:
+    label = f"{loaded_log.input_name} {loaded_log.source_display_name or ''}".lower()
+    if "screening" in label or "crc" in label or "colorectal" in label:
+        return "ccr_screening"
+    if loaded_log.source_type.upper() in {"XES", "CSV"}:
+        return "healthcare"
+    return "generic"
 
 
 def build_model_comparison_dataframe(
@@ -641,17 +746,22 @@ def build_model_comparison_dataframe(
         alignment_fitness = summary.get("alignment_fitness", {}).get("log_fitness")
         token_fitness = summary.get("token_fitness", {}).get("log_fitness")
         precision = conf.get("precision")
+        parameter_profile = getattr(result, "parameter_profile", {}) or {}
 
         rows.append(
             {
                 "model_name": model_name,
                 "algorithm": result.algorithm,
                 "variant": result.variant,
+                "parameter_profile_name": parameter_profile.get("profile_name"),
+                "parameter_profile_intended_use": parameter_profile.get("intended_use"),
+                "pm4py_variant": parameter_profile.get("pm4py_variant", result.variant),
                 "alignment_fitness": alignment_fitness,
                 "token_fitness": token_fitness,
                 "precision": precision,
                 "num_transitions": getattr(result, "num_transitions", 0),
                 "num_places": getattr(result, "num_places", 0),
+                "num_arcs": getattr(result, "num_arcs", 0),
                 "arc_degree": complexity.get("arc_degree", 0),
                 "complexity_score": complexity.get("complexity_score", 0),
                 "discovery_time_s": getattr(result, "discovery_time_s", 0),
@@ -661,7 +771,19 @@ def build_model_comparison_dataframe(
             }
         )
 
-    return pd.DataFrame(rows)
+    comparison_df = pd.DataFrame(rows)
+    if comparison_df.empty:
+        return comparison_df
+    quality_index = {
+        row["model_name"]: row for row in build_model_quality_matrix(comparison_df) if isinstance(row, Mapping) and row.get("model_name")
+    }
+    comparison_df["quality_score"] = comparison_df["model_name"].map(lambda value: quality_index.get(value, {}).get("quality_score"))
+    comparison_df["quality_band"] = comparison_df["model_name"].map(lambda value: quality_index.get(value, {}).get("quality_band", "N/A"))
+    comparison_df["simplicity_proxy"] = comparison_df["model_name"].map(lambda value: quality_index.get(value, {}).get("simplicity_proxy"))
+    comparison_df["generalization_proxy"] = comparison_df["model_name"].map(
+        lambda value: quality_index.get(value, {}).get("generalization_proxy")
+    )
+    return comparison_df
 
 
 def compute_full_conformance(log: EventLog, net, im, fm, model_name: str) -> dict[str, Any]:
@@ -678,12 +800,21 @@ def compute_full_conformance(log: EventLog, net, im, fm, model_name: str) -> dic
     summary = summarize_metrics(align_res, token_res)
     if precision is not None:
         summary["precision"] = {"value": precision}
+    conformance_profile = {
+        "profile_name": "alignment-first-diagnostics",
+        "primary_diagnostic": "alignments",
+        "token_replay_role": "fast screening",
+        "precision_role": "model overgeneralization check",
+        "intended_use": "Use token replay for fast cohort posture and alignments for exact deviation diagnostics.",
+    }
+    summary["conformance_profile"] = conformance_profile
 
     return {
         "model_name": model_name,
         "alignments": align_res,
         "token": token_res,
         "precision": precision,
+        "conformance_profile": conformance_profile,
         "summary": summary,
     }
 
@@ -704,12 +835,19 @@ def build_conformance_workspace_payload(
         conformance_results=conformance_results,
         comparison_df=comparison_df,
     )
+    resource_perspective = build_resource_perspective(log)
+    conformance_root_causes = build_conformance_root_cause_summary(
+        workflow_payload,
+        trace_deviation_df=trace_deviation_df,
+    )
 
     return {
         "model_summary_df": model_summary_df,
         "deviation_summary_df": deviation_summary_df,
         "trace_deviation_df": trace_deviation_df,
         "workflow": workflow_payload,
+        "resource_perspective": resource_perspective,
+        "conformance_root_causes": conformance_root_causes,
         "has_workflow": not workflow_payload["nodes"].empty,
     }
 
@@ -1493,24 +1631,30 @@ def _build_process_map_payload(
     path_denominator = _summary_int("path_denominator", visible_case_count)
     activity_denominator = _summary_int("activity_denominator", 0)
     transition_denominator = _summary_int("transition_denominator", 0)
+    denominators = {
+        "visible_case_count": visible_case_count,
+        "excluded_case_count": excluded_case_count,
+        "path_denominator": path_denominator,
+        "activity_denominator": activity_denominator,
+        "transition_denominator": transition_denominator,
+    }
     return {
+        "schema_version": 1,
+        "map_kind": "workflow_conformance",
         "renderer_role": renderer_role,
         "nodes": nodes_df,
         "edges": edges_df,
         "legend": legend_df,
         "trace_profiles": trace_profiles_df,
         "summary": dict(summary),
-        "denominators": {
-            "visible_case_count": visible_case_count,
-            "excluded_case_count": excluded_case_count,
-            "path_denominator": path_denominator,
-            "activity_denominator": activity_denominator,
-            "transition_denominator": transition_denominator,
-        },
-        "selection": {
-            "selected_node_id": None,
-            "selected_edge_uid": None,
-        },
+        "denominators": denominators,
+        "kpi_rows": build_process_map_kpis(denominators),
+        "selection": {"selected_node_id": None, "selected_edge_uid": None},
+        "selection_context": build_selection_context(
+            source_page="Conformance Analytics",
+            renderer_role=renderer_role,
+            local_focus_hint=WORKFLOW_LOCAL_FOCUS_HINT,
+        ),
     }
 
 

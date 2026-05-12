@@ -100,6 +100,60 @@ def test_render_discovery_page_renders_summary_table(monkeypatch) -> None:
     assert calls["table"][1]["label_column"] == "Model"
 
 
+def test_render_discovery_page_includes_quality_matrix_columns(monkeypatch) -> None:
+    calls = {}
+    monkeypatch.setattr(discovery_page.st, "subheader", lambda *args, **kwargs: None)
+    monkeypatch.setattr(discovery_page.st, "caption", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        discovery_page.st,
+        "columns",
+        lambda n, **kwargs: [_DummyContext() for _ in range(n if isinstance(n, int) else len(n))],
+    )
+    monkeypatch.setattr(discovery_page.st, "container", lambda border=False: _DummyContext())
+    monkeypatch.setattr(discovery_page.st, "markdown", lambda *args, **kwargs: None)
+    monkeypatch.setattr(discovery_page.st, "metric", lambda *args, **kwargs: None)
+    monkeypatch.setattr(discovery_page, "render_html_card_grid", lambda *args, **kwargs: None)
+    monkeypatch.setattr(discovery_page, "render_metric_card_grid", lambda *args, **kwargs: None)
+    monkeypatch.setattr(discovery_page, "render_html_ranked_table", lambda df, **kwargs: calls.setdefault("table", df))
+    result = SimpleNamespace(
+        algorithm="Inductive Miner",
+        variant="IMf",
+        discovery_time_s=0.5,
+        num_transitions=3,
+        num_places=2,
+        num_arcs=4,
+    )
+    snapshot = _snapshot(
+        discovery_results={"Inductive": result},
+        comparison_df=pd.DataFrame(
+            [
+                {
+                    "model_name": "Inductive",
+                    "quality_score": 0.88,
+                    "quality_band": "Excellent",
+                    "parameter_profile_name": "inductive-noise-aware",
+                    "pm4py_variant": "IMf",
+                    "fitness_quality": "Good",
+                    "precision_quality": "Good",
+                    "quadrant": "Balanced",
+                }
+            ]
+        ),
+    )
+
+    discovery_page.render_discovery_page(snapshot)
+
+    assert {
+        "Quality score",
+        "Quality band",
+        "Parameter profile",
+        "PM4Py variant",
+        "Fitness quality",
+        "Precision quality",
+        "Quadrant",
+    }.issubset(calls["table"].columns)
+
+
 def test_dashboard_helpers_escape_and_redact_sensitive_values(monkeypatch) -> None:
     calls = {"markdown": []}
     monkeypatch.setattr(
@@ -110,16 +164,16 @@ def test_dashboard_helpers_escape_and_redact_sensitive_values(monkeypatch) -> No
 
     common_page.render_dashboard_topbar(
         title="<script>Run</script>",
-        subtitle=r"C:\Users\Researcher\Secret cohort\screening cohort.csv",
+        subtitle=r"X:\Private\Secret cohort\screening cohort.csv",
         badges=[{"label": "Mode", "value": "Direct workflow <default>", "tone": "accent"}],
-        meta=[r"C:\Users\Researcher\Secret cohort\local.xes"],
+        meta=[r"X:\Private\Secret cohort\local.xes"],
     )
     topbar_markup = calls["markdown"][-1]
 
     assert "crpm-dashboard-topbar" in topbar_markup
     assert "&lt;script&gt;Run&lt;/script&gt;" in topbar_markup
     assert "Direct workflow &lt;default&gt;" in topbar_markup
-    assert r"C:\Users" not in topbar_markup
+    assert r"X:\Private" not in topbar_markup
     assert "screening cohort.csv" in topbar_markup
     assert "local.xes" in topbar_markup
 
@@ -137,7 +191,7 @@ def test_dashboard_helpers_escape_and_redact_sensitive_values(monkeypatch) -> No
 
 
 def test_render_overview_page_uses_dashboard_command_center(monkeypatch) -> None:
-    calls = {"markdown": [], "workflow": []}
+    calls = {"markdown": [], "workflow": [], "download": []}
     snapshot = AnalysisSnapshot(
         analysis_complete=True,
         input_name="screening_conformance_demo.xes",
@@ -162,7 +216,69 @@ def test_render_overview_page_uses_dashboard_command_center(monkeypatch) -> None
             "workflow_nodes": 8,
             "workflow_edges": 7,
             "analysis_runtime_s": 1.3,
+            "source_validation_status": "validated:xes",
+            "loop_rework_metrics": {
+                "case_count": 1000,
+                "self_loop_cases_pct": 4.0,
+                "loop_cases_pct": 12.0,
+                "rework_cases_pct": 18.0,
+            },
+            "cohort_lenses": {
+                "rows": [
+                    {"label": "All cases", "count": 1000, "share_pct": 100.0},
+                    {"label": "Dominant path", "count": 640, "share_pct": 64.0},
+                ]
+            },
+            "time_series_monitoring": {
+                "summary": {
+                    "latest_case_count": 42,
+                    "latest_median_throughput_days": 12.5,
+                    "case_volume_delta": 3,
+                }
+            },
+            "resource_perspective": {
+                "summary": {
+                    "resource_count": 9,
+                    "handoff_count": 22,
+                    "resource_coverage_pct": 88.0,
+                }
+            },
+            "conformance_root_causes": {
+                "summary": {
+                    "model_deviation_activity_count": 2,
+                    "log_deviation_transition_count": 3,
+                    "deviating_trace_count": 15,
+                }
+            },
         },
+        source_metadata={
+            "source_type": "XES",
+            "source_kind": "local",
+            "display_name": r"C:\Analyst\Private\redacted_cohort.xes",
+            "size_bytes": 2048,
+            "validation_status": "validated:xes",
+        },
+        denominator_registry={
+            "case_count": 1000,
+            "event_count": 3436,
+            "activity_count": 8,
+            "variant_count": 12,
+            "evaluation_case_count": 1000,
+            "path_denominator": 1000,
+            "activity_denominator": 3436,
+            "excluded_case_count": 0,
+        },
+        log_quality={
+            "summary": {
+                "quality_status": "ok",
+                "required_field_completeness_pct": 100.0,
+                "duplicate_event_count": 0,
+                "negative_gap_count": 0,
+                "events": 3436,
+                "timezone_mode": "aware",
+            }
+        },
+        run_manifest={"schema_version": 1, "input": {"display_name": "Local XES log"}},
         active_followup_label="365-day follow-up window",
         config_change_message=None,
         filter_error_message=None,
@@ -209,6 +325,7 @@ def test_render_overview_page_uses_dashboard_command_center(monkeypatch) -> None
     )
     monkeypatch.setattr(overview_page.st, "columns", _columns)
     monkeypatch.setattr(overview_page.st, "expander", lambda *args, **kwargs: _DummyContext())
+    monkeypatch.setattr(overview_page.st, "download_button", lambda *args, **kwargs: calls["download"].append((args, kwargs)))
     monkeypatch.setattr(
         overview_page,
         "render_workflow_conformance_svg",
@@ -225,12 +342,22 @@ def test_render_overview_page_uses_dashboard_command_center(monkeypatch) -> None
     assert any("crpm-overview-command-center" in text for text in calls["markdown"])
     assert any("crpm-overview-map-frame" in text for text in calls["markdown"])
     assert any("crpm-dashboard-bar-list" in text for text in calls["markdown"])
+    assert any("Denominators" in text for text in calls["markdown"])
+    assert any("Event log quality" in text for text in calls["markdown"])
+    assert any("Source validation" in text for text in calls["markdown"])
+    assert any("Loop/rework posture" in text for text in calls["markdown"])
+    assert any("Cohort lenses" in text for text in calls["markdown"])
+    assert any("Latest period" in text for text in calls["markdown"])
+    assert any("Resource perspective" in text for text in calls["markdown"])
+    assert any("Root-cause summary" in text for text in calls["markdown"])
+    assert not any(r"C:\Analyst\Private" in text for text in calls["markdown"])
     assert not any("crpm-overview-hero" in text for text in calls["markdown"])
     assert any("crpm-reading-order-band" in text for text in calls["markdown"])
     assert any("crpm-page-card-grid" in text for text in calls["markdown"])
     assert calls["workflow"]
     assert calls["workflow"][0]["kwargs"]["layout_mode"] == "vertical"
     assert calls["workflow"][0]["kwargs"]["detail_level"] == "executive"
+    assert calls["download"]
 
 
 def test_render_comparison_page_renders_ranked_table_and_charts(monkeypatch) -> None:
@@ -635,6 +762,28 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
                 ]
             ),
         },
+        "resource_perspective": {
+            "summary": {
+                "resource_count": 3,
+                "handoff_count": 4,
+                "resource_coverage_pct": 100.0,
+            },
+        },
+        "conformance_root_causes": {
+            "top_causes": [
+                {
+                    "label": "Lab rejection",
+                    "issue": "Model deviation activity",
+                    "count": 2,
+                    "severity": "High",
+                }
+            ],
+            "summary": {
+                "model_deviation_activity_count": 1,
+                "log_deviation_transition_count": 1,
+                "deviating_trace_count": 1,
+            },
+        },
     }
 
     monkeypatch.setattr(
@@ -782,15 +931,17 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
     assert any(label == "Pinned metric type" for label, _ in calls["segmented"])
     assert not any(label == "Color" for label, _ in calls["selectbox"])
     assert "Clear pinned metrics" in calls["buttons"]
-    assert "Reset filters" not in calls["buttons"]
+    assert "Reset filters" in calls["buttons"]
     assert "Reset graph view" in calls["buttons"]
-    assert (0.72, 2.55, 0.73) in calls["columns"]
-    assert (0.48, 0.26, 0.26) in calls["columns"]
+    assert (0.62, 2.72, 0.66) in calls["columns"]
+    assert (0.58, 0.21, 0.21) in calls["columns"]
     assert any("crpm-selection-card" in text for text in calls["markdown"])
     assert any("crpm-model-card-grid" in text for text in calls["markdown"])
     assert any("crpm-ranked-table" in text for text in calls["markdown"])
     assert not any("crpm-mode-banner" in text for text in calls["markdown"])
     assert any("overview mode is active" in note.lower() for note in calls["notes"])
+    assert any("Root-cause watchlist" in str(text) for text in calls["markdown"])
+    assert any("Resource perspective" in str(text) for text in calls["markdown"])
     assert any("crpm-dashboard-topbar" in str(text) for text in calls["markdown"])
     assert not any("crpm-conformance-hero" in str(text) for text in calls["markdown"])
     assert not any("crpm-conformance-report-band" in str(text) for text in calls["markdown"])
@@ -1385,7 +1536,7 @@ def test_render_workflow_controls_rail_uses_progressive_filter_categories(
     controls = conformance_page._render_workflow_controls(snapshot, layout="rail")
 
     assert {"Pathway", "Deviation", "Display", "Actions"}.issubset(set(button_calls))
-    assert "Reset filters" not in button_calls
+    assert "Reset filters" in button_calls
     assert not any(label == "Filter category" for label, _ in segmented_calls)
     assert ("Density", ("Executive", "Analyst", "Research")) in segmented_calls
     assert ("Lens", ("% of activities", "% of paths")) in segmented_calls

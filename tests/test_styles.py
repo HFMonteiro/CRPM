@@ -89,6 +89,7 @@ def test_dfg_map_canvas_has_desktop_height_guard() -> None:
     css = get_custom_css()
     assert ".crpm-dfg-map-canvas" in css
     assert "overflow: hidden;" in css
+    assert "align-items: flex-start;" in css
     assert "justify-content: center;" in css
     assert "min-height: 272px;" in css
     assert "max-width: 100%;" in css

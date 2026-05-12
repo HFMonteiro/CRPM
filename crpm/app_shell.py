@@ -9,6 +9,7 @@ from datetime import date
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from crpm.app_runtime import (
     AVAILABLE_ALGORITHMS,
@@ -91,6 +92,7 @@ def render_app() -> None:
         PREVIEW_PAGES,
         key="crpm_preview_page",
     )
+    _reset_page_scroll_on_change(page)
     _render_analysis_controls(state)
     snapshot = build_analysis_snapshot(st.session_state)
     _render_sidebar_session_info(snapshot)
@@ -98,6 +100,51 @@ def render_app() -> None:
     _render_header(snapshot, page=page)
     PAGE_REGISTRY[page](snapshot)
     _render_footer()
+
+
+def _reset_page_scroll_on_change(page: str) -> None:
+    """Reset the main browser viewport when the selected analytical page changes."""
+    previous_page = st.session_state.get("_crpm_last_rendered_page")
+    st.session_state["_crpm_last_rendered_page"] = page
+    if previous_page in {None, page}:
+        return
+
+    components.html(
+        """
+        <script>
+        (() => {
+          const scrollTop = (target) => {
+            try {
+              if (target && typeof target.scrollTo === "function") {
+                target.scrollTo({ top: 0, left: 0, behavior: "auto" });
+              } else if (target) {
+                target.scrollTop = 0;
+              }
+            } catch (_) {}
+          };
+          const reset = () => {
+            scrollTop(window.parent);
+            try {
+              const doc = window.parent.document;
+              [
+                doc.querySelector("[data-testid='stAppViewContainer']"),
+                doc.querySelector(".main"),
+                doc.querySelector("section.main"),
+                doc.scrollingElement,
+                doc.documentElement,
+                doc.body,
+              ].forEach(scrollTop);
+            } catch (_) {}
+          };
+          reset();
+          try { window.parent.requestAnimationFrame(reset); } catch (_) {}
+          [50, 150, 350, 700, 1200].forEach((delay) => setTimeout(reset, delay));
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
 
 def _safe_set_page_config() -> None:
@@ -174,9 +221,10 @@ def _render_header(snapshot: AnalysisSnapshot, *, page: str) -> None:
         unsafe_allow_html=True,
     )
 
-    meta_cols = st.columns(2)
-    meta_cols[0].metric("Cases", f"{snapshot.case_count:,}")
-    meta_cols[1].metric("Events", f"{snapshot.event_count:,}")
+    if page != "DFG Visualizations":
+        meta_cols = st.columns(2)
+        meta_cols[0].metric("Cases", f"{snapshot.case_count:,}")
+        meta_cols[1].metric("Events", f"{snapshot.event_count:,}")
     if getattr(snapshot, "config_change_message", None):
         render_quiet_note(
             "Settings changed since the last successful run. "

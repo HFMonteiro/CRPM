@@ -18,6 +18,8 @@ from crpm.discovery import (
     discover_inductive_imd,
     discover_inductive_imf,
     discover_with_algorithm,
+    get_algorithm_parameter_profile,
+    list_algorithm_parameter_profiles,
 )
 
 LOG_PATH = "examples/running-example.xes"
@@ -46,6 +48,19 @@ def test_discover_with_algorithm_returns_result(log, algorithm):
     assert result.num_places > 0
     assert result.num_arcs > 0
     assert result.discovery_time_s >= 0
+    assert result.parameter_profile["algorithm_key"] == algorithm
+    assert result.parameter_profile["profile_name"]
+    assert result.parameter_profile["pm4py_variant"] == result.variant
+
+
+def test_algorithm_parameter_profiles_are_explicit_and_reproducible() -> None:
+    profiles = list_algorithm_parameter_profiles()
+    imf_profile = get_algorithm_parameter_profile("Inductive (IMf)")
+
+    assert "Inductive (IMf)" in profiles
+    assert imf_profile["profile_name"] == "inductive-noise-aware"
+    assert imf_profile["parameters"]["noise_threshold"] == "pm4py default"
+    assert imf_profile["intended_use"]
 
 
 def test_discover_with_unknown_algorithm_raises_on_invalid(log):

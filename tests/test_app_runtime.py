@@ -14,6 +14,7 @@ from crpm.app_runtime import (
     list_safe_local_xes_files,
     resolve_xes_log,
     run_discovery_comparison_pipeline,
+    compute_full_conformance,
 )
 from crpm.app_state import get_crpm_state
 
@@ -37,6 +38,11 @@ def test_build_model_comparison_dataframe_adds_quality_columns() -> None:
             num_places=2,
             num_arcs=4,
             discovery_time_s=0.42,
+            parameter_profile={
+                "profile_name": "inductive-noise-aware",
+                "pm4py_variant": "IMf",
+                "intended_use": "Preferred robust baseline",
+            },
         )
     }
     conformance_results = {
@@ -54,15 +60,55 @@ def test_build_model_comparison_dataframe_adds_quality_columns() -> None:
     assert list(comparison_df["model_name"]) == ["Inductive"]
     assert comparison_df.iloc[0]["fitness_quality"] == "Good"
     assert comparison_df.iloc[0]["precision_quality"] in {"Good", "Excellent"}
+    assert comparison_df.iloc[0]["num_arcs"] == 4
+    assert comparison_df.iloc[0]["parameter_profile_name"] == "inductive-noise-aware"
+    assert comparison_df.iloc[0]["pm4py_variant"] == "IMf"
+    assert comparison_df.iloc[0]["quality_band"] in {"Good", "Excellent"}
+    assert 0.0 <= comparison_df.iloc[0]["quality_score"] <= 1.0
     assert comparison_df.iloc[0]["quadrant"]
+
+
+def test_compute_full_conformance_declares_method_profile(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "crpm.app_runtime.compute_alignments",
+        lambda *args, **kwargs: {"fitness": {"log_fitness": 0.91}, "aligned_traces": []},
+    )
+    monkeypatch.setattr(
+        "crpm.app_runtime.compute_token_replay",
+        lambda *args, **kwargs: {"fitness": {"log_fitness": 0.89}, "token_results": []},
+    )
+
+    result = compute_full_conformance(EventLog(), object(), object(), object(), "Inductive")
+
+    assert result["conformance_profile"]["profile_name"] == "alignment-first-diagnostics"
+    assert result["conformance_profile"]["primary_diagnostic"] == "alignments"
+    assert result["summary"]["conformance_profile"]["token_replay_role"] == "fast screening"
 
 
 def test_build_conformance_workspace_payload_creates_structured_tables() -> None:
     trace = Trace()
-    trace.attributes["concept:name"] = "patient-identifier-001"
-    trace.append({"concept:name": "Invitation_mail", "time:timestamp": pd.Timestamp("2024-01-01")})
-    trace.append({"concept:name": "FIT_mail", "time:timestamp": pd.Timestamp("2024-01-02")})
-    trace.append({"concept:name": "FIT_return", "time:timestamp": pd.Timestamp("2024-01-05")})
+    trace.attributes["concept:name"] = "raw-case-identifier-001"
+    trace.append(
+        {
+            "concept:name": "Invitation_mail",
+            "org:resource": "Nurse Maria",
+            "time:timestamp": pd.Timestamp("2024-01-01"),
+        }
+    )
+    trace.append(
+        {
+            "concept:name": "FIT_mail",
+            "org:resource": "Screening Team",
+            "time:timestamp": pd.Timestamp("2024-01-02"),
+        }
+    )
+    trace.append(
+        {
+            "concept:name": "FIT_return",
+            "org:resource": "Screening Team",
+            "time:timestamp": pd.Timestamp("2024-01-05"),
+        }
+    )
     log = EventLog([trace])
 
     fake_net = SimpleNamespace(
@@ -107,6 +153,11 @@ def test_build_conformance_workspace_payload_creates_structured_tables() -> None
     assert payload["deviation_summary_df"].iloc[0]["token_summary"] == "log fit 0.89"
     assert not payload["workflow"]["nodes"].empty
     assert not payload["workflow"]["edges"].empty
+    assert payload["resource_perspective"]["summary"]["resource_count"] == 2
+    assert payload["resource_perspective"]["summary"]["handoff_count"] == 1
+    assert payload["conformance_root_causes"]["summary"]["deviating_trace_count"] == 1
+    assert "Nurse Maria" not in str(payload["resource_perspective"])
+    assert "raw-case-identifier-001" not in str(payload["conformance_root_causes"])
     assert {
         "business_label",
         "branch_role",
@@ -161,6 +212,10 @@ def test_build_conformance_workspace_payload_creates_structured_tables() -> None
     assert workflow["activity_denominator"] == 3
     assert workflow["renderer_role"] == "conformance_explorer"
     assert workflow["process_map_payload"]["renderer_role"] == "conformance_explorer"
+    assert workflow["process_map_payload"]["schema_version"] == 1
+    assert workflow["process_map_payload"]["map_kind"] == "workflow_conformance"
+    assert workflow["process_map_payload"]["selection_context"]["renderer_role"] == "conformance_explorer"
+    assert workflow["process_map_payload"]["kpi_rows"][0]["key"] == "visible_case_count"
     assert workflow["process_map_payload"]["denominators"] == {
         "visible_case_count": 1,
         "excluded_case_count": 0,
@@ -175,9 +230,9 @@ def test_build_conformance_workspace_payload_creates_structured_tables() -> None
     assert set(workflow["edges"]["share_pct"]) == {50.0}
     assert workflow["trace_profiles"].iloc[0]["case_id"] == "case-001"
     assert set(workflow["edges"]["edge_uid"]).issubset(set(workflow["trace_profiles"].iloc[0]["edge_uids"]))
-    assert "patient-identifier-001" not in workflow["trace_profiles"].to_string()
-    assert "patient-identifier-001" not in workflow["nodes"].to_string()
-    assert "patient-identifier-001" not in workflow["edges"].to_string()
+    assert "raw-case-identifier-001" not in workflow["trace_profiles"].to_string()
+    assert "raw-case-identifier-001" not in workflow["nodes"].to_string()
+    assert "raw-case-identifier-001" not in workflow["edges"].to_string()
 
 
 def test_build_conformance_workspace_payload_derives_node_level_alignment_mix() -> None:
@@ -582,12 +637,12 @@ def test_resolve_xes_log_rejects_unsafe_xml_without_filename_leak() -> None:
             state,
             selected_path=None,
             uploaded_bytes=unsafe_payload,
-            uploaded_name="patient_cohort_secret.xes",
+            uploaded_name="sensitive_cohort_upload.xes",
         )
 
     message = str(exc_info.value)
     assert "XES validation failed" in message
-    assert "patient_cohort_secret" not in message
+    assert "sensitive_cohort_upload" not in message
 
 
 def test_resolve_xes_log_rejects_unsafe_xml_after_large_prefix(tmp_path) -> None:
@@ -704,6 +759,90 @@ def test_run_discovery_pipeline_reuses_cached_conformance_workspace(monkeypatch)
     assert state.results.analysis_summary["cases"] == 1
     assert state.results.analysis_summary["events"] == 2
     assert state.results.analysis_summary["model_count"] == 1
+    assert state.results.denominator_registry["case_count"] == 1
+    assert state.results.log_quality["summary"]["quality_status"] == "critical"
+    assert state.results.run_manifest["run"]["workflow_cohort_policy"] == "first_event_direct"
+    assert "source_signature_sha1" in state.results.run_manifest["input"]
+    assert state.results.analysis_summary["preprocessing_impact"]["source_cases"] == 1
+    assert state.results.run_manifest["preprocessing_impact"]["evaluation_cases"] == 1
+    assert "loop_rework_metrics" in state.results.analysis_summary
+    assert "model_quality_matrix_summary" in state.results.analysis_summary
+    assert "cohort_lenses" in state.results.analysis_summary
+    assert "time_series_monitoring" in state.results.analysis_summary
+    assert "analytics_depth" in state.results.run_manifest
+    assert "cohort_lenses_summary" in state.results.run_manifest["analytics_depth"]
+    assert "cache_telemetry" in state.results.analysis_summary
+    assert state.results.analysis_summary["cache_telemetry"]["summary"]["total_entries"] >= 1
+    assert state.results.run_manifest["observability"]["cache_telemetry"]["summary"]["cache_count"] >= 1
+
+
+def test_run_discovery_pipeline_uses_semantic_profile_in_quality_cache(monkeypatch) -> None:
+    trace = Trace()
+    trace.append({"concept:name": "Invitation_mail", "time:timestamp": pd.Timestamp("2024-01-01")})
+    trace.append({"concept:name": "FIT_mail", "time:timestamp": pd.Timestamp("2024-01-02")})
+    log = EventLog([trace])
+    loaded_log = LoadedLog(log=log, input_name="screening_conformance_demo.xes", log_signature="sig")
+    state = get_crpm_state({})
+    profiles = []
+
+    monkeypatch.setattr("crpm.app_runtime.filter_start_event", lambda value, selected_first: value)
+    monkeypatch.setattr("crpm.app_runtime.filter_date_range", lambda value, start_dt, end_dt, mode: value)
+    monkeypatch.setattr(
+        "crpm.app_runtime.discover_all_algorithms",
+        lambda current_log, selected_algorithms: {
+            "Inductive (IMf)": SimpleNamespace(
+                algorithm="Inductive Miner",
+                variant="IMf",
+                net=SimpleNamespace(transitions=[object()], places=[_fake_place(1, 1)], arcs=[object()]),
+                initial_marking=SimpleNamespace(),
+                final_marking=SimpleNamespace(),
+                num_transitions=1,
+                num_places=1,
+                num_arcs=1,
+                discovery_time_s=0.1,
+            )
+        },
+    )
+    monkeypatch.setattr(
+        "crpm.app_runtime.compute_full_conformance",
+        lambda *args, **kwargs: {
+            "precision": 0.88,
+            "summary": {"alignment_fitness": {"log_fitness": 0.91}, "token_fitness": {"log_fitness": 0.89}},
+            "alignments": {"aligned_traces": []},
+        },
+    )
+    monkeypatch.setattr(
+        "crpm.app_runtime.build_conformance_workspace_payload",
+        lambda **kwargs: {
+            "model_summary_df": pd.DataFrame(),
+            "deviation_summary_df": pd.DataFrame(),
+            "trace_deviation_df": pd.DataFrame(),
+            "workflow": {"nodes": pd.DataFrame(), "edges": pd.DataFrame(), "legend": pd.DataFrame()},
+            "has_workflow": False,
+        },
+    )
+
+    def _quality(current_log, *, semantic_profile):
+        profiles.append(semantic_profile)
+        return {"summary": {"quality_status": "ok", "semantic_profile": semantic_profile}, "issues": []}
+
+    monkeypatch.setattr("crpm.app_runtime.compute_event_log_quality", _quality)
+
+    run_discovery_comparison_pipeline(
+        state,
+        loaded_log=loaded_log,
+        start_filter="Invitation_mail",
+        date_filter_mode="case",
+        start_date=None,
+        end_date=None,
+        selected_algorithms=["Inductive (IMf)"],
+        enable_train_test=False,
+        random_seed=42,
+        followup_days=None,
+    )
+
+    assert profiles == ["ccr_screening"]
+    assert any("ccr_screening::quality-v1" in key for key in state.caches["log_quality_cache"])
 
 
 def test_train_test_workspace_uses_evaluation_log_and_seeded_cache(monkeypatch) -> None:

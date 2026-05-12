@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from pm4py.objects.log.obj import EventLog, Trace
 
-from crpm.conformance import filter_date_range
+from crpm.conformance import export_petri_net_to_pnml, filter_date_range, inspect_pnml_model, load_petri_net_from_pnml
 
 
 def _trace(*events: tuple[str, datetime]) -> Trace:
@@ -52,3 +52,24 @@ def test_event_date_filter_preserves_matching_events_with_timezone_aware_timesta
 
     assert len(filtered) == 1
     assert [event["concept:name"] for event in filtered[0]] == ["Inside"]
+
+
+def test_pnml_inspection_reports_model_shape_without_leaking_path() -> None:
+    report = inspect_pnml_model("examples/idealized_petri_net.pnml")
+
+    assert report["status"] == "ok"
+    assert report["transition_count"] > 0
+    assert report["place_count"] > 0
+    assert "examples" not in str(report)
+
+
+def test_pnml_export_roundtrip_preserves_loadable_model(tmp_path) -> None:
+    net, im, fm = load_petri_net_from_pnml("examples/idealized_petri_net.pnml")
+    output_path = tmp_path / "roundtrip.pnml"
+
+    export_report = export_petri_net_to_pnml(net, im, fm, output_path)
+    inspect_report = inspect_pnml_model(output_path)
+
+    assert export_report["status"] == "ok"
+    assert export_report["transition_count"] == inspect_report["transition_count"]
+    assert inspect_report["status"] == "ok"

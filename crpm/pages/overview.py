@@ -8,14 +8,18 @@ from typing import Any, Mapping
 import streamlit as st
 
 from crpm.app_state import AnalysisSnapshot
+from crpm.denominators import denominator_rows
+from crpm.log_quality import quality_bar_rows
 from crpm.pages.common import (
     format_metric_value,
+    redact_dashboard_value,
     render_dashboard_bar_list,
     render_dashboard_topbar,
     render_html_card_grid,
     render_inline_empty,
     render_metric_card_grid,
 )
+from crpm.run_manifest import manifest_to_json
 from crpm.visualization import render_workflow_conformance_svg
 
 PAGE_GUIDE = [
@@ -111,6 +115,15 @@ def render_overview_page(snapshot: AnalysisSnapshot) -> None:
             unsafe_allow_html=True,
         )
         render_dashboard_bar_list("Pathway mix", _overview_pathway_rows(summary))
+        if _cohort_lens_rows(summary):
+            render_dashboard_bar_list("Cohort lenses", _cohort_lens_rows(summary))
+        if snapshot.denominator_registry:
+            render_dashboard_bar_list(
+                "Denominators",
+                _overview_denominator_rows(snapshot.denominator_registry),
+                value_label="",
+                max_value=_denominator_max(snapshot.denominator_registry),
+            )
         render_html_card_grid(
             _overview_signal_cards(snapshot, summary),
             grid_class="crpm-dashboard-card-stack",
@@ -145,10 +158,13 @@ def render_overview_page(snapshot: AnalysisSnapshot) -> None:
             grid_class="crpm-dashboard-card-stack",
         )
         if snapshot.analysis_complete:
+            if snapshot.log_quality:
+                render_dashboard_bar_list("Event log quality", quality_bar_rows(dict(snapshot.log_quality)))
             render_html_card_grid(
                 _overview_quality_cards(snapshot, summary),
                 grid_class="crpm-dashboard-card-stack",
             )
+            _render_manifest_download(snapshot)
 
 
 def _render_overview_topbar(snapshot: AnalysisSnapshot, summary: Mapping[str, Any]) -> None:
@@ -334,6 +350,11 @@ def _overview_signal_cards(snapshot: AnalysisSnapshot, summary: Mapping[str, Any
 
 
 def _overview_status_cards(snapshot: AnalysisSnapshot, summary: Mapping[str, Any]) -> list[dict[str, str]]:
+    cache_summary = _cache_telemetry_summary(summary)
+    cache_entries = cache_summary.get("total_entries")
+    cache_capacity = cache_summary.get("total_capacity")
+    cache_utilization = cache_summary.get("utilization_pct")
+    legacy_cache_entries = len(snapshot.performance_cache) + len(snapshot.variant_cache) + len(snapshot.dfg_cache)
     return [
         {
             "eyebrow": "Analysis status",
@@ -367,15 +388,102 @@ def _overview_status_cards(snapshot: AnalysisSnapshot, summary: Mapping[str, Any
         {
             "eyebrow": "Cached context",
             "title": "Reusable page state",
-            "value": f"{len(snapshot.performance_cache) + len(snapshot.variant_cache) + len(snapshot.dfg_cache):,} entries",
-            "body": f"Performance {len(snapshot.performance_cache):,} · Variants {len(snapshot.variant_cache):,} · DFG {len(snapshot.dfg_cache):,}",
+            "value": (
+                f"{format_metric_value(cache_entries, kind='count')} entries"
+                if cache_entries is not None
+                else f"{legacy_cache_entries:,} entries"
+            ),
+            "body": (
+                f"Capacity {format_metric_value(cache_capacity, kind='count')} · utilization {_display_optional(cache_utilization, kind='percent')}"
+                if cache_summary
+                else f"Performance {len(snapshot.performance_cache):,} · Variants {len(snapshot.variant_cache):,} · DFG {len(snapshot.dfg_cache):,}"
+            ),
             "tone": "accent",
         },
     ]
 
 
 def _overview_quality_cards(snapshot: AnalysisSnapshot, summary: Mapping[str, Any]) -> list[dict[str, str]]:
+    quality_summary = {}
+    if isinstance(snapshot.log_quality, Mapping):
+        quality_summary = snapshot.log_quality.get("summary", {}) if isinstance(snapshot.log_quality.get("summary"), Mapping) else {}
+    source_metadata = snapshot.source_metadata if isinstance(snapshot.source_metadata, Mapping) else {}
     return [
+        {
+            "eyebrow": "Provenance",
+            "title": "Source validation",
+            "value": str(source_metadata.get("validation_status") or summary.get("source_validation_status") or "N/A"),
+            "body": (
+                f"{redact_dashboard_value(source_metadata.get('display_name') or snapshot.input_name)} · "
+                f"{redact_dashboard_value(source_metadata.get('source_kind') or 'source')} · "
+                f"{format_metric_value(source_metadata.get('size_bytes'), kind='count')} bytes"
+            ),
+            "tone": "accent",
+        },
+        {
+            "eyebrow": "Quality",
+            "title": "Accepted event log",
+            "value": str(quality_summary.get("quality_status") or "N/A").upper(),
+            "body": (
+                f"Required fields {_display_optional(quality_summary.get('required_field_completeness_pct'), kind='percent')} · "
+                f"duplicates {format_metric_value(quality_summary.get('duplicate_event_count'), kind='count')} · "
+                f"timezone {quality_summary.get('timezone_mode', 'N/A')} · "
+                f"semantic {quality_summary.get('semantic_status', 'N/A')}"
+            ),
+            "tone": _quality_card_tone(str(quality_summary.get("quality_status") or "")),
+        },
+        {
+            "eyebrow": "Preprocessing",
+            "title": "Filter impact",
+            "value": _display_optional(_preprocessing_impact(summary).get("filter_case_retention_pct"), kind="percent"),
+            "body": (
+                f"Source {_display_optional(_preprocessing_impact(summary).get('source_cases'), kind='count')} cases · "
+                f"filtered {_display_optional(_preprocessing_impact(summary).get('filtered_cases'), kind='count')} · "
+                f"evaluation {_display_optional(_preprocessing_impact(summary).get('evaluation_cases'), kind='count')}"
+            ),
+            "tone": "neutral",
+        },
+        {
+            "eyebrow": "Process behaviour",
+            "title": "Loop/rework posture",
+            "value": _display_optional(_loop_rework_metrics(summary).get("rework_cases_pct"), kind="percent"),
+            "body": (
+                f"Self-loop cases {_display_optional(_loop_rework_metrics(summary).get('self_loop_cases_pct'), kind='percent')} · "
+                f"loop cases {_display_optional(_loop_rework_metrics(summary).get('loop_cases_pct'), kind='percent')} · "
+                f"denominator {_display_optional(_loop_rework_metrics(summary).get('case_count'), kind='count')} cases"
+            ),
+            "tone": "accent",
+        },
+        {
+            "eyebrow": "Monitoring",
+            "title": "Latest period",
+            "value": _display_optional(_time_series_summary(summary).get("latest_case_count"), kind="count"),
+            "body": (
+                f"Median throughput {_display_optional(_time_series_summary(summary).get('latest_median_throughput_days'), kind='days')} · "
+                f"case volume delta {_display_optional(_time_series_summary(summary).get('case_volume_delta'), kind='count')}"
+            ),
+            "tone": "neutral",
+        },
+        {
+            "eyebrow": "Resources",
+            "title": "Resource perspective",
+            "value": _display_optional(_resource_summary(summary).get("resource_count"), kind="count"),
+            "body": (
+                f"Handoffs {_display_optional(_resource_summary(summary).get('handoff_count'), kind='count')} · "
+                f"coverage {_display_optional(_resource_summary(summary).get('resource_coverage_pct'), kind='percent')}"
+            ),
+            "tone": "accent",
+        },
+        {
+            "eyebrow": "Conformance",
+            "title": "Root-cause summary",
+            "value": _display_optional(_root_cause_summary(summary).get("deviating_trace_count"), kind="count"),
+            "body": (
+                f"Model-deviation activities {_display_optional(_root_cause_summary(summary).get('model_deviation_activity_count'), kind='count')} · "
+                f"log-deviation transitions {_display_optional(_root_cause_summary(summary).get('log_deviation_transition_count'), kind='count')}"
+            ),
+            "tone": "neutral",
+        },
         {
             "eyebrow": "Coverage",
             "title": "Dominant path concentration",
@@ -398,6 +506,90 @@ def _overview_quality_cards(snapshot: AnalysisSnapshot, summary: Mapping[str, An
             "tone": "accent",
         },
     ]
+
+
+def _overview_denominator_rows(registry: Mapping[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "label": row["label"],
+            "value": row["value"],
+            "display": format_metric_value(row["value"], kind="count"),
+            "tone": "accent" if row["key"] in {"path_denominator", "activity_denominator"} else "neutral",
+        }
+        for row in denominator_rows(registry)
+    ]
+
+
+def _denominator_max(registry: Mapping[str, Any]) -> float:
+    values = [float(row["value"]) for row in denominator_rows(registry)]
+    return max(values) if values else 1.0
+
+
+def _render_manifest_download(snapshot: AnalysisSnapshot) -> None:
+    if not snapshot.run_manifest:
+        return
+    st.download_button(
+        "Download run manifest",
+        data=manifest_to_json(snapshot.run_manifest),
+        file_name="crpm_run_manifest.json",
+        mime="application/json",
+        use_container_width=True,
+    )
+
+
+def _quality_card_tone(status: str) -> str:
+    normalized = status.strip().lower()
+    if normalized == "ok":
+        return "success"
+    if normalized == "warning":
+        return "neutral"
+    return "danger"
+
+
+def _preprocessing_impact(summary: Mapping[str, Any]) -> Mapping[str, Any]:
+    value = summary.get("preprocessing_impact", {})
+    return value if isinstance(value, Mapping) else {}
+
+
+def _loop_rework_metrics(summary: Mapping[str, Any]) -> Mapping[str, Any]:
+    value = summary.get("loop_rework_metrics", {})
+    return value if isinstance(value, Mapping) else {}
+
+
+def _cohort_lens_rows(summary: Mapping[str, Any]) -> list[dict[str, Any]]:
+    cohort_lenses = summary.get("cohort_lenses", {})
+    rows = cohort_lenses.get("rows", []) if isinstance(cohort_lenses, Mapping) else []
+    if not isinstance(rows, list):
+        return []
+    return [
+        {"label": row.get("label"), "value": row.get("share_pct"), "display": format_metric_value(row.get("count"), kind="count")}
+        for row in rows[:6]
+        if isinstance(row, Mapping)
+    ]
+
+
+def _time_series_summary(summary: Mapping[str, Any]) -> Mapping[str, Any]:
+    value = summary.get("time_series_monitoring", {})
+    nested = value.get("summary", {}) if isinstance(value, Mapping) else {}
+    return nested if isinstance(nested, Mapping) else {}
+
+
+def _resource_summary(summary: Mapping[str, Any]) -> Mapping[str, Any]:
+    value = summary.get("resource_perspective", {})
+    nested = value.get("summary", {}) if isinstance(value, Mapping) else {}
+    return nested if isinstance(nested, Mapping) else {}
+
+
+def _root_cause_summary(summary: Mapping[str, Any]) -> Mapping[str, Any]:
+    value = summary.get("conformance_root_causes", {})
+    nested = value.get("summary", {}) if isinstance(value, Mapping) else {}
+    return nested if isinstance(nested, Mapping) else {}
+
+
+def _cache_telemetry_summary(summary: Mapping[str, Any]) -> Mapping[str, Any]:
+    value = summary.get("cache_telemetry", {})
+    nested = value.get("summary", {}) if isinstance(value, Mapping) else {}
+    return nested if isinstance(nested, Mapping) else {}
 
 
 def _render_page_guide_html(analysis_complete: bool) -> str:

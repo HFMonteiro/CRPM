@@ -54,6 +54,70 @@ The public sample bundle lives in `examples/`:
 
 The bundled `screening_conformance_demo.*` files are **synthetic** and intentionally shaped to expose dominant and rare pathways, deviations, PRE/POST drift, and timing bottlenecks.
 
+You can generate a fresh synthetic screening log for experiments without replacing the bundled sample:
+
+```bash
+crpm-generate-screening-demo --cases 120 --seed 42 --csv outputs/synthetic_screening.csv --xes outputs/synthetic_screening.xes
+```
+
+## Data Quality and Timestamp Policy
+
+CRPM treats XES and CSV inputs as sensitive health-adjacent operational data. CSV onboarding requires distinct case, activity, and timestamp columns. Null or blank case IDs, activities, or timestamps are rejected before PM4Py conversion, and mixed timezone-aware/timezone-naive CSV timestamps are rejected because they make waiting-time interpretation unsafe.
+
+After a log is accepted, CRPM reports non-blocking event-log quality diagnostics in the run manifest and Overview: required-field completeness, duplicate event groups, same-timestamp bursts, decreasing timestamps, timestamp granularity, semantic profile fit, and preprocessing impact from source log to filtered/evaluation cohort. Semantic profiles are advisory only; `generic`, `healthcare`, and `ccr_screening` diagnostics should guide data cleanup without preventing generic process-mining use.
+
+The v3 process-intelligence summaries also include privacy-preserving resource posture when a resource column exists. Resource names are aliased in summaries, while Conformance Analytics reports root-cause counts for model-deviation activities, log-deviation transitions, high-delay transitions, and deviating traces without exposing raw case identifiers.
+
+Discovery and conformance runs now record explicit PM4Py method profiles: discovery tables and manifests include the selected algorithm profile and PM4Py variant, while conformance summaries document the alignment-first diagnostic policy with token replay retained as the fast screening posture. PNML helpers support path-redacted model inspection and export round-trip checks for interoperability.
+
+Process-map payloads now share a common internal contract across DFG and Conformance renderers: schema version, map kind, renderer role, explicit denominators, KPI rows, and a safe selection context. This keeps the Streamlit SVG/HTML renderers aligned while preparing a future custom process-map renderer without changing PM4Py analytics.
+
+## Headless Batch Config
+
+CRPM can validate or run a local analysis from a JSON/YAML config without launching Streamlit:
+
+```bash
+crpm-analyze --config config.json --dry-run
+crpm-analyze --config config.json
+```
+
+Minimal XES example:
+
+```json
+{
+  "source": {
+    "type": "xes",
+    "path": "examples/screening_conformance_demo.xes"
+  },
+  "analysis": {
+    "workflow_cohort_policy": "first_event_direct",
+    "start_filter": "Invitation",
+    "selected_algorithms": ["Inductive (IMf)"]
+  },
+  "governance": {
+    "privacy_mode": "restricted_health_adjacent",
+    "domain_template": "ccr_screening"
+  },
+  "output": {
+    "directory": "outputs/batch-run"
+  }
+}
+```
+
+The first-event direct workflow remains the production default. Use a concrete `start_filter` for production runs; `All` is only valid with explicit follow-up anchor mode for secondary sensitivity work.
+
+Supported privacy modes are `public_demo`, `internal_operational`, and `restricted_health_adjacent`. Supported domain templates are `ccr_screening` and `generic`. These fields document governance posture in the manifest; they do not convert CRPM into clinical decision support or weaken the default redaction posture.
+
+See `docs/governance.md` for the public governance notes behind these modes.
+
+## Future Readiness
+
+Run manifests include lightweight cache telemetry and stage timings so local runs can be audited without exposing cache keys or records. Cache telemetry reports bounded cache names, entry counts, configured limits, utilization, and runtime totals.
+
+DuckDB/Parquet is an optional future staging track for larger CSV logs. It is not a required dependency and is not part of the default install path.
+
+OCEL 2.0 is an experimental future track for object-centric process mining. The current CRPM production workflow remains case-centric CCR screening with `first_event_direct` as the default discovery mode.
+
 ## Requirements
 
 - Python `3.10+`

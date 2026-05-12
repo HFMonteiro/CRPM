@@ -34,6 +34,9 @@ def test_build_analysis_snapshot_uses_expected_defaults() -> None:
     assert snapshot.selected_workflow_edge_id is None
     assert snapshot.workflow_cohort_policy == WORKFLOW_COHORT_FIRST_EVENT_DIRECT
     assert snapshot.source_metadata == {}
+    assert snapshot.denominator_registry == {}
+    assert snapshot.log_quality == {}
+    assert snapshot.run_manifest == {}
 
 
 def test_build_analysis_snapshot_reads_existing_results() -> None:
@@ -93,12 +96,13 @@ def test_get_crpm_state_initializes_versioned_state() -> None:
 
     state = get_crpm_state(session_state)
 
-    assert state.version == 6
+    assert state.version == 7
     assert state.config.workflow_cohort_policy == WORKFLOW_COHORT_FIRST_EVENT_DIRECT
     assert state.config.selected_algorithms
     assert "conformance_cache" in state.caches
     assert "conformance_workspace_cache" in state.caches
     assert "workflow_view_cache" in state.caches
+    assert "log_quality_cache" in state.caches
     assert state.results.workflow_view_mode == "board"
     assert state.results.workflow_detail_level == "analyst"
     assert state.results.workflow_cohort_policy == WORKFLOW_COHORT_FIRST_EVENT_DIRECT
@@ -118,7 +122,13 @@ def test_bounded_cache_put_evicts_oldest_entries() -> None:
 def test_analysis_results_reset_clears_last_analysis_signature() -> None:
     state = get_crpm_state({})
     state.results.last_analysis_signature = "demo-signature"
+    state.results.denominator_registry = {"case_count": 1}
+    state.results.log_quality = {"summary": {"quality_status": "ok"}}
+    state.results.run_manifest = {"schema_version": 1}
 
     state.results.reset()
 
     assert state.results.last_analysis_signature is None
+    assert state.results.denominator_registry == {}
+    assert state.results.log_quality == {}
+    assert state.results.run_manifest == {}
