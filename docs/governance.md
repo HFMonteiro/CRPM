@@ -21,3 +21,20 @@ Domain templates are governance and interpretation metadata. They do not change 
 ## Release Responsibility
 
 Before public release, run the release checks, inspect generated artifacts, and confirm that screenshots, manifests, logs, and bundled examples do not expose local paths, real case identifiers, credentials, or health records.
+
+Recommended local checks before publishing a branch:
+
+```bash
+pytest -q
+ruff check crpm tests
+black --check crpm tests
+crpm-release-check --quick
+```
+
+Generated artifacts should stay local and ignored: `outputs/`, `output/`, `build/`, `dist/`, `*.egg-info`, `.pytest_cache/`, `.ruff_cache/`, Streamlit logs, and browser/test caches. Keep `AGENTS.md` local-only because it may contain branch-specific working notes.
+
+Branch promotion policy:
+
+- Develop experimental dashboard and process-intelligence work on `_CRPM_v3`.
+- Keep `main` stable until a deliberate promotion review is complete.
+- Do not merge or push to `main` as part of routine v3 cleanup.

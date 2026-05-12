@@ -9,6 +9,12 @@ Developed in the context of PhD research at the **Faculty of Medicine, Universit
 
 > **Legal notice** - For research and operational monitoring support only. Not a substitute for clinical judgment or institutional decision-making.
 
+## Branch Status
+
+- `main` is the public stable branch.
+- `_CRPM_v3` is the active process-intelligence dashboard branch. It keeps the same Python-first Streamlit architecture while adding reproducibility, governance, batch, manifest, data-quality, and dashboard refinements.
+- Promotion from `_CRPM_v3` to `main` should happen only after review, local validation, and an explicit merge decision.
+
 ## Screenshots
 
 ![CRPM Overview](docs/screenshots/overview.png)
@@ -139,7 +145,20 @@ On Windows, install Graphviz from the official installer and add `dot` to `PATH`
 pip install -e ".[dev]"
 pytest -q
 ruff check crpm tests
+black --check crpm tests
+crpm-release-check --quick
 ```
+
+On Windows, if pytest cannot access the default temporary directory, redirect pytest temp files into the ignored workspace output folder:
+
+```powershell
+New-Item -ItemType Directory -Force -Path outputs\pytest-tmp | Out-Null
+$env:TMP=(Resolve-Path outputs\pytest-tmp).Path
+$env:TEMP=$env:TMP
+pytest -q
+```
+
+Local generated artifacts such as `outputs/`, `output/`, `build/`, `dist/`, `*.egg-info`, `.pytest_cache/`, `.ruff_cache/`, and Streamlit log files are ignored by Git and should not be committed.
 
 ## Citation
 

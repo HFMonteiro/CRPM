@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import random
 
@@ -33,7 +33,7 @@ def generate_screening_demo(cases: int = 120, seed: int = 42) -> pd.DataFrame:
     boundary = max(cases // 2, 1)
     for index in range(cases):
         phase = "PRE" if index < boundary else "POST"
-        start = datetime(2024, 1, 1, tzinfo=UTC) + timedelta(days=index // 4, hours=(index % 4) * 6)
+        start = datetime(2024, 1, 1, tzinfo=timezone.utc) + timedelta(days=index // 4, hours=(index % 4) * 6)
         variant, activities = _case_variant(index, rng)
         timestamp = start
         case_id = f"SYN-{index + 1:05d}"

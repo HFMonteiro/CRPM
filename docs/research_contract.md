@@ -23,6 +23,16 @@ Explicit anchor semantics are allowed only as secondary analysis:
 - Conformance workspaces use the same evaluation log used for conformance metrics, including train/test runs.
 - Run metadata is privacy-safe: source type, source kind, size, validation status, and a redacted display name may be shown; local paths, uploaded filenames, raw case IDs, and raw records must not be displayed in error messages.
 
+## v3 Dashboard Contract
+
+The `_CRPM_v3` dashboard branch may change composition, density, and investigation ergonomics, but not the production cohort semantics.
+
+- Overview, DFG, Operational Flow, Variant Analysis, and Conformance Analytics must continue to use the same first-event production gate unless a secondary sensitivity mode is explicitly selected.
+- Dashboard filters may hide or highlight visible structure, but they must not silently re-infer branch roles, denominators, or first-event membership.
+- Reset filters and reset graph viewport are separate actions.
+- Interactive local graph focus is a visual inspection aid; persisted pinned metrics remain explicit Streamlit-side selections.
+- Public screenshots and report bundles should show the direct workflow mode when they are intended to represent the production/paper-aligned method.
+
 ## Non-Clinical Scope
 
 CRPM is a research and operational monitoring workbench. It is not clinical decision support, and its outputs require local governance review before operational action.

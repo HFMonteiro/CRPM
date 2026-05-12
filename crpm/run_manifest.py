@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import platform
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timezone
 from importlib import metadata
 from pathlib import PurePosixPath
 from typing import Any, Mapping
@@ -47,7 +47,7 @@ def build_run_manifest(
 
     manifest = {
         "schema_version": 1,
-        "generated_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "versions": _versions(),
         "input": {
             "display_name": _redact_label(input_name),
