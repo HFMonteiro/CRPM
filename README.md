@@ -11,9 +11,9 @@ Developed in the context of PhD research at the **Faculty of Medicine, Universit
 
 ## Branch Status
 
-- `main` is the public stable branch.
-- `_CRPM_v3` is the active process-intelligence dashboard branch. It keeps the same Python-first Streamlit architecture while adding reproducibility, governance, batch, manifest, data-quality, and dashboard refinements.
-- Promotion from `_CRPM_v3` to `main` should happen only after review, local validation, and an explicit merge decision.
+- `main` is the public stable branch and now includes the v3 process-intelligence workbench capabilities.
+- `_CRPM_v3` remains the active test-bed branch for future dashboard, reproducibility, governance, batch, manifest, data-quality, and UI refinements.
+- Future promotion from `_CRPM_v3` to `main` should happen only after review, local validation, remote CI, and an explicit merge decision.
 
 ## Screenshots
 
