@@ -7,7 +7,14 @@ import streamlit as st
 from crpm.app_state import AnalysisSnapshot
 from crpm.formatting import format_metric_value
 from crpm.interpretations import assess_balanced_quality, assess_fitness, assess_precision
-from crpm.pages.common import render_empty_state, render_html_ranked_table, render_metric_card_grid, render_plotly_chart, render_quiet_note
+from crpm.pages.common import (
+    render_empty_state,
+    render_html_ranked_table,
+    render_metric_card_grid,
+    render_page_cockpit_topbar,
+    render_plotly_chart,
+    render_quiet_note,
+)
 from crpm.visualization import create_fitness_precision_scatter, create_model_comparison_heatmap
 
 
@@ -19,6 +26,12 @@ def render_comparison_page(snapshot: AnalysisSnapshot) -> None:
         return
 
     comparison_df = snapshot.comparison_df.copy()
+    render_page_cockpit_topbar(
+        snapshot,
+        title="Model comparison cockpit",
+        subtitle="Use the scatter as the primary decision surface, then confirm exact values in the report table.",
+        meta=[snapshot.input_name or "No log loaded", f"{len(comparison_df):,} model candidate(s)"],
+    )
     display_df = comparison_df.copy()
     if "discovery_time_s" in display_df.columns:
         display_df["discovery_time_s"] = display_df["discovery_time_s"].map(lambda value: format_metric_value(value, kind="seconds"))
@@ -74,11 +87,11 @@ def render_comparison_page(snapshot: AnalysisSnapshot) -> None:
         )
 
     if len(comparison_df) > 1:
-        chart_cols = st.columns(2)
-        with chart_cols[0]:
+        scatter_col, evidence_col = st.columns(2)
+        with scatter_col:
             st.markdown("#### Fitness versus precision")
             render_plotly_chart(create_fitness_precision_scatter(comparison_df), key="shell_comparison_scatter")
-        with chart_cols[1]:
+        with evidence_col:
             st.markdown("#### Metrics heatmap")
             render_plotly_chart(
                 create_model_comparison_heatmap(comparison_df, ["alignment_fitness", "token_fitness", "precision"]),
@@ -97,5 +110,6 @@ def render_comparison_page(snapshot: AnalysisSnapshot) -> None:
             "num_arcs": "Arcs",
         }
     )
-    st.markdown("#### Comparison table")
-    render_html_ranked_table(comparison_table, title="Model comparison", label_column="Model")
+    with st.expander("Report/detail view", expanded=False):
+        st.markdown("#### Comparison table")
+        render_html_ranked_table(comparison_table, title="Model comparison", label_column="Model")

@@ -13,6 +13,7 @@ from crpm.pages.common import (
     render_html_ranked_table,
     render_inline_empty,
     render_metric_card_grid,
+    render_page_cockpit_topbar,
     render_plotly_chart,
     render_quiet_note,
 )
@@ -29,6 +30,12 @@ def render_operational_flow_page(snapshot: AnalysisSnapshot) -> None:
         return
 
     log = snapshot.filtered_log
+    render_page_cockpit_topbar(
+        snapshot,
+        title="Operational flow cockpit",
+        subtitle="Review stage throughput, queue pressure, and aging from the current filtered screening pathway.",
+        meta=[snapshot.input_name or "No log loaded", f"{snapshot.case_count:,} cases"],
+    )
     activity_names = sorted({event.get("concept:name") for trace in log for event in trace if event.get("concept:name")})
     step_map = infer_step_mapping(activity_names)
     anchor_activity = step_map.get("invitation")

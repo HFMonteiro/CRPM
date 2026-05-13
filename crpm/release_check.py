@@ -103,7 +103,8 @@ def _run_command(name: str, command: list[str], cwd: Path) -> CheckResult:
 
 def _build_package(root: Path) -> CheckResult:
     result = _run_command("package-build", [sys.executable, "-m", "build"], root)
-    if result.ok or "No module named build.__main__" not in result.detail:
+    missing_build_module = "No module named build" in result.detail or "No module named build.__main__" in result.detail
+    if result.ok or not missing_build_module:
         return result
     wheel_dir = root / "outputs" / "release_check_dist"
     wheel_dir.mkdir(parents=True, exist_ok=True)

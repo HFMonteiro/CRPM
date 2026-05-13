@@ -930,16 +930,15 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
     assert not any(label == "Lens" for label, _ in calls["segmented"])
     assert any(label == "Pinned metric type" for label, _ in calls["segmented"])
     assert not any(label == "Color" for label, _ in calls["selectbox"])
-    assert "Clear pinned metrics" in calls["buttons"]
+    assert "Clear pin" in calls["buttons"]
     assert "Reset filters" in calls["buttons"]
-    assert "Reset graph view" in calls["buttons"]
-    assert (0.62, 2.72, 0.66) in calls["columns"]
-    assert (0.58, 0.21, 0.21) in calls["columns"]
+    assert "Reset view" in calls["buttons"]
+    assert (0.5, 2.86, 0.7) in calls["columns"]
+    assert (0.74, 0.13, 0.13) in calls["columns"]
     assert any("crpm-selection-card" in text for text in calls["markdown"])
     assert any("crpm-model-card-grid" in text for text in calls["markdown"])
     assert any("crpm-ranked-table" in text for text in calls["markdown"])
     assert not any("crpm-mode-banner" in text for text in calls["markdown"])
-    assert any("overview mode is active" in note.lower() for note in calls["notes"])
     assert any("Root-cause watchlist" in str(text) for text in calls["markdown"])
     assert any("Resource perspective" in str(text) for text in calls["markdown"])
     assert any("crpm-dashboard-topbar" in str(text) for text in calls["markdown"])
@@ -954,13 +953,10 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
     assert any(label == "Report/export view" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
     inspector_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-conformance-side-title--inspector" in str(text))
     selection_index = next(idx for idx, text in enumerate(calls["markdown"]) if "Selection focus</div>" in str(text))
-    pinned_index = next(
-        idx for idx, text in enumerate(calls["markdown"]) if idx > selection_index and "Pinned exact metrics</div>" in str(text)
-    )
-    lead_time_index = next(
-        idx for idx, text in enumerate(calls["markdown"]) if idx > pinned_index and "Lead-time watchlist</div>" in str(text)
-    )
-    assert inspector_index < selection_index < pinned_index < lead_time_index
+    watchlist_index = next(idx for idx, text in enumerate(calls["markdown"]) if idx > selection_index and "Watchlist</div>" in str(text))
+    assert inspector_index < selection_index < watchlist_index
+    assert not any("Pinned exact metrics</div>" in str(text) for text in calls["markdown"])
+    assert not any("Lead-time watchlist</div>" in str(text) for text in calls["markdown"])
     assert any(label == "Context" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
     assert not any("Evidence rail</div>" in str(text) for text in calls["markdown"])
     top_transitions_index = next(

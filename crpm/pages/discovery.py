@@ -6,7 +6,14 @@ import pandas as pd
 import streamlit as st
 
 from crpm.app_state import AnalysisSnapshot
-from crpm.pages.common import render_empty_state, render_html_card_grid, render_html_ranked_table, render_metric_card_grid
+from crpm.pages.common import (
+    render_dashboard_bar_list,
+    render_empty_state,
+    render_html_card_grid,
+    render_html_ranked_table,
+    render_metric_card_grid,
+    render_page_cockpit_topbar,
+)
 
 
 def render_discovery_page(snapshot: AnalysisSnapshot) -> None:
@@ -16,35 +23,20 @@ def render_discovery_page(snapshot: AnalysisSnapshot) -> None:
         return
 
     recommended_name = _recommended_model_name(snapshot)
+    render_page_cockpit_topbar(
+        snapshot,
+        title="Discovery cockpit",
+        subtitle="Compare candidate process models before moving into formal model comparison.",
+        meta=[snapshot.input_name or "No log loaded", f"{snapshot.case_count:,} cases"],
+    )
 
     render_metric_card_grid(_discovery_kpi_cards(snapshot, recommended_name))
 
     models = list(snapshot.discovery_results.items())
-    model_col, signal_col = st.columns(2)
-    with model_col:
-        st.markdown("#### Candidate detail")
-        with st.expander("Discovery candidates", expanded=False):
-            columns_per_row = 2 if len(models) <= 4 else 3
-            for start_index in range(0, len(models), columns_per_row):
-                row_items = models[start_index : start_index + columns_per_row]
-                row_cols = st.columns(len(row_items))
-                for column, (model_name, result) in zip(row_cols, row_items):
-                    with column:
-                        with st.container(border=True):
-                            heading = f"{model_name} ⭐" if model_name == recommended_name else model_name
-                            st.markdown(f"**{heading}**")
-                            st.caption(f"{getattr(result, 'algorithm', 'N/A')} | {getattr(result, 'variant', 'N/A')}")
-                            metric_cols = st.columns(2)
-                            metric_cols[0].metric("Transitions", getattr(result, "num_transitions", 0))
-                            metric_cols[1].metric("Places", getattr(result, "num_places", 0))
-                            metric_cols = st.columns(2)
-                            metric_cols[0].metric("Arcs", getattr(result, "num_arcs", 0))
-                            metric_cols[1].metric(
-                                "Discovery time",
-                                f"{float(getattr(result, 'discovery_time_s', 0.0)):.2f}s",
-                            )
-                            st.caption(_model_tradeoff_summary(model_name, result, snapshot))
-
+    rail_col, model_col, signal_col = st.columns([0.72, 1.75, 1.0], gap="small")
+    with rail_col:
+        st.markdown("#### Discovery rail")
+        render_dashboard_bar_list("Algorithm mix", _algorithm_mix_rows(models), value_label="")
     with signal_col:
         st.markdown("#### Discovery signals")
         render_html_card_grid(_discovery_signal_cards(snapshot, recommended_name))
@@ -87,8 +79,42 @@ def render_discovery_page(snapshot: AnalysisSnapshot) -> None:
                     model_row["Quadrant"] = str(quadrant)
         rows.append(model_row)
 
-    st.markdown("#### Model summary table")
-    render_html_ranked_table(pd.DataFrame(rows), title="Discovered model summary", label_column="Model")
+    with model_col:
+        st.markdown("#### Model summary table")
+        render_html_ranked_table(pd.DataFrame(rows), title="Discovered model summary", label_column="Model")
+
+    with st.expander("Discovery candidates", expanded=False):
+        columns_per_row = 2 if len(models) <= 4 else 3
+        for start_index in range(0, len(models), columns_per_row):
+            row_items = models[start_index : start_index + columns_per_row]
+            row_cols = st.columns(len(row_items))
+            for column, (model_name, result) in zip(row_cols, row_items):
+                with column:
+                    with st.container(border=True):
+                        heading = f"{model_name} ⭐" if model_name == recommended_name else model_name
+                        st.markdown(f"**{heading}**")
+                        st.caption(f"{getattr(result, 'algorithm', 'N/A')} | {getattr(result, 'variant', 'N/A')}")
+                        metric_cols = st.columns(2)
+                        metric_cols[0].metric("Transitions", getattr(result, "num_transitions", 0))
+                        metric_cols[1].metric("Places", getattr(result, "num_places", 0))
+                        metric_cols = st.columns(2)
+                        metric_cols[0].metric("Arcs", getattr(result, "num_arcs", 0))
+                        metric_cols[1].metric(
+                            "Discovery time",
+                            f"{float(getattr(result, 'discovery_time_s', 0.0)):.2f}s",
+                        )
+                        st.caption(_model_tradeoff_summary(model_name, result, snapshot))
+
+
+def _algorithm_mix_rows(models: list[tuple[str, object]]) -> list[dict[str, object]]:
+    counts: dict[str, int] = {}
+    for _, result in models:
+        algorithm = str(getattr(result, "algorithm", "Unknown") or "Unknown")
+        counts[algorithm] = counts.get(algorithm, 0) + 1
+    return [
+        {"label": algorithm, "value": count, "display": f"{count:,}", "tone": "accent" if index == 0 else "neutral"}
+        for index, (algorithm, count) in enumerate(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+    ]
 
 
 def _discovery_kpi_cards(snapshot: AnalysisSnapshot, recommended_name: str | None) -> list[dict[str, str]]:

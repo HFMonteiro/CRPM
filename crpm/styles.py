@@ -340,12 +340,12 @@ def get_custom_css() -> str:
     .crpm-filter-composer {
         display: grid;
         gap: 0.12rem;
-        margin: 0.24rem 0 0.34rem 0;
-        padding: 0.46rem 0.52rem;
+        margin: 0.16rem 0 0.22rem 0;
+        padding: 0.34rem 0.44rem;
         border-radius: 8px;
-        border: 1px solid rgba(157, 173, 190, 0.28);
-        background: #ffffff;
-        box-shadow: 0 2px 8px rgba(28, 45, 64, 0.032);
+        border: 1px solid rgba(157, 173, 190, 0.22);
+        background: rgba(248, 250, 252, 0.78);
+        box-shadow: none;
     }
 
     .crpm-filter-composer__title {
@@ -363,12 +363,12 @@ def get_custom_css() -> str:
 
     .crpm-active-filter-summary {
         display: grid;
-        gap: 0.3rem;
-        margin: 0.34rem 0 0.42rem 0;
-        padding: 0.48rem 0.52rem;
+        gap: 0.18rem;
+        margin: 0.22rem 0 0.24rem 0;
+        padding: 0.28rem 0.34rem;
         border-radius: 8px;
-        border: 1px solid rgba(157, 173, 190, 0.3);
-        background: #f8fafc;
+        border: 1px solid rgba(157, 173, 190, 0.24);
+        background: rgba(248, 250, 252, 0.74);
     }
 
     .crpm-active-filter-summary__title {
@@ -382,14 +382,14 @@ def get_custom_css() -> str:
     .crpm-active-filter-summary__chips {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.26rem;
+        gap: 0.14rem;
     }
 
     .crpm-active-filter-summary__chip {
         display: inline-grid;
         gap: 0.02rem;
         max-width: 100%;
-        padding: 0.28rem 0.38rem;
+        padding: 0.18rem 0.26rem;
         border-radius: 7px;
         border: 1px solid rgba(151, 166, 184, 0.32);
         background: #ffffff;
@@ -1199,9 +1199,9 @@ def get_custom_css() -> str:
     }
 
     .crpm-selection-card {
-        margin: 0.2rem 0 0.52rem 0;
-        padding: 0.82rem 0.92rem;
-        border-radius: 16px;
+        margin: 0.12rem 0 0.26rem 0;
+        padding: 0.48rem 0.56rem;
+        border-radius: 12px;
         border: 1px solid rgba(71, 88, 79, 0.12);
         background: rgba(252, 251, 253, 0.96);
         box-shadow: var(--crpm-shadow-soft);
@@ -1224,7 +1224,7 @@ def get_custom_css() -> str:
     }
 
     .crpm-selection-card__eyebrow {
-        font-size: 0.61rem;
+        font-size: 0.56rem;
         font-weight: 700;
         letter-spacing: 0.03em;
         text-transform: uppercase;
@@ -1233,17 +1233,17 @@ def get_custom_css() -> str:
     }
 
     .crpm-selection-card__title {
-        font-size: 0.8rem;
+        font-size: 0.74rem;
         font-weight: 700;
         color: var(--crpm-forest-strong);
         line-height: 1.18;
     }
 
     .crpm-selection-card__meta {
-        margin-top: 0.35rem;
-        font-size: 0.68rem;
+        margin-top: 0.18rem;
+        font-size: 0.63rem;
         color: var(--crpm-text-soft);
-        line-height: 1.3;
+        line-height: 1.22;
     }
 
     .crpm-detail-card {
@@ -1623,6 +1623,44 @@ def get_custom_css() -> str:
         font-size: 0.66rem;
         line-height: 1.16;
         color: var(--crpm-text-soft);
+    }
+
+    .crpm-conformance-stage-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.42rem;
+        min-height: 2.55rem;
+    }
+
+    .crpm-conformance-stage-header__copy {
+        min-width: 0;
+    }
+
+    .crpm-conformance-stage-header__chips {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 0.22rem;
+        min-width: 0;
+    }
+
+    .crpm-conformance-stage-header__chips span {
+        display: inline-flex;
+        align-items: center;
+        min-height: 1.35rem;
+        max-width: 10rem;
+        padding: 0.18rem 0.34rem;
+        border-radius: 999px;
+        border: 1px solid rgba(157, 173, 190, 0.32);
+        background: #f8fafc;
+        color: #34465b;
+        font-size: 0.62rem;
+        font-weight: 700;
+        line-height: 1.05;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .crpm-conformance-hero__badge {

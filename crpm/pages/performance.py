@@ -23,6 +23,7 @@ from crpm.pages.common import (
     render_html_ranked_table,
     render_inline_empty,
     render_metric_card_grid,
+    render_page_cockpit_topbar,
     render_plotly_chart,
     render_quiet_note,
     store_cache_entry,
@@ -39,6 +40,12 @@ def render_performance_page(snapshot: AnalysisSnapshot) -> None:
         return
 
     log = snapshot.filtered_log
+    render_page_cockpit_topbar(
+        snapshot,
+        title="Performance cockpit",
+        subtitle="Start with bottlenecks and tail risk, then use exact tables for activity and case-duration detail.",
+        meta=[snapshot.input_name or "No log loaded", f"{snapshot.case_count:,} cases"],
+    )
     cache_key = f"{snapshot.filter_key or 'current'}::performance"
     cached_payload = snapshot.performance_cache.get(cache_key) if hasattr(snapshot.performance_cache, "get") else None
 

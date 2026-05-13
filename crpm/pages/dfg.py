@@ -21,9 +21,11 @@ from crpm.dfg_utils import (
 from crpm.pages.common import (
     format_metric_value,
     render_empty_state,
+    render_dashboard_bar_list,
     render_html_ranked_table,
     render_inline_empty as render_inline_empty,
     render_metric_card_grid,
+    render_page_cockpit_topbar,
     render_quiet_note,
     store_cache_entry,
 )
@@ -37,6 +39,12 @@ def render_dfg_page(snapshot: AnalysisSnapshot) -> None:
         return
 
     log = snapshot.filtered_log
+    render_page_cockpit_topbar(
+        snapshot,
+        title="DFG cockpit",
+        subtitle="Inspect directly-follows structure first; use ranked edges only when exact transition values matter.",
+        meta=[getattr(snapshot, "input_name", None) or "No log loaded", f"{int(getattr(snapshot, 'case_count', 0) or 0):,} cases"],
+    )
 
     # --- Controls ---
     ctrl_cols = st.columns([1.0, 1.6])
@@ -120,26 +128,60 @@ def render_dfg_page(snapshot: AnalysisSnapshot) -> None:
         else _format_dfg_duration(stats.get("max_edge_value"))
     )
 
-    st.markdown("#### Directly-follows map")
-    if dfg:
-        with st.spinner("Rendering process map…"):
-            try:
-                svg_markup = render_dfg_to_svg(dfg, starts, ends, variant=vis_variant)
-                st.markdown(
-                    f'<div class="crpm-dfg-vector crpm-dfg-map-canvas">{svg_markup}</div>',
-                    unsafe_allow_html=True,
-                )
-            except Exception:
+    map_col, evidence_col = st.columns([2.2, 0.9], gap="large")
+    with map_col:
+        st.markdown("#### Directly-follows map")
+        if dfg:
+            with st.spinner("Rendering process map…"):
                 try:
-                    png_bytes = render_dfg_to_png(dfg, starts, ends, variant=vis_variant)
-                    st.image(png_bytes, caption=f"Directly-Follows Graph ({dfg_mode})", use_container_width=True)
-                    st.warning("SVG rendering failed, so the DFG fell back to PNG. Confirm Graphviz is installed if labels look clipped.")
+                    svg_markup = render_dfg_to_svg(dfg, starts, ends, variant=vis_variant)
+                    st.markdown(
+                        f'<div class="crpm-dfg-vector crpm-dfg-map-canvas">{svg_markup}</div>',
+                        unsafe_allow_html=True,
+                    )
                 except Exception:
-                    st.warning("Could not render the DFG. Check the runtime preflight and confirm Graphviz is installed.")
-    else:
-        st.markdown(
-            "<div class='crpm-inline-empty'>The DFG is empty after applying the current coverage band. Widen the slider to bring more edges back into view.</div>",
-            unsafe_allow_html=True,
+                    try:
+                        png_bytes = render_dfg_to_png(dfg, starts, ends, variant=vis_variant)
+                        st.image(png_bytes, caption=f"Directly-Follows Graph ({dfg_mode})", use_container_width=True)
+                        st.warning(
+                            "SVG rendering failed, so the DFG fell back to PNG. Confirm Graphviz is installed if labels look clipped."
+                        )
+                    except Exception:
+                        st.warning("Could not render the DFG. Check the runtime preflight and confirm Graphviz is installed.")
+        else:
+            st.markdown(
+                "<div class='crpm-inline-empty'>The DFG is empty after applying the current coverage band. Widen the slider to bring more edges back into view.</div>",
+                unsafe_allow_html=True,
+            )
+    with evidence_col:
+        st.markdown("#### Evidence rail")
+        render_dashboard_bar_list(
+            "Map evidence",
+            [
+                {
+                    "label": "Activities",
+                    "value": stats.get("num_activities", 0),
+                    "display": format_metric_value(stats.get("num_activities", 0), kind="count"),
+                },
+                {
+                    "label": "Edges",
+                    "value": stats.get("num_edges", 0),
+                    "display": format_metric_value(stats.get("num_edges", 0), kind="count"),
+                    "tone": "accent",
+                },
+                {
+                    "label": "Start activities",
+                    "value": stats.get("num_start_activities", 0),
+                    "display": format_metric_value(stats.get("num_start_activities", 0), kind="count"),
+                    "tone": "success",
+                },
+                {
+                    "label": "End activities",
+                    "value": stats.get("num_end_activities", 0),
+                    "display": format_metric_value(stats.get("num_end_activities", 0), kind="count"),
+                },
+            ],
+            value_label="",
         )
 
     render_metric_card_grid(

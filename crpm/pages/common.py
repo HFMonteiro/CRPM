@@ -147,6 +147,37 @@ def render_dashboard_topbar(
     )
 
 
+def render_page_cockpit_topbar(
+    snapshot: Any,
+    *,
+    title: str,
+    subtitle: str,
+    badges: list[Mapping[str, Any] | tuple[Any, ...]] | None = None,
+    meta: list[Any] | tuple[Any, ...] | None = None,
+) -> None:
+    """Render the shared process-intelligence page header."""
+
+    default_badges: list[Mapping[str, Any] | tuple[Any, ...]] = [
+        {"label": "Mode", "value": "Direct workflow mode", "tone": "accent"},
+        {
+            "label": "Follow-up",
+            "value": getattr(snapshot, "active_followup_label", None) or "Full available follow-up",
+            "tone": "success",
+        },
+        {"label": "Models", "value": f"{int(getattr(snapshot, 'model_count', 0) or 0):,}", "tone": "neutral"},
+    ]
+    render_dashboard_topbar(
+        title=title,
+        subtitle=subtitle,
+        badges=badges or default_badges,
+        meta=meta
+        or [
+            getattr(snapshot, "input_name", None) or "No log loaded",
+            f"{int(getattr(snapshot, 'case_count', 0) or 0):,} cases",
+        ],
+    )
+
+
 def render_dashboard_bar_list(
     title: str,
     rows: list[Mapping[str, Any]],

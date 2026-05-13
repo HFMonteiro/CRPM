@@ -15,6 +15,7 @@ from crpm.pages.common import (
     render_html_ranked_table,
     render_inline_empty,
     render_metric_card_grid,
+    render_page_cockpit_topbar,
     render_plotly_chart,
     store_cache_entry,
 )
@@ -30,6 +31,12 @@ def render_variant_page(snapshot: AnalysisSnapshot) -> None:
         return
 
     log = snapshot.filtered_log
+    render_page_cockpit_topbar(
+        snapshot,
+        title="Variant cockpit",
+        subtitle="Read variant concentration first, then use frequency, coverage, and conformance tabs for exact investigation.",
+        meta=[snapshot.input_name or "No log loaded", f"{snapshot.case_count:,} cases"],
+    )
     model_name = next(iter(snapshot.discovery_results)) if snapshot.discovery_results else None
     cache_key = f"{snapshot.filter_key or 'current'}::variants::{model_name or 'none'}"
     cached_payload = snapshot.variant_cache.get(cache_key) if hasattr(snapshot.variant_cache, "get") else None

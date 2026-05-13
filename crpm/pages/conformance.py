@@ -48,9 +48,7 @@ except Exception:  # pragma: no cover - optional dependency
 
 logger = logging.getLogger(__name__)
 WORKFLOW_VIEW_CACHE_VERSION = "workflow-view-v3"
-WORKFLOW_LOCAL_FOCUS_HINT = (
-    "Local graph focus stays inside the frame. Use Pinned exact metrics in the right rail for persisted node or transition values."
-)
+WORKFLOW_LOCAL_FOCUS_HINT = "Local focus is visual only. Pin from the right rail for exact metrics."
 WORKFLOW_FILTER_DEFAULTS = {
     "filter_category": "Pathway",
     "coverage_view": "All",
@@ -156,7 +154,7 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
             grid_class="crpm-conformance-kpi-strip crpm-conformance-kpi-strip--cockpit",
         )
 
-    filter_col, main_col, detail_col = st.columns([0.62, 2.72, 0.66], gap="small")
+    filter_col, main_col, detail_col = st.columns([0.5, 2.86, 0.7], gap="small")
 
     with filter_col:
         _render_conformance_filter_rail(
@@ -167,7 +165,7 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
         )
 
     with main_col:
-        stage_actions = _render_workflow_stage_toolbar(snapshot=snapshot)
+        stage_actions = _render_workflow_stage_toolbar(snapshot=snapshot, workflow=filtered_workflow, controls=controls)
         if stage_actions["reset_selection"]:
             _clear_workflow_selection(snapshot)
             _store_workflow_state(
@@ -201,7 +199,7 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
     with detail_col:
         _render_conformance_side_intro(
             title="Inspector",
-            lead="Pin exact metrics only after the reference backbone reads clearly.",
+            lead="Pin one node or transition only when exact evidence is needed.",
             variant="inspector",
         )
         pinned_kind, pinned_id = _render_right_panel(
@@ -364,11 +362,11 @@ def _render_right_panel(
         selection_kind=selection_kind,
         selection_id=selection_id,
     )
-    st.markdown(
-        "<div class='crpm-conformance-side-subtitle'>Pinned exact metrics</div>",
-        unsafe_allow_html=True,
-    )
     if selected_id:
+        st.markdown(
+            "<div class='crpm-conformance-side-subtitle'>Pinned exact metrics</div>",
+            unsafe_allow_html=True,
+        )
         _render_event_process_details(
             model_summary_df=model_summary_df,
             nodes_df=nodes_df,
@@ -378,15 +376,12 @@ def _render_right_panel(
             selected_node_id=selected_id if selected_kind == "node" else None,
             selected_edge_id=selected_id if selected_kind == "edge" else None,
         )
-    else:
-        render_legend_note("Overview mode is active. Use Pinned exact metrics to persist a node or transition from this rail.")
-
-    _render_root_cause_watchlist(snapshot)
 
     st.markdown(
-        "<div class='crpm-conformance-side-subtitle'>Lead-time watchlist</div>",
+        "<div class='crpm-conformance-side-subtitle'>Watchlist</div>",
         unsafe_allow_html=True,
     )
+    _render_root_cause_watchlist(snapshot)
     _render_workflow_lead_time_rail(workflow=workflow, nodes_df=nodes_df, edges_df=edges_df)
 
     with st.expander("Context", expanded=False):
@@ -696,8 +691,6 @@ def _render_selector_guide(*, selection_kind: str, selection_id: Optional[str]) 
         (
             "<div class='crpm-conformance-panel crpm-conformance-panel--muted'>"
             "<div class='crpm-conformance-panel__eyebrow'>Selection state</div>"
-            "<div class='crpm-conformance-panel__body'>Use Local graph focus inside the map for quick visual inspection. Use Pinned exact metrics below for one persisted node or transition. "
-            "Keep overview mode active when you are reading the whole pathway.</div>"
             f"<div class='crpm-conformance-panel__body'><strong>{html.escape(state)}</strong></div>"
             "</div>"
         ),
@@ -1112,16 +1105,32 @@ def _render_conformance_side_intro(*, title: str, lead: str, variant: str) -> No
     )
 
 
-def _render_workflow_stage_toolbar(snapshot: AnalysisSnapshot) -> dict[str, bool]:
-    header_col, clear_col, reset_col = st.columns([0.58, 0.21, 0.21], gap="small")
+def _render_workflow_stage_toolbar(snapshot: AnalysisSnapshot, *, workflow: dict[str, Any], controls: dict[str, Any]) -> dict[str, bool]:
+    summary = workflow.get("summary", {}) if isinstance(workflow, dict) else {}
+    visible_cases = _coerce_int(summary.get("visible_case_count", summary.get("cases_covered")))
+    excluded_cases = _coerce_int(summary.get("excluded_case_count"))
+    mode = "Overview mode"
+    if snapshot.workflow_selection_kind == "node":
+        mode = "Pinned node"
+    elif snapshot.workflow_selection_kind == "edge":
+        mode = "Pinned edge"
+    case_scope = f"{visible_cases:,} visible cases" if visible_cases else "Visible case scope pending"
+    if excluded_cases:
+        case_scope += f" · {excluded_cases:,} excluded"
+    lens = str(controls.get("conformance_lens", "% of paths"))
+    header_col, clear_col, reset_col = st.columns([0.74, 0.13, 0.13], gap="small")
     with header_col:
         st.markdown(
             (
                 "<div class='crpm-dashboard-map-toolbar crpm-conformance-stage-header'>"
+                "<div class='crpm-conformance-stage-header__copy'>"
                 "<div class='crpm-conformance-stage-header__eyebrow'>Process map</div>"
                 "<div class='crpm-conformance-stage-header__title'>Interactive workflow explorer</div>"
-                "<div class='crpm-conformance-stage-header__body'>"
-                "Local graph focus stays inside the frame. Pinned exact metrics persist in the right rail."
+                "</div>"
+                "<div class='crpm-conformance-stage-header__chips'>"
+                f"<span>{html.escape(mode)}</span>"
+                f"<span>{html.escape(lens)}</span>"
+                f"<span>{html.escape(case_scope)}</span>"
                 "</div>"
                 "</div>"
             ),
@@ -1129,14 +1138,14 @@ def _render_workflow_stage_toolbar(snapshot: AnalysisSnapshot) -> dict[str, bool
         )
     with clear_col:
         reset_selection = st.button(
-            "Clear pinned metrics",
+            "Clear pin",
             key=_widget_key(snapshot, "workflow_reset"),
             help="Clear the pinned node or edge selection.",
             use_container_width=True,
         )
     with reset_col:
         reset_graph_viewport = st.button(
-            "Reset graph view",
+            "Reset view",
             key=_widget_key(snapshot, "workflow_reset_viewport"),
             help="Reset the interactive workflow viewport without changing filters.",
             use_container_width=True,
@@ -1286,15 +1295,14 @@ def _render_filter_category_boxes(
 
 def _render_filter_composer_child(filter_category: str) -> None:
     descriptions = {
-        "Pathway": "Choose which path cohort is visible in the process map.",
-        "Deviation": "Isolate conformant, log-deviation, or model-deviation behavior.",
-        "Display": "Tune coloring, density, and denominator lens without changing cohort semantics.",
-        "Actions": "Reset visible subset filters. Graph viewport reset remains separate above the map.",
+        "Pathway": "First-event gate fixed.",
+        "Deviation": "Isolate conformance buckets without changing cohort semantics.",
+        "Display": "Tune color, density, and denominator lens.",
+        "Actions": "Reset subset filters; graph viewport reset stays above the map.",
     }
     st.markdown(
         (
             "<div class='crpm-filter-composer'>"
-            f"<div class='crpm-filter-composer__title'>{html.escape(filter_category)} options</div>"
             f"<div class='crpm-filter-composer__body'>{html.escape(descriptions.get(filter_category, 'Choose a filter category.'))}</div>"
             "</div>"
         ),
@@ -1315,8 +1323,6 @@ def _render_active_filter_summary(
         ("Active", filter_category),
         ("Pathway", coverage_view),
         ("Deviation", deviation_view),
-        ("Color", metric_coloring),
-        ("Density", detail_label),
         ("Lens", lens_label),
     ]
     chip_markup = "".join(
@@ -2360,8 +2366,7 @@ def _render_selection_summary_card(
         subtitle = "No pinned workflow detail"
         meta = [
             "Read the pathway first",
-            "Use Pinned exact metrics when you need one persisted value",
-            "Workflow lenses stay above the figure",
+            "Pin only when exact values matter",
         ]
         tone = "Overview"
     st.markdown(

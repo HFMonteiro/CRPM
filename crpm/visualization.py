@@ -3636,7 +3636,6 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             case_scope_label += f" · {excluded_case_count:,} excluded"
     case_scope_badge = f'<span class="crpm-explorer-badge">{escape(case_scope_label)}</span>' if case_scope_label else ""
     coloring_hint = _workflow_metric_coloring_hint(metric_coloring)
-    density_hint = _workflow_density_hint(detail_level)
     lens_hint = "Activity lens" if "activit" in conformance_lens.lower() else "Path lens"
     mainline_backbone_points: list[tuple[float, float]] = [(first_anchor_x, start_anchor_y)]
     for node in sorted(mainline_nodes, key=lambda item: float(item.get("center_y", 0.0))):
@@ -3694,7 +3693,7 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
         f'<span class="crpm-explorer-badge">{escape(lens_hint)}</span>'
         f"{case_scope_badge}"
         "</div>",
-        f'<div class="crpm-explorer-toolbar__summary">{escape(coloring_hint)} {escape(density_hint)}</div>',
+        f'<div class="crpm-explorer-toolbar__summary">{escape(coloring_hint)}</div>',
         '<div class="crpm-explorer-status-line">'
         '<div id="crpm-explorer-live-title" class="crpm-explorer-live-title">Overview mode</div>'
         f'<div id="crpm-explorer-live-meta" class="crpm-explorer-live-meta">{escape(local_focus_hint)}</div>'
@@ -3702,7 +3701,7 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
         '<div class="crpm-explorer-legend">'
         '<span class="crpm-explorer-legend__item"><span class="crpm-explorer-legend__swatch" style="background:#9ed2a2;"></span>Conformance class</span>'
         '<span class="crpm-explorer-legend__item"><span class="crpm-explorer-legend__swatch" style="background:#7c98bd;"></span>Timing burden on links</span>'
-        '<span class="crpm-explorer-toolbar__sub">Reference flow now reads top to bottom. Local graph focus is separate from pinned exact metrics.</span>'
+        '<span class="crpm-explorer-toolbar__sub">Top to bottom reference flow.</span>'
         "</div>",
         "</div>",
         '<div class="crpm-explorer-toolbar__actions">',
@@ -4171,21 +4170,12 @@ def _script_json(value: Any) -> str:
 
 def _workflow_metric_coloring_hint(metric_coloring: str) -> str:
     hints = {
-        "Conformance bucket": "Coloring emphasizes conformance buckets so deviations surface immediately.",
-        "Frequency": "Coloring emphasizes traffic density so dominant branches stand out from rare paths.",
-        "Median delay": "Coloring emphasizes median delay so queue-heavy steps read hotter than fast transitions.",
-        "P90 delay": "Coloring emphasizes tail delay so volatile or long-wait branches stand out.",
+        "Conformance bucket": "Conformance color surfaces deviations first.",
+        "Frequency": "Traffic color separates dominant and rare paths.",
+        "Median delay": "Median-delay color highlights waiting burden.",
+        "P90 delay": "P90-delay color highlights tail burden.",
     }
-    return hints.get(metric_coloring, "Coloring follows the selected analytical metric.")
-
-
-def _workflow_density_hint(detail_level: str) -> str:
-    hints = {
-        "executive": "Executive density keeps cards quiet and count-first for presentation.",
-        "analyst": "Analyst density balances counts and timing for investigation.",
-        "research": "Research density keeps richer delay labels visible on cards and links.",
-    }
-    return hints.get(str(detail_level).lower(), "Density follows the selected inspection level.")
+    return hints.get(metric_coloring, "Color follows the selected metric.")
 
 
 def create_workflow_cytoscape_payload(payload: Mapping[str, Any] | pd.DataFrame) -> dict[str, Any]:
