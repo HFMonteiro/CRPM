@@ -8,6 +8,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from crpm.runtime_compat import ensure_graphviz_on_path
+
 REQUIRED_PYTHON_MODULES = (
     "streamlit",
     "streamlit_cytoscape",
@@ -85,7 +87,7 @@ def _module_exists(module_name: str) -> bool:
 
 
 def _check_graphviz_binary() -> tuple[str | None, str | None, str | None]:
-    executable = shutil.which("dot")
+    executable = shutil.which("dot") or ensure_graphviz_on_path()
     if executable is None:
         return None, None, None
 

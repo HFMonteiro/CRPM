@@ -95,7 +95,7 @@ class AnalysisResults:
     filter_error_message: Optional[str] = None
     last_analysis_signature: Optional[str] = None
     stage_timings: dict[str, float] = field(default_factory=dict)
-    workflow_view_mode: str = "board"
+    workflow_view_mode: str = "explorer"
     workflow_detail_level: str = "analyst"
     workflow_selection_kind: str = "none"
     workflow_selection_id: Optional[str] = None
@@ -138,7 +138,7 @@ class AnalysisResults:
         self.filter_error_message = filter_error_message
         self.last_analysis_signature = None
         self.stage_timings = {}
-        self.workflow_view_mode = "board"
+        self.workflow_view_mode = "explorer"
         self.workflow_detail_level = "analyst"
         self.workflow_selection_kind = "none"
         self.workflow_selection_id = None
@@ -183,7 +183,7 @@ class AnalysisSnapshot:
     run_manifest: Mapping[str, Any] = field(default_factory=dict)
     workflow_cohort_policy: str = WORKFLOW_COHORT_FIRST_EVENT_DIRECT
     source_metadata: Mapping[str, Any] = field(default_factory=dict)
-    workflow_view_mode: str = "board"
+    workflow_view_mode: str = "explorer"
     workflow_detail_level: str = "analyst"
     workflow_selection_kind: str = "none"
     workflow_selection_id: Optional[str] = None
@@ -314,7 +314,7 @@ def build_analysis_snapshot(session_state: Mapping[str, Any]) -> AnalysisSnapsho
         conformance_workspace=results.conformance_workspace if isinstance(results.conformance_workspace, Mapping) else {},
         selected_algorithms=tuple(state.config.selected_algorithms),
         stage_timings=results.stage_timings if isinstance(results.stage_timings, Mapping) else {},
-        workflow_view_mode=str(getattr(results, "workflow_view_mode", "board") or "board"),
+        workflow_view_mode=str(getattr(results, "workflow_view_mode", "explorer") or "explorer"),
         workflow_detail_level=str(getattr(results, "workflow_detail_level", "analyst") or "analyst"),
         workflow_selection_kind=selection_kind,
         workflow_selection_id=selection_id,
@@ -378,7 +378,7 @@ def _migrate_or_create_state(session_state: Mapping[str, Any]) -> CRPMState:
         conformance_workspace=(
             dict(session_state.get("conformance_workspace", {})) if isinstance(session_state.get("conformance_workspace"), Mapping) else {}
         ),
-        workflow_view_mode=str(session_state.get("workflow_view_mode", "board") or "board"),
+        workflow_view_mode=str(session_state.get("workflow_view_mode", "explorer") or "explorer"),
         workflow_detail_level=str(session_state.get("workflow_detail_level", "analyst") or "analyst"),
         workflow_selection_kind=str(session_state.get("workflow_selection_kind", "none") or "none"),
         workflow_selection_id=(

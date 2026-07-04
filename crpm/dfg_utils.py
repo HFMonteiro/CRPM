@@ -20,6 +20,7 @@ from pm4py.statistics.start_activities.log import get as start_activities_get
 from pm4py.statistics.end_activities.log import get as end_activities_get
 
 from crpm.process_map import build_process_map_kpis, build_selection_context
+from crpm.runtime_compat import ensure_graphviz_on_path
 
 _SVG_SCRIPT_RE = re.compile(r"<\s*script\b[^>]*>.*?<\s*/\s*script\s*>", re.IGNORECASE | re.DOTALL)
 _SVG_EVENT_ATTR_RE = re.compile(r"\s+on[a-zA-Z]+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)")
@@ -196,6 +197,7 @@ def render_dfg_to_png(dfg: Dict, start_activities: Dict, end_activities: Dict, v
         vis_variant = dfg_visualizer.Variants.FREQUENCY
 
     # Create visualization
+    ensure_graphviz_on_path()
     gviz = dfg_visualizer.apply(
         dfg,
         log=None,
@@ -239,6 +241,7 @@ def render_dfg_to_svg(dfg: Dict, start_activities: Dict, end_activities: Dict, v
     else:
         vis_variant = dfg_visualizer.Variants.FREQUENCY
 
+    ensure_graphviz_on_path()
     gviz = dfg_visualizer.apply(
         dfg,
         log=None,

@@ -2699,6 +2699,441 @@ def filter_workflow_payload(
     }
 
 
+def render_workflow_bpmn_style_svg(
+    payload: Mapping[str, Any] | pd.DataFrame | None,
+    edges: pd.DataFrame | None = None,
+    *,
+    detail_level: Literal["executive", "analyst", "research"] = "analyst",
+    metric_coloring: str = "Conformance bucket",
+) -> str:
+    """Render the filtered workflow payload with BPMN-inspired notation."""
+
+    payload_mapping = payload if isinstance(payload, Mapping) else {}
+    selected_node_id = str(payload_mapping.get("selected_node_id") or "").strip()
+    selected_edge_uid = str(payload_mapping.get("selected_edge_uid") or "").strip()
+    nodes_df, edges_df, _legend_df, overall_median = _coerce_workflow_payload(payload, edges)
+    ordered_nodes = _order_workflow_nodes(nodes_df)
+    normalized_edges = _normalize_workflow_edges(edges_df, ordered_nodes)
+    detail_level = str(detail_level or "analyst").lower()
+
+    if ordered_nodes.empty and normalized_edges.empty:
+        return _workflow_svg_empty("No BPMN-style workflow structure available")
+    if ordered_nodes.empty and not normalized_edges.empty:
+        ordered_nodes = _derive_nodes_from_edges(normalized_edges)
+
+    step_groups: dict[int, list[pd.Series]] = defaultdict(list)
+    for _, row in ordered_nodes.iterrows():
+        step_groups[_workflow_layout_step_rank(row.get("step_rank", 999))].append(row)
+    sorted_steps = sorted(step_groups)
+    if not sorted_steps:
+        return _workflow_svg_empty("No BPMN-style workflow structure available")
+
+    task_width = 164.0
+    task_height = 68.0
+    gateway_size = 86.0
+    step_gap = 190.0
+    side_margin = 118.0
+    mainline_y = 210.0
+    branch_gap = 116.0
+    branch_stack_gap = 96.0
+    board_width = int(max(920.0, side_margin * 2.0 + max(1, len(sorted_steps) - 1) * step_gap + task_width))
+
+    node_layouts: list[dict[str, Any]] = []
+    for step_index, step_rank in enumerate(sorted_steps):
+        rows = sorted(
+            step_groups[step_rank],
+            key=lambda row: (
+                0 if str(row.get("branch_role", "mainline")) == "mainline" else 1,
+                -_safe_int(row.get("cases", 0)),
+                str(row.get("display_name", row.get("activity", ""))),
+            ),
+        )
+        mainline_rows = [row for row in rows if str(row.get("branch_role", "mainline")) == "mainline"]
+        top_rows = [
+            row
+            for row in rows
+            if str(row.get("branch_role", "mainline")) != "mainline" and str(row.get("lane", "left") or "left").lower() != "right"
+        ]
+        bottom_rows = [
+            row
+            for row in rows
+            if str(row.get("branch_role", "mainline")) != "mainline" and str(row.get("lane", "left") or "left").lower() == "right"
+        ]
+        x_center = side_margin + step_index * step_gap
+
+        for main_index, row in enumerate(mainline_rows or rows[:1]):
+            activity = str(row.get("activity", row.get("display_name", f"node-{step_rank}-{main_index}")))
+            shape = _workflow_bpmn_shape(row)
+            width, height = _workflow_bpmn_dimensions(shape, task_width, task_height, gateway_size)
+            y_center = mainline_y + main_index * 12.0
+            node_layouts.append(
+                {
+                    "row": row,
+                    "activity": activity,
+                    "shape": shape,
+                    "x": x_center - width / 2.0,
+                    "y": y_center - height / 2.0,
+                    "width": width,
+                    "height": height,
+                    "center_x": x_center,
+                    "center_y": y_center,
+                }
+            )
+
+        for lane_rows, direction in ((top_rows, -1), (bottom_rows, 1)):
+            for lane_index, row in enumerate(lane_rows):
+                activity = str(row.get("activity", row.get("display_name", f"branch-{step_rank}-{direction}-{lane_index}")))
+                shape = _workflow_bpmn_shape(row)
+                width, height = _workflow_bpmn_dimensions(shape, task_width, task_height, gateway_size)
+                y_center = mainline_y + direction * (branch_gap + lane_index * branch_stack_gap)
+                node_layouts.append(
+                    {
+                        "row": row,
+                        "activity": activity,
+                        "shape": shape,
+                        "x": x_center - width / 2.0,
+                        "y": y_center - height / 2.0,
+                        "width": width,
+                        "height": height,
+                        "center_x": x_center,
+                        "center_y": y_center,
+                    }
+                )
+
+    if not node_layouts:
+        return _workflow_svg_empty("No BPMN-style workflow structure available")
+
+    min_y = min(float(item["y"]) for item in node_layouts)
+    max_y = max(float(item["y"]) + float(item["height"]) for item in node_layouts)
+    shift_y = max(34.0 - min_y, 0.0)
+    for item in node_layouts:
+        item["y"] = float(item["y"]) + shift_y
+        item["center_y"] = float(item["center_y"]) + shift_y
+    mainline_y += shift_y
+    max_y += shift_y
+    board_height = int(max(350.0, max_y + 92.0))
+    node_positions = {str(item["activity"]): item for item in node_layouts}
+
+    edge_rows: list[dict[str, Any]] = []
+    for _, row in normalized_edges.iterrows():
+        source = str(row.get("source", ""))
+        target = str(row.get("target", ""))
+        if source not in node_positions or target not in node_positions:
+            continue
+        edge_rows.append(
+            {
+                "row": row,
+                "source": source,
+                "target": target,
+                "source_layout": node_positions[source],
+                "target_layout": node_positions[target],
+            }
+        )
+
+    top_branch_items = [item for item in node_layouts if float(item["center_y"]) < mainline_y - 8.0]
+    bottom_branch_items = [item for item in node_layouts if float(item["center_y"]) > mainline_y + 8.0]
+    start_x = max(36.0, min(float(item["x"]) for item in node_layouts) - 70.0)
+    end_x = min(float(board_width) - 36.0, max(float(item["x"]) + float(item["width"]) for item in node_layouts) + 70.0)
+
+    parts = [
+        f'<svg class="crpm-bpmn-style-board" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {board_width} {board_height}" width="{board_width}" height="{board_height}" role="img" aria-label="BPMN-style workflow process map" data-qa="bpmn-style-board" style="display:block;width:100%;height:auto;max-width:100%;font-family:Segoe UI, Arial, sans-serif;">',
+        "<defs>",
+        '<marker id="crpm-bpmn-arrow-main" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 10 4 L 0 8 z" fill="#415967"/></marker>',
+        '<marker id="crpm-bpmn-arrow-log" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 10 4 L 0 8 z" fill="#b9842e"/></marker>',
+        '<marker id="crpm-bpmn-arrow-model" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 10 4 L 0 8 z" fill="#a45f8d"/></marker>',
+        '<filter id="crpm-bpmn-shadow" x="-18%" y="-18%" width="140%" height="140%"><feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#395060" flood-opacity="0.12"/></filter>',
+        "</defs>",
+        '<rect x="0" y="0" width="100%" height="100%" rx="18" ry="18" fill="#ffffff" stroke="#d8e0e7" stroke-width="1.2"/>',
+    ]
+
+    if top_branch_items:
+        top_y = max(10.0, min(float(item["y"]) for item in top_branch_items) - 18.0)
+        top_h = max(float(item["y"]) + float(item["height"]) for item in top_branch_items) - top_y + 18.0
+        parts.append(
+            f'<rect x="10" y="{top_y:.1f}" width="{board_width - 20:.1f}" height="{top_h:.1f}" rx="14" ry="14" fill="#f8fafc" stroke="#e3e8ee" stroke-width="1" data-qa="bpmn-swimlane-upper"/>'
+        )
+        parts.append(f'<text x="24" y="{top_y + 18:.1f}" font-size="10.5" font-weight="800" fill="#697a88">Upper variation</text>')
+    main_lane_y = mainline_y - 58.0
+    parts.append(
+        f'<rect x="10" y="{main_lane_y:.1f}" width="{board_width - 20:.1f}" height="116" rx="14" ry="14" fill="#fbfdff" stroke="#d9e2ea" stroke-width="1.2" data-qa="bpmn-swimlane-main"/>'
+    )
+    parts.append(f'<text x="24" y="{main_lane_y + 18:.1f}" font-size="10.5" font-weight="800" fill="#465c6b">Reference flow</text>')
+    if bottom_branch_items:
+        bottom_y = min(float(item["y"]) for item in bottom_branch_items) - 18.0
+        bottom_h = max(float(item["y"]) + float(item["height"]) for item in bottom_branch_items) - bottom_y + 18.0
+        parts.append(
+            f'<rect x="10" y="{bottom_y:.1f}" width="{board_width - 20:.1f}" height="{bottom_h:.1f}" rx="14" ry="14" fill="#f8fafc" stroke="#e3e8ee" stroke-width="1" data-qa="bpmn-swimlane-lower"/>'
+        )
+        parts.append(f'<text x="24" y="{bottom_y + 18:.1f}" font-size="10.5" font-weight="800" fill="#697a88">Lower variation</text>')
+
+    parts.append(
+        f'<g class="crpm-bpmn-start-event" data-qa="bpmn-start-event"><circle cx="{start_x:.1f}" cy="{mainline_y:.1f}" r="22" fill="#ffffff" stroke="#294354" stroke-width="2.2"/><text x="{start_x:.1f}" y="{mainline_y + 4.0:.1f}" text-anchor="middle" font-size="10.5" font-weight="800" fill="#294354">Start</text></g>'
+    )
+    parts.append(
+        f'<g class="crpm-bpmn-end-event" data-qa="bpmn-end-event"><circle cx="{end_x:.1f}" cy="{mainline_y:.1f}" r="24" fill="#ffffff" stroke="#294354" stroke-width="3.4"/><circle cx="{end_x:.1f}" cy="{mainline_y:.1f}" r="16" fill="none" stroke="#294354" stroke-width="1.4"/><text x="{end_x:.1f}" y="{mainline_y + 4.0:.1f}" text-anchor="middle" font-size="10.5" font-weight="800" fill="#294354">End</text></g>'
+    )
+
+    first_mainline = _workflow_bpmn_first_mainline_node(node_layouts)
+    last_mainline = _workflow_bpmn_last_mainline_node(node_layouts)
+    if first_mainline:
+        parts.append(
+            _workflow_bpmn_edge_path(
+                start_x + 22.0,
+                mainline_y,
+                float(first_mainline["x"]),
+                float(first_mainline["center_y"]),
+                edge_id="start",
+                edge_uid="start",
+                css_class="crpm-bpmn-sequence-flow crpm-bpmn-sequence-flow--anchor",
+                marker="crpm-bpmn-arrow-main",
+                stroke="#415967",
+                selected=False,
+            )
+        )
+    if last_mainline:
+        parts.append(
+            _workflow_bpmn_edge_path(
+                float(last_mainline["x"]) + float(last_mainline["width"]),
+                float(last_mainline["center_y"]),
+                end_x - 24.0,
+                mainline_y,
+                edge_id="end",
+                edge_uid="end",
+                css_class="crpm-bpmn-sequence-flow crpm-bpmn-sequence-flow--anchor",
+                marker="crpm-bpmn-arrow-main",
+                stroke="#415967",
+                selected=False,
+            )
+        )
+
+    for item in edge_rows:
+        row = item["row"]
+        edge_id = str(row.get("edge_id", f"{item['source']} -> {item['target']}"))
+        edge_uid = str(row.get("edge_uid", edge_id))
+        conformance_bucket = str(row.get("conformance_bucket", "Conformant"))
+        palette = _workflow_metric_palette(row, metric_coloring, item_kind="edge")
+        marker = "crpm-bpmn-arrow-main"
+        if conformance_bucket == "Log deviation":
+            marker = "crpm-bpmn-arrow-log"
+        elif conformance_bucket == "Model deviation":
+            marker = "crpm-bpmn-arrow-model"
+        sx, sy, tx, ty = _workflow_bpmn_connection_points(item["source_layout"], item["target_layout"])
+        parts.append(
+            _workflow_bpmn_edge_path(
+                sx,
+                sy,
+                tx,
+                ty,
+                edge_id=edge_id,
+                edge_uid=edge_uid,
+                css_class="crpm-bpmn-sequence-flow",
+                marker=marker,
+                stroke=palette["stroke"],
+                selected=bool(selected_edge_uid and selected_edge_uid in {edge_uid, edge_id}),
+                dash=("9 6" if conformance_bucket != "Conformant" else ""),
+                frequency=_safe_int(row.get("frequency")),
+                median_days=_safe_float(row.get("median_days")),
+            )
+        )
+
+    for item in node_layouts:
+        parts.append(
+            _workflow_bpmn_node_svg(
+                item,
+                metric_coloring=metric_coloring,
+                detail_level=detail_level,
+                overall_median=overall_median,
+                selected=bool(selected_node_id and selected_node_id == str(item["activity"])),
+            )
+        )
+
+    summary = payload_mapping.get("summary", {}) if isinstance(payload_mapping.get("summary"), Mapping) else {}
+    footer_bits = []
+    for label, key, suffix in (
+        ("Visible", "visible_case_count", " cases"),
+        ("Excluded", "excluded_case_count", " cases"),
+        ("Median throughput", "median_throughput_days", " d"),
+        ("Deviation", "deviation_share", "%"),
+    ):
+        value = summary.get(key)
+        if value is not None:
+            footer_bits.append(f"{label}: {value}{suffix}")
+    footer = " | ".join(footer_bits) if footer_bits else "BPMN-style view uses the current filtered workflow payload."
+    parts.append(f'<text x="20" y="{board_height - 20:.1f}" font-size="10.5" fill="#6a7884">{escape(footer)}</text>')
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+def _workflow_bpmn_shape(row: Mapping[str, Any]) -> str:
+    branch_role = str(row.get("branch_role", "mainline")).lower()
+    node_type = str(row.get("node_type", "")).lower()
+    conformance_bucket = str(row.get("conformance_bucket", "Conformant"))
+    if branch_role != "mainline" or node_type in {"deviation", "gateway"} or conformance_bucket == "Model deviation":
+        return "gateway"
+    return "task"
+
+
+def _workflow_bpmn_dimensions(shape: str, task_width: float, task_height: float, gateway_size: float) -> tuple[float, float]:
+    if shape == "gateway":
+        return gateway_size, gateway_size
+    return task_width, task_height
+
+
+def _workflow_bpmn_first_mainline_node(node_layouts: list[dict[str, Any]]) -> dict[str, Any] | None:
+    mainline = [item for item in node_layouts if str(item["row"].get("branch_role", "mainline")) == "mainline"]
+    candidates = mainline or node_layouts
+    return min(candidates, key=lambda item: (float(item["center_x"]), float(item["center_y"]))) if candidates else None
+
+
+def _workflow_bpmn_last_mainline_node(node_layouts: list[dict[str, Any]]) -> dict[str, Any] | None:
+    mainline = [item for item in node_layouts if str(item["row"].get("branch_role", "mainline")) == "mainline"]
+    candidates = mainline or node_layouts
+    return max(candidates, key=lambda item: (float(item["center_x"]), float(item["center_y"]))) if candidates else None
+
+
+def _workflow_bpmn_connection_points(
+    source_layout: Mapping[str, Any], target_layout: Mapping[str, Any]
+) -> tuple[float, float, float, float]:
+    sx = float(source_layout["center_x"])
+    sy = float(source_layout["center_y"])
+    tx = float(target_layout["center_x"])
+    ty = float(target_layout["center_y"])
+    if tx >= sx:
+        return (
+            float(source_layout["x"]) + float(source_layout["width"]),
+            sy,
+            float(target_layout["x"]),
+            ty,
+        )
+    return (
+        float(source_layout["x"]),
+        sy,
+        float(target_layout["x"]) + float(target_layout["width"]),
+        ty,
+    )
+
+
+def _workflow_bpmn_edge_path(
+    sx: float,
+    sy: float,
+    tx: float,
+    ty: float,
+    *,
+    edge_id: str,
+    edge_uid: str,
+    css_class: str,
+    marker: str,
+    stroke: str,
+    selected: bool,
+    dash: str = "",
+    frequency: int | None = None,
+    median_days: float | None = None,
+) -> str:
+    if abs(tx - sx) < 8 and abs(ty - sy) < 8:
+        path = f"M {sx:.1f} {sy:.1f} c 34 -42 82 -42 92 0 c -18 34 -62 34 -92 0"
+    else:
+        control = max(42.0, min(112.0, abs(tx - sx) * 0.34))
+        path = f"M {sx:.1f} {sy:.1f} C {sx + control:.1f} {sy:.1f}, {tx - control:.1f} {ty:.1f}, {tx:.1f} {ty:.1f}"
+    dash_attr = f' stroke-dasharray="{dash}"' if dash else ""
+    selected_class = " is-selected" if selected else ""
+    stroke_width = 3.4 if selected else 2.15
+    title_bits = [edge_id]
+    if frequency is not None:
+        title_bits.append(f"{frequency:,} events")
+    if median_days is not None:
+        title_bits.append(f"{median_days:.1f} d median")
+    return (
+        f'<path class="{css_class}{selected_class}" data-qa="bpmn-sequence-flow" data-edge-id="{escape(edge_id)}" data-edge-uid="{escape(edge_uid)}" '
+        f'd="{path}" fill="none" stroke="{stroke}" stroke-width="{stroke_width:.1f}" stroke-linecap="round" stroke-linejoin="round"{dash_attr} '
+        f'opacity="{0.98 if selected else 0.78}" marker-end="url(#{marker})"><title>{escape(" | ".join(title_bits))}</title></path>'
+    )
+
+
+def _workflow_bpmn_node_svg(
+    item: Mapping[str, Any],
+    *,
+    metric_coloring: str,
+    detail_level: str,
+    overall_median: float | None,
+    selected: bool,
+) -> str:
+    row = item["row"]
+    shape = str(item.get("shape", "task"))
+    palette = _workflow_metric_palette(row, metric_coloring, item_kind="node")
+    x = float(item["x"])
+    y = float(item["y"])
+    width = float(item["width"])
+    height = float(item["height"])
+    cx = float(item["center_x"])
+    cy = float(item["center_y"])
+    title = _workflow_display_name(row)
+    cases = _safe_int(row.get("cases", 0))
+    median_days = _safe_float(row.get("median_next_delay_days"))
+    conformance_bucket = str(row.get("conformance_bucket", "Conformant"))
+    severity = str(row.get("severity", "Low"))
+    node_id = str(item.get("activity", title))
+    qa = "bpmn-gateway" if shape == "gateway" else "bpmn-task"
+    selected_class = " is-selected" if selected else ""
+    title_lines = _workflow_fit_text_lines([title], max_chars=(14 if shape == "gateway" else 21), max_lines=2)
+    if detail_level == "executive":
+        detail_lines = [f"{cases:,} cases"]
+    else:
+        detail_lines = [f"{cases:,} cases", f"{median_days:.1f} d median" if median_days is not None else "Delay n/a"]
+    if detail_level == "research" and overall_median is not None:
+        detail_lines.append(f"Baseline {float(overall_median):.1f} d")
+
+    title_attr = [
+        title,
+        f"{cases:,} cases",
+        f"Conformance: {conformance_bucket}",
+        f"Severity: {severity}",
+    ]
+    if median_days is not None:
+        title_attr.append(f"Median next delay: {median_days:.1f} d")
+
+    if shape == "gateway":
+        points = f"{cx:.1f},{y:.1f} {x + width:.1f},{cy:.1f} {cx:.1f},{y + height:.1f} {x:.1f},{cy:.1f}"
+        label_y = cy - 8.0 if len(title_lines) == 1 else cy - 14.0
+        parts = [
+            f'<g class="crpm-bpmn-node crpm-bpmn-gateway{selected_class}" data-qa="{qa}" data-node-id="{escape(node_id)}" filter="url(#crpm-bpmn-shadow)">',
+            f'<polygon points="{points}" fill="{palette["fill"]}" stroke="{palette["stroke"]}" stroke-width="{3.0 if selected else 2.0}"><title>{escape(" | ".join(title_attr))}</title></polygon>',
+        ]
+        for index, line in enumerate(title_lines):
+            parts.append(
+                f'<text x="{cx:.1f}" y="{label_y + index * 11.5:.1f}" text-anchor="middle" font-size="9.5" font-weight="800" fill="{palette["ink"]}">{escape(str(line))}</text>'
+            )
+        parts.append(
+            f'<text x="{cx:.1f}" y="{cy + 23.0:.1f}" text-anchor="middle" font-size="8.6" font-weight="700" fill="#5c6b75">{escape(conformance_bucket)}</text>'
+        )
+        parts.append("</g>")
+        return "".join(parts)
+
+    chip = conformance_bucket if metric_coloring == "Conformance bucket" else severity
+    chip_width = min(92.0, max(42.0, len(chip) * 5.1 + 20.0))
+    chip_x = x + width - chip_width - 10.0
+    chip_y = y + 8.0
+    parts = [
+        f'<g class="crpm-bpmn-node crpm-bpmn-task{selected_class}" data-qa="{qa}" data-node-id="{escape(node_id)}" filter="url(#crpm-bpmn-shadow)">',
+        f'<rect x="{x:.1f}" y="{y:.1f}" width="{width:.1f}" height="{height:.1f}" rx="10" ry="10" fill="#ffffff" stroke="{palette["stroke"]}" stroke-width="{3.0 if selected else 2.0}"><title>{escape(" | ".join(title_attr))}</title></rect>',
+        f'<rect x="{x + 8.0:.1f}" y="{y + 9.0:.1f}" width="3.2" height="{height - 18.0:.1f}" rx="1.6" ry="1.6" fill="{palette["stroke"]}" fill-opacity="0.82"/>',
+        f'<rect x="{chip_x:.1f}" y="{chip_y:.1f}" width="{chip_width:.1f}" height="17" rx="8.5" ry="8.5" fill="{palette["chip_fill"]}" stroke="none"/>',
+        f'<text x="{chip_x + chip_width / 2.0:.1f}" y="{chip_y + 12.2:.1f}" text-anchor="middle" font-size="8.4" font-weight="800" fill="{palette["chip_ink"]}">{escape(chip)}</text>',
+    ]
+    text_x = x + 18.0
+    text_y = y + 25.0
+    for index, line in enumerate(title_lines):
+        parts.append(
+            f'<text x="{text_x:.1f}" y="{text_y + index * 12.0:.1f}" font-size="10.7" font-weight="800" fill="{palette["ink"]}">{escape(str(line))}</text>'
+        )
+    detail_y = y + 51.0
+    for index, line in enumerate(detail_lines[:2]):
+        parts.append(
+            f'<text x="{text_x:.1f}" y="{detail_y + index * 10.0:.1f}" font-size="9.2" font-weight="600" fill="#60717d">{escape(str(line))}</text>'
+        )
+    parts.append("</g>")
+    return "".join(parts)
+
+
 def _workflow_process_map_payload(
     *,
     nodes_df: pd.DataFrame,
@@ -5011,6 +5446,7 @@ __all__ = [
     "create_model_comparison_radar",
     "create_model_comparison_heatmap",
     "create_fitness_precision_scatter",
+    "render_workflow_bpmn_style_svg",
     "render_workflow_conformance_svg",
     "filter_workflow_payload",
     "create_workflow_interactive_payload",

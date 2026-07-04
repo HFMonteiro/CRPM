@@ -1482,7 +1482,7 @@ def test_render_workflow_controls_sanitizes_invalid_metric_coloring(
 
     controls = conformance_page._render_workflow_controls(snapshot)
 
-    assert controls["workflow_mode"] == "interactive"
+    assert controls["workflow_mode"] == "explorer"
     assert controls["metric_coloring"] == "Conformance bucket"
     assert (
         "Color",
@@ -1505,6 +1505,7 @@ def test_render_workflow_controls_rail_uses_progressive_filter_categories(
         conformance_page._widget_key(snapshot, "workflow_metric_coloring"): "Median delay",
         conformance_page._widget_key(snapshot, "workflow_detail_level"): "Research",
         conformance_page._widget_key(snapshot, "workflow_lens"): "% of activities",
+        conformance_page._widget_key(snapshot, "workflow_mode"): "BPMN style",
     }
     segmented_calls: list[tuple[str, tuple[str, ...]]] = []
     button_calls: list[str] = []
@@ -1515,6 +1516,7 @@ def test_render_workflow_controls_rail_uses_progressive_filter_categories(
         segmented_calls.append((label, tuple(options)))
         return {
             "Filter category": "Display",
+            "View": "BPMN style",
             "Density": "Research",
             "Lens": "% of activities",
         }.get(label, kwargs.get("default", options[0]))
@@ -1538,6 +1540,7 @@ def test_render_workflow_controls_rail_uses_progressive_filter_categories(
     assert ("Lens", ("% of activities", "% of paths")) in segmented_calls
     assert not any(label == "Path view" for label, _ in segmented_calls)
     assert not any(label == "Deviation focus" for label, _ in segmented_calls)
+    assert ("View", ("Explorer", "Board", "BPMN style")) in segmented_calls
     assert (
         "Color",
         ("Conformance bucket", "Frequency", "Median delay", "P90 delay"),
@@ -1545,6 +1548,7 @@ def test_render_workflow_controls_rail_uses_progressive_filter_categories(
     ) in selectbox_calls
     assert controls["coverage_view"] == "rare"
     assert controls["deviation_view"] == "Log deviations"
+    assert controls["workflow_mode"] == "bpmn"
     assert controls["metric_coloring"] == "Median delay"
     assert controls["detail_level"] == "research"
     assert controls["conformance_lens"] == "% of activities"
@@ -1625,6 +1629,7 @@ def test_workflow_controls_from_state_surfaces_pending_filter_reset(
         conformance_page._widget_key(snapshot, "workflow_metric_coloring"): "P90 delay",
         conformance_page._widget_key(snapshot, "workflow_detail_level"): "Research",
         conformance_page._widget_key(snapshot, "workflow_lens"): "% of activities",
+        conformance_page._widget_key(snapshot, "workflow_mode"): "BPMN style",
     }
 
     monkeypatch.setattr(conformance_page.st, "session_state", session_state)
@@ -1639,8 +1644,10 @@ def test_workflow_controls_from_state_surfaces_pending_filter_reset(
     assert controls["detail_level"] == "analyst"
     assert controls["conformance_lens"] == "% of paths"
     assert controls["filter_category"] == "Pathway"
+    assert controls["workflow_mode"] == "bpmn"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_reset_pending")] is False
     assert session_state[conformance_page._widget_key(snapshot, "workflow_filter_category")] == "Pathway"
+    assert session_state[conformance_page._widget_key(snapshot, "workflow_mode")] == "BPMN style"
 
 
 def test_reset_workflow_filters_clears_selection_and_restores_defaults(
@@ -1656,6 +1663,7 @@ def test_reset_workflow_filters_clears_selection_and_restores_defaults(
         conformance_page._widget_key(snapshot, "workflow_metric_coloring"): "Median delay",
         conformance_page._widget_key(snapshot, "workflow_detail_level"): "Research",
         conformance_page._widget_key(snapshot, "workflow_lens"): "% of activities",
+        conformance_page._widget_key(snapshot, "workflow_mode"): "BPMN style",
         conformance_page._widget_key(snapshot, "workflow_reset_pending"): True,
     }
 
@@ -1671,6 +1679,7 @@ def test_reset_workflow_filters_clears_selection_and_restores_defaults(
     assert session_state[conformance_page._widget_key(snapshot, "workflow_detail_level")] == "Analyst"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_lens")] == "% of paths"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_filter_category")] == "Pathway"
+    assert session_state[conformance_page._widget_key(snapshot, "workflow_mode")] == "BPMN style"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_reset_pending")] is False
 
 

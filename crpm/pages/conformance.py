@@ -35,6 +35,7 @@ from crpm.visualization import (
     create_workflow_cytoscape_payload,
     create_workflow_interactive_payload,
     filter_workflow_payload,
+    render_workflow_bpmn_style_svg,
     render_workflow_conformance_svg,
     render_workflow_explorer_html,
     workflow_edge_uid,
@@ -50,6 +51,7 @@ logger = logging.getLogger(__name__)
 WORKFLOW_VIEW_CACHE_VERSION = "workflow-view-v3"
 WORKFLOW_LOCAL_FOCUS_HINT = "Local focus is visual only. Pin from the right rail for exact metrics."
 WORKFLOW_FILTER_DEFAULTS = {
+    "workflow_mode": "Explorer",
     "filter_category": "Pathway",
     "coverage_view": "All",
     "deviation_view": "All",
@@ -58,6 +60,8 @@ WORKFLOW_FILTER_DEFAULTS = {
     "conformance_lens": "% of paths",
 }
 WORKFLOW_FILTER_CATEGORIES = ["Pathway", "Deviation", "Display", "Actions"]
+WORKFLOW_VIEW_OPTIONS = ["Explorer", "Board", "BPMN style"]
+WORKFLOW_VIEW_LABELS = {"explorer": "Explorer", "board": "Board", "bpmn": "BPMN style"}
 
 
 def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
@@ -86,7 +90,7 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
         controls = _workflow_controls_from_state(snapshot)
     else:
         controls = {
-            "workflow_mode": "interactive",
+            "workflow_mode": _normalize_workflow_mode(WORKFLOW_FILTER_DEFAULTS["workflow_mode"]),
             "coverage_view": "all",
             "deviation_view": "All",
             "metric_coloring": "Conformance bucket",
@@ -97,7 +101,7 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
         }
 
     if has_workflow:
-        workflow_mode = "interactive"
+        workflow_mode = _normalize_workflow_mode(controls.get("workflow_mode"))
         current_selection_kind = (
             snapshot.workflow_selection_kind if snapshot.workflow_selection_kind in {"node", "edge", "none"} else "none"
         )
@@ -128,7 +132,7 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
             selection_id=current_selection_id,
         )
     else:
-        workflow_mode = "interactive"
+        workflow_mode = _normalize_workflow_mode(controls.get("workflow_mode"))
         filtered_workflow = dict(workflow) if isinstance(workflow, dict) else workflow
         if isinstance(filtered_workflow, dict):
             filtered_workflow["conformance_lens"] = controls["conformance_lens"]
@@ -247,7 +251,8 @@ def _render_workflow_board_or_graph(
         st.caption("No workflow structure could be derived from the current filtered log.")
         return "none", None
 
-    if workflow_mode == "interactive":
+    workflow_mode = _normalize_workflow_mode(workflow_mode)
+    if workflow_mode == "explorer":
         graph_rendered, selection_kind, selection_id, fallback_message = _render_interactive_workflow_graph(
             workflow,
             nodes_df,
@@ -262,11 +267,43 @@ def _render_workflow_board_or_graph(
             return selection_kind, selection_id
         if fallback_message:
             st.warning(fallback_message)
-        st.markdown(render_workflow_conformance_svg(workflow), unsafe_allow_html=True)
-        return "none", None
+        workflow_for_render = _workflow_payload_with_selection(workflow, selection_kind=selection_kind, selection_id=selection_id)
+        st.markdown(render_workflow_conformance_svg(workflow_for_render), unsafe_allow_html=True)
+        return selection_kind, selection_id
 
-    st.markdown(render_workflow_conformance_svg(workflow), unsafe_allow_html=True)
-    return "none", None
+    workflow_for_render = _workflow_payload_with_selection(workflow, selection_kind=selection_kind, selection_id=selection_id)
+    if workflow_mode == "bpmn":
+        st.markdown(
+            render_workflow_bpmn_style_svg(
+                workflow_for_render,
+                metric_coloring=metric_coloring,
+                detail_level=detail_level,
+            ),
+            unsafe_allow_html=True,
+        )
+        return selection_kind, selection_id
+
+    st.markdown(
+        render_workflow_conformance_svg(
+            workflow_for_render,
+            layout_mode="horizontal",
+            detail_level=detail_level,
+        ),
+        unsafe_allow_html=True,
+    )
+    return selection_kind, selection_id
+
+
+def _workflow_payload_with_selection(
+    workflow: dict[str, Any],
+    *,
+    selection_kind: str,
+    selection_id: Optional[str],
+) -> dict[str, Any]:
+    workflow_for_render = dict(workflow) if isinstance(workflow, dict) else {}
+    workflow_for_render["selected_node_id"] = selection_id if selection_kind == "node" else None
+    workflow_for_render["selected_edge_uid"] = selection_id if selection_kind == "edge" else None
+    return workflow_for_render
 
 
 def _render_interactive_workflow_graph(
@@ -791,6 +828,7 @@ def _render_supporting_detail_tabs(
 
 
 def _workflow_controls_from_state(snapshot: AnalysisSnapshot) -> dict[str, Any]:
+    mode_key = _widget_key(snapshot, "workflow_mode")
     category_key = _widget_key(snapshot, "workflow_filter_category")
     coverage_key = _widget_key(snapshot, "workflow_coverage")
     deviation_key = _widget_key(snapshot, "workflow_deviation")
@@ -809,6 +847,9 @@ def _workflow_controls_from_state(snapshot: AnalysisSnapshot) -> dict[str, Any]:
         st.session_state[lens_key] = WORKFLOW_FILTER_DEFAULTS["conformance_lens"]
         st.session_state[reset_pending_key] = False
 
+    stored_mode = st.session_state.get(mode_key, getattr(snapshot, "workflow_view_mode", WORKFLOW_FILTER_DEFAULTS["workflow_mode"]))
+    current_mode = _normalize_workflow_mode(stored_mode)
+    st.session_state[mode_key] = _workflow_mode_label(current_mode)
     current_category = str(st.session_state.get(category_key, WORKFLOW_FILTER_DEFAULTS["filter_category"]))
     current_coverage = str(st.session_state.get(coverage_key, WORKFLOW_FILTER_DEFAULTS["coverage_view"]))
     current_deviation = str(st.session_state.get(deviation_key, WORKFLOW_FILTER_DEFAULTS["deviation_view"]))
@@ -819,7 +860,7 @@ def _workflow_controls_from_state(snapshot: AnalysisSnapshot) -> dict[str, Any]:
     metric_options = ["Conformance bucket", "Frequency", "Median delay", "P90 delay"]
     metric_default = current_metric if current_metric in metric_options else "Conformance bucket"
     return {
-        "workflow_mode": "interactive",
+        "workflow_mode": current_mode,
         "filter_category": _normalize_filter_category(current_category),
         "coverage_view": current_coverage.lower() if current_coverage else "all",
         "deviation_view": current_deviation or "All",
@@ -837,6 +878,7 @@ def _render_workflow_controls(
     controls: Optional[dict[str, Any]] = None,
     layout: str = "panel",
 ) -> dict[str, Any]:
+    mode_key = _widget_key(snapshot, "workflow_mode")
     category_key = _widget_key(snapshot, "workflow_filter_category")
     coverage_key = _widget_key(snapshot, "workflow_coverage")
     deviation_key = _widget_key(snapshot, "workflow_deviation")
@@ -852,12 +894,13 @@ def _render_workflow_controls(
     current_detail = str(state_controls.get("detail_level", "analyst")).title()
     current_lens = str(state_controls.get("conformance_lens", "% of paths"))
     current_category = _normalize_filter_category(str(state_controls.get("filter_category", "Pathway")))
+    current_mode = _workflow_mode_label(state_controls.get("workflow_mode", WORKFLOW_FILTER_DEFAULTS["workflow_mode"]))
 
     metric_options = ["Conformance bucket", "Frequency", "Median delay", "P90 delay"]
     metric_default = current_metric if current_metric in metric_options else "Conformance bucket"
     filter_category = current_category
     if layout == "toolbar":
-        toolbar_cols = st.columns([1.02, 1.1, 0.82, 0.78, 0.82, 0.6], gap="medium")
+        toolbar_cols = st.columns([1.02, 1.1, 0.82, 0.86, 0.78, 0.82, 0.6], gap="medium")
         with toolbar_cols[0]:
             coverage_view = _render_choice_control(
                 "Path view",
@@ -880,20 +923,27 @@ def _render_workflow_controls(
                 key=metric_key,
             )
         with toolbar_cols[3]:
+            workflow_mode_label = _render_choice_control(
+                "View",
+                WORKFLOW_VIEW_OPTIONS,
+                key=mode_key,
+                default=current_mode,
+            )
+        with toolbar_cols[4]:
             detail_label = _render_choice_control(
                 "Density",
                 ["Executive", "Analyst", "Research"],
                 key=detail_key,
                 default=current_detail,
             )
-        with toolbar_cols[4]:
+        with toolbar_cols[5]:
             lens_label = _render_choice_control(
                 "Lens",
                 ["% of activities", "% of paths"],
                 key=lens_key,
                 default=current_lens,
             )
-        with toolbar_cols[5]:
+        with toolbar_cols[6]:
             st.markdown("##### Actions")
             reset_filters = st.button("Reset filters", key=_widget_key(snapshot, "workflow_reset_filters"))
     elif layout == "rail":
@@ -908,6 +958,7 @@ def _render_workflow_controls(
         metric_coloring = metric_default
         detail_label = current_detail
         lens_label = current_lens
+        workflow_mode_label = current_mode
         reset_filters = False
 
         _render_filter_composer_child(filter_category)
@@ -926,6 +977,12 @@ def _render_workflow_controls(
                 default=current_deviation,
             )
         elif filter_category == "Display":
+            workflow_mode_label = _render_choice_control(
+                "View",
+                WORKFLOW_VIEW_OPTIONS,
+                key=mode_key,
+                default=current_mode,
+            )
             metric_coloring = st.selectbox(
                 "Color",
                 options=metric_options,
@@ -958,6 +1015,7 @@ def _render_workflow_controls(
             metric_coloring=metric_coloring,
             detail_label=detail_label,
             lens_label=lens_label,
+            workflow_mode_label=workflow_mode_label,
             filter_category=filter_category,
         )
         if filter_category != "Actions":
@@ -986,6 +1044,12 @@ def _render_workflow_controls(
             index=metric_options.index(metric_default),
             key=metric_key,
         )
+        workflow_mode_label = _render_choice_control(
+            "View",
+            WORKFLOW_VIEW_OPTIONS,
+            key=mode_key,
+            default=current_mode,
+        )
         detail_label = _render_choice_control(
             "Density",
             ["Executive", "Analyst", "Research"],
@@ -1006,7 +1070,7 @@ def _render_workflow_controls(
             rerun()
 
     return {
-        "workflow_mode": "interactive",
+        "workflow_mode": _normalize_workflow_mode(workflow_mode_label),
         "filter_category": _normalize_filter_category(filter_category),
         "coverage_view": str(coverage_view).lower(),
         "deviation_view": str(deviation_view),
@@ -1118,6 +1182,12 @@ def _render_workflow_stage_toolbar(snapshot: AnalysisSnapshot, *, workflow: dict
     if excluded_cases:
         case_scope += f" · {excluded_cases:,} excluded"
     lens = str(controls.get("conformance_lens", "% of paths"))
+    workflow_mode = _normalize_workflow_mode(controls.get("workflow_mode"))
+    workflow_title = {
+        "explorer": "Interactive workflow explorer",
+        "board": "Workflow board",
+        "bpmn": "BPMN-style workflow map",
+    }.get(workflow_mode, "Interactive workflow explorer")
     header_col, clear_col, reset_col = st.columns([0.74, 0.13, 0.13], gap="small")
     with header_col:
         st.markdown(
@@ -1125,7 +1195,7 @@ def _render_workflow_stage_toolbar(snapshot: AnalysisSnapshot, *, workflow: dict
                 "<div class='crpm-dashboard-map-toolbar crpm-conformance-stage-header'>"
                 "<div class='crpm-conformance-stage-header__copy'>"
                 "<div class='crpm-conformance-stage-header__eyebrow'>Process map</div>"
-                "<div class='crpm-conformance-stage-header__title'>Interactive workflow explorer</div>"
+                f"<div class='crpm-conformance-stage-header__title'>{html.escape(workflow_title)}</div>"
                 "</div>"
                 "<div class='crpm-conformance-stage-header__chips'>"
                 f"<span>{html.escape(mode)}</span>"
@@ -1257,6 +1327,21 @@ def _normalize_filter_category(value: str) -> str:
     return value if value in WORKFLOW_FILTER_CATEGORIES else WORKFLOW_FILTER_DEFAULTS["filter_category"]
 
 
+def _normalize_workflow_mode(value: Any) -> str:
+    text = str(value or "").strip().lower().replace("_", " ").replace("-", " ")
+    if text in {"explorer", "interactive", "interaction", "dynamic"}:
+        return "explorer"
+    if text in {"board", "static", "svg"}:
+        return "board"
+    if text in {"bpmn", "bpmn style", "bpmn styled", "bpmn map"}:
+        return "bpmn"
+    return _normalize_workflow_mode(WORKFLOW_FILTER_DEFAULTS["workflow_mode"]) if text else "explorer"
+
+
+def _workflow_mode_label(value: Any) -> str:
+    return WORKFLOW_VIEW_LABELS.get(_normalize_workflow_mode(value), WORKFLOW_FILTER_DEFAULTS["workflow_mode"])
+
+
 def _render_filter_category_boxes(
     snapshot: AnalysisSnapshot,
     *,
@@ -1317,10 +1402,12 @@ def _render_active_filter_summary(
     metric_coloring: str,
     detail_label: str,
     lens_label: str,
+    workflow_mode_label: str,
     filter_category: str,
 ) -> None:
     chips = [
         ("Active", filter_category),
+        ("View", workflow_mode_label),
         ("Pathway", coverage_view),
         ("Deviation", deviation_view),
         ("Lens", lens_label),
@@ -1355,14 +1442,28 @@ def _has_streamlit_run_context() -> bool:
 
 
 def _render_workflow_mode_banner(workflow_mode: str) -> None:
-    if workflow_mode == "interactive":
+    workflow_mode = _normalize_workflow_mode(workflow_mode)
+    if workflow_mode == "explorer":
         st.markdown(
             (
                 "<div class='crpm-mode-banner crpm-mode-banner--interactive'>"
-                "<div class='crpm-mode-banner__title'>Interactive mode: investigation view</div>"
+                "<div class='crpm-mode-banner__title'>Explorer: investigation view</div>"
                 "<div class='crpm-mode-banner__body'>"
                 "Use zoom and local focus in the explorer to inspect neighboring branches quickly. "
                 "Pin exact node and edge metrics from the inspector selectors when you need stable ranked detail."
+                "</div>"
+                "</div>"
+            ),
+            unsafe_allow_html=True,
+        )
+        return
+    if workflow_mode == "bpmn":
+        st.markdown(
+            (
+                "<div class='crpm-mode-banner crpm-mode-banner--bpmn'>"
+                "<div class='crpm-mode-banner__title'>BPMN style: notation view</div>"
+                "<div class='crpm-mode-banner__body'>"
+                "The diagram uses the same filtered workflow payload with BPMN-style events, gateways, tasks, and sequence flows."
                 "</div>"
                 "</div>"
             ),

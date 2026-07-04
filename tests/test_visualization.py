@@ -23,6 +23,7 @@ from crpm.visualization import (
     create_workflow_cytoscape_payload,
     create_workflow_conformance_sankey,
     _workflow_primary_path_nodes,
+    render_workflow_bpmn_style_svg,
     render_workflow_explorer_html,
     render_workflow_conformance_svg,
     workflow_edge_uid,
@@ -193,6 +194,142 @@ def test_empty_chart_annotation_uses_readable_theme():
     assert fig.layout.font.color == "#1f2c25"
     assert fig.layout.annotations[0].font.color == "#1f2c25"
     assert fig.layout.annotations[0].bgcolor
+
+
+def _bpmn_style_workflow_payload() -> dict:
+    rare_edge_uid = workflow_edge_uid("FIT_mail -> Reminder_mail", "Model deviation", "skip", "reminder")
+    return {
+        "nodes": pd.DataFrame(
+            [
+                {
+                    "activity": "Invitation_mail",
+                    "display_name": "Invitation",
+                    "cases": 140,
+                    "occurrences": 145,
+                    "median_next_delay_days": 35.0,
+                    "severity": "Low",
+                    "conformance_bucket": "Conformant",
+                    "branch_role": "mainline",
+                    "coverage_group": "dominant",
+                    "lane": "center",
+                    "step_rank": 0,
+                },
+                {
+                    "activity": "FIT_mail",
+                    "display_name": "FIT mail",
+                    "cases": 136,
+                    "occurrences": 140,
+                    "median_next_delay_days": 56.0,
+                    "severity": "Moderate",
+                    "conformance_bucket": "Conformant",
+                    "branch_role": "mainline",
+                    "coverage_group": "dominant",
+                    "lane": "center",
+                    "step_rank": 1,
+                },
+                {
+                    "activity": "Reminder_mail",
+                    "display_name": "Reminder",
+                    "cases": 42,
+                    "occurrences": 42,
+                    "median_next_delay_days": 12.0,
+                    "severity": "High",
+                    "conformance_bucket": "Model deviation",
+                    "branch_role": "side",
+                    "coverage_group": "rare",
+                    "lane": "left",
+                    "branch_family": "reminder",
+                    "node_type": "deviation",
+                    "step_rank": 2,
+                },
+            ]
+        ),
+        "edges": pd.DataFrame(
+            [
+                {
+                    "edge_id": "Invitation_mail -> FIT_mail",
+                    "source": "Invitation_mail",
+                    "target": "FIT_mail",
+                    "frequency": 145128,
+                    "median_days": 35.0,
+                    "severity": "Low",
+                    "share_pct": 82.5,
+                    "conformance_bucket": "Conformant",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                    "edge_type": "expected",
+                },
+                {
+                    "edge_id": "FIT_mail -> Reminder_mail",
+                    "edge_uid": rare_edge_uid,
+                    "source": "FIT_mail",
+                    "target": "Reminder_mail",
+                    "frequency": 42,
+                    "median_days": 12.0,
+                    "severity": "High",
+                    "share_pct": 1.8,
+                    "conformance_bucket": "Model deviation",
+                    "coverage_group": "rare",
+                    "branch_role": "side",
+                    "branch_family": "reminder",
+                    "edge_type": "skip",
+                    "stroke_style": "dashed",
+                },
+            ]
+        ),
+        "legend": pd.DataFrame(),
+        "trace_profiles": pd.DataFrame(
+            [
+                {
+                    "trace_ref": "RAW-CASE-ID-42",
+                    "case_path": r"C:\Users\hugof\Desktop\private-log.xes",
+                    "representative_edge_uid": rare_edge_uid,
+                }
+            ]
+        ),
+        "summary": {"visible_case_count": 140, "excluded_case_count": 5, "median_throughput_days": 35.0, "deviation_share": 30.0},
+        "overall_median_delay_days": 35.0,
+    }
+
+
+def test_workflow_bpmn_style_svg_returns_bpmn_notation_without_trace_leaks():
+    svg = render_workflow_bpmn_style_svg(_bpmn_style_workflow_payload(), metric_coloring="Conformance bucket")
+
+    assert 'class="crpm-bpmn-style-board"' in svg
+    assert 'data-qa="bpmn-start-event"' in svg
+    assert 'data-qa="bpmn-end-event"' in svg
+    assert 'data-qa="bpmn-task"' in svg
+    assert 'data-qa="bpmn-gateway"' in svg
+    assert 'data-qa="bpmn-sequence-flow"' in svg
+    assert 'data-qa="bpmn-swimlane-main"' in svg
+    assert "Reminder" in svg
+    assert "RAW-CASE-ID-42" not in svg
+    assert "private-log.xes" not in svg
+
+
+def test_workflow_bpmn_style_svg_highlights_pinned_node_and_edge():
+    payload = _bpmn_style_workflow_payload()
+    rare_edge_uid = str(payload["edges"].loc[1, "edge_uid"])
+    payload["selected_node_id"] = "Reminder_mail"
+    payload["selected_edge_uid"] = rare_edge_uid
+
+    svg = render_workflow_bpmn_style_svg(payload, metric_coloring="Frequency", detail_level="research")
+
+    assert 'class="crpm-bpmn-node crpm-bpmn-gateway is-selected"' in svg
+    assert 'class="crpm-bpmn-sequence-flow is-selected"' in svg
+    assert f'data-edge-uid="{rare_edge_uid.replace(">", "&gt;")}"' in svg
+
+
+def test_filtered_payload_drives_bpmn_style_view():
+    payload = _bpmn_style_workflow_payload()
+    filtered = filter_workflow_payload(payload, coverage_view="rare", deviation_view="Model deviations", detail_level="research")
+    svg = render_workflow_bpmn_style_svg(filtered)
+
+    assert "Reminder" in svg
+    assert "Invitation" not in svg
+    assert "FIT mail" not in svg
+    assert 'data-qa="bpmn-gateway"' in svg
+    assert "RAW-CASE-ID-42" not in svg
 
 
 def test_workflow_board_svg_returns_markup():
