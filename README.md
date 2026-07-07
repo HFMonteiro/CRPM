@@ -11,9 +11,9 @@ Developed in the context of PhD research at the **Faculty of Medicine, Universit
 
 ## Branch Status
 
-- `main` is the public stable branch.
-- `_CRPM_v3` is the active process-intelligence dashboard branch. It keeps the same Python-first Streamlit architecture while adding reproducibility, governance, batch, manifest, data-quality, and dashboard refinements.
-- Promotion from `_CRPM_v3` to `main` should happen only after review, local validation, and an explicit merge decision.
+- `main` is the public stable branch and now includes the v3 process-intelligence workbench capabilities.
+- `_CRPM_v3` remains the active test-bed branch for dashboard, BPMN-style workflow, reproducibility, governance, batch, manifest, data-quality, and UI refinements.
+- Future promotion from `_CRPM_v3` to `main` should happen only after review, local validation, remote CI, and an explicit merge decision.
 
 ## Screenshots
 
@@ -46,8 +46,36 @@ streamlit run app.py
 - `Discovery` and `Model Comparison` for Petri net discovery and quality tradeoffs
 - `Operational Flow`, `DFG Visualizations`, and `Process Performance` for pathway movement, bottlenecks, and timing
 - `Variant Analysis` for dominant and rare trace structure
-- `Conformance Analytics` for token-based diagnostics, SVG workflow boards, and interactive workflow exploration
+- `Conformance Analytics` for token-based diagnostics, SVG workflow boards, interactive workflow exploration, and BPMN-style workflow viewing
 - local XES and CSV ingestion through the Streamlit shell
+
+## Project Structure
+
+The repository is intentionally small and local-first. The most useful map for readers is by responsibility, not by every file:
+
+```text
+CRPM/
+|-- app.py                    # Streamlit entrypoint
+|-- crpm/
+|   |-- app_shell.py           # global Streamlit shell, sidebar, page routing
+|   |-- app_runtime.py         # log loading, filtering, analysis orchestration
+|   |-- app_state.py           # typed session state and page snapshots
+|   |-- pages/                 # Overview, Discovery, DFG, Conformance, Performance...
+|   |-- conformance.py         # PM4Py conformance and model diagnostics
+|   |-- discovery.py           # discovery algorithms and model summaries
+|   |-- process_map.py         # shared process-map payload contract
+|   |-- dfg_utils.py           # DFG extraction and Graphviz/SVG rendering
+|   |-- visualization.py       # Plotly, SVG, and analytical visual builders
+|   |-- screening.py           # colorectal-screening domain helpers
+|   |-- batch_cli.py           # headless config-driven analysis
+|   `-- run_manifest.py        # privacy-safe run metadata and audit output
+|-- examples/                  # synthetic/public demo logs and reference model
+|-- docs/                      # governance, research contract, screenshots
+|-- tests/                     # unit, contract, CLI, rendering, and governance tests
+`-- pyproject.toml             # package metadata, dependencies, CLI entrypoints
+```
+
+For a more detailed reader-oriented walkthrough, see `docs/project_structure.md`.
 
 ## Sample Data
 

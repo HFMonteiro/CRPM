@@ -439,7 +439,7 @@ def test_render_dfg_to_svg_returns_vector_markup():
     assert "width:100%" in svg
     assert "max-width:100%" in svg
     assert "min-width:0" in svg
-    assert "height:clamp(240px, 30vh, 340px)" in svg
+    assert "height:clamp(320px, 38vh, 480px)" in svg
 
 
 def test_render_dfg_to_svg_uses_pipe_output_and_responsive_wrapper(monkeypatch):
@@ -454,7 +454,7 @@ def test_render_dfg_to_svg_uses_pipe_output_and_responsive_wrapper(monkeypatch):
 
     assert svg.startswith("<svg ")
     assert 'preserveAspectRatio="xMidYMid meet"' in svg
-    assert 'style="width:100%; max-width:100%; min-width:0; height:clamp(240px, 30vh, 340px); display:block;"' in svg
+    assert 'style="width:100%; max-width:100%; min-width:0; height:clamp(320px, 38vh, 480px); display:block;"' in svg
     assert "demo" in svg
 
 

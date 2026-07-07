@@ -26,10 +26,15 @@ def render_comparison_page(snapshot: AnalysisSnapshot) -> None:
         return
 
     comparison_df = snapshot.comparison_df.copy()
+    sparse_comparison = len(comparison_df) < 4
     render_page_cockpit_topbar(
         snapshot,
         title="Model comparison cockpit",
-        subtitle="Use the scatter as the primary decision surface, then confirm exact values in the report table.",
+        subtitle=(
+            "Use the heatmap and exact table for small candidate sets; scatter becomes useful once there are enough models."
+            if sparse_comparison
+            else "Use the scatter as the primary decision surface, then confirm exact values in the report table."
+        ),
         meta=[snapshot.input_name or "No log loaded", f"{len(comparison_df):,} model candidate(s)"],
     )
     display_df = comparison_df.copy()
@@ -83,10 +88,15 @@ def render_comparison_page(snapshot: AnalysisSnapshot) -> None:
 
     if best_balanced is not None:
         render_quiet_note(
-            f"Recommended starting point: {best_balanced['model_name']}. Use the scatter for trade-offs and the table for exact metrics."
+            f"Recommended starting point: {best_balanced['model_name']}. "
+            + (
+                "With this few models, use the heatmap and exact table rather than over-reading a scatter."
+                if sparse_comparison
+                else "Use the scatter for trade-offs and the table for exact metrics."
+            )
         )
 
-    if len(comparison_df) > 1:
+    if len(comparison_df) > 3:
         scatter_col, evidence_col = st.columns(2)
         with scatter_col:
             st.markdown("#### Fitness versus precision")
@@ -97,6 +107,12 @@ def render_comparison_page(snapshot: AnalysisSnapshot) -> None:
                 create_model_comparison_heatmap(comparison_df, ["alignment_fitness", "token_fitness", "precision"]),
                 key="shell_comparison_heatmap",
             )
+    elif len(comparison_df) > 1:
+        st.markdown("#### Metrics heatmap")
+        render_plotly_chart(
+            create_model_comparison_heatmap(comparison_df, ["alignment_fitness", "token_fitness", "precision"]),
+            key="shell_comparison_heatmap",
+        )
 
     comparison_table = display_df.rename(
         columns={

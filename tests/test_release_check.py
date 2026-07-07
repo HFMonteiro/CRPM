@@ -1,3 +1,4 @@
+import zipfile
 from types import SimpleNamespace
 
 from crpm import release_check
@@ -34,3 +35,25 @@ def test_build_package_falls_back_when_build_module_is_missing(monkeypatch, tmp_
     assert result.ok
     assert "pip" in calls[1]
     assert "wheel" in calls[1]
+
+
+def test_inspect_wheel_requires_logo_and_typing_marker(tmp_path) -> None:
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    wheel_path = dist / "crpm-0.3.0-py3-none-any.whl"
+
+    with zipfile.ZipFile(wheel_path, "w") as wheel:
+        wheel.writestr("crpm/assets/crpm_logo.png", b"png")
+
+    missing_marker = release_check._inspect_wheel(tmp_path)
+
+    assert not missing_marker.ok
+    assert "typing marker" in missing_marker.detail
+
+    with zipfile.ZipFile(wheel_path, "w") as wheel:
+        wheel.writestr("crpm/assets/crpm_logo.png", b"png")
+        wheel.writestr("crpm/py.typed", "")
+
+    complete = release_check._inspect_wheel(tmp_path)
+
+    assert complete.ok

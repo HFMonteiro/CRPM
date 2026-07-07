@@ -347,7 +347,14 @@ def store_cache_entry(cache: MutableMapping[str, Any], key: str, value: Any, *, 
 
 def render_plotly_chart(fig: go.Figure, *, key: str) -> None:
     try:
-        st.plotly_chart(fig, use_container_width=True, key=key)
+        if isinstance(fig, go.Figure):
+            fig.update_layout(autosize=True)
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+            key=key,
+            config={"responsive": True, "displayModeBar": False},
+        )
     except Exception:
         logger.exception("Failed to render Plotly chart with key %s", key)
         st.warning("This chart could not be displayed. Please rerun the analysis or use the table below.")

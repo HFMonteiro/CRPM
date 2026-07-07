@@ -876,10 +876,15 @@ def create_model_comparison_heatmap(comparison_df: pd.DataFrame, metrics: List[s
             z=matrix,
             x=model_names,
             y=metrics,
-            colorscale="RdYlGn",
+            colorscale=[
+                [0.0, "#b57a3e"],
+                [0.45, "#f2e2b8"],
+                [0.7, "#9fc2b8"],
+                [1.0, "#2f6f8f"],
+            ],
             text=[[f"{val:.3f}" if not pd.isna(val) else "N/A" for val in row] for row in matrix],
             texttemplate="%{text}",
-            textfont={"size": 10},
+            textfont={"size": 12},
             colorbar=dict(title="Value"),
         )
     )
@@ -888,10 +893,11 @@ def create_model_comparison_heatmap(comparison_df: pd.DataFrame, metrics: List[s
         title="Model Comparison Heatmap",
         xaxis_title="Model",
         yaxis_title="Metric",
-        height=max(CHART_HEIGHT_DYNAMIC_MIN, len(metrics) * 50),
+        height=max(300, len(metrics) * 74),
     )
 
     _apply_chart_theme(fig)
+    fig.update_layout(margin=dict(l=72, r=38, t=58, b=56))
 
     return fig
 

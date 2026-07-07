@@ -136,6 +136,10 @@ def test_model_comparison_heatmap_returns_figure():
     fig = create_model_comparison_heatmap(df, metrics=["alignment_fitness", "precision"])
     assert isinstance(fig, go.Figure)
     assert fig.layout.width is None
+    assert fig.layout.height == 300
+    assert fig.layout.margin.l == 72
+    assert fig.data[0].colorscale[0] == (0.0, "#b57a3e")
+    assert fig.data[0].textfont.size == 12
 
 
 def test_operational_flow_chart_returns_figure():

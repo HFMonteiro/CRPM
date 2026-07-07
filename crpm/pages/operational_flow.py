@@ -128,14 +128,14 @@ def _render_single_view(section_title: str, view: dict[str, Any]) -> None:
                 "eyebrow": "Return",
                 "title": "FIT return rate",
                 "value": _format_rate(kpis.get("fit_return_rate")),
-                "body": "Observed return conversion.",
+                "body": _fit_return_body(kpis),
                 "tone": "accent",
             },
             {
                 "eyebrow": "Completion",
                 "title": "Colonoscopy completion",
                 "value": _format_rate(kpis.get("colonoscopy_completion_rate")),
-                "body": "Observed pathway completion.",
+                "body": _completion_body(kpis),
                 "tone": "success",
             },
             {
@@ -156,19 +156,23 @@ def _render_single_view(section_title: str, view: dict[str, Any]) -> None:
     )
 
     if lens == "Stage flow":
-        st.caption("Weekly case volumes by canonical stage for the current filtered cohort.")
+        st.caption("Weekly case volumes by canonical stage for the current filtered cohort; unit is cases per sequential week.")
         render_plotly_chart(
             create_operational_flow_chart(view["weekly_counts"], title=f"{section_title} · weekly flow"),
             key=f"operational_flow_{section_title}",
         )
     elif lens == "Queue stock":
-        st.caption("Estimated queue size per week from cumulative stage throughput for the current filtered cohort.")
+        st.caption(
+            "Estimated queue stock by sequential week from cumulative stage throughput; latest queue cards use the final observed week."
+        )
         render_plotly_chart(
             create_queue_stock_chart(view["stock_levels"], title=f"{section_title} · queue stock"),
             key=f"operational_stock_{section_title}",
         )
     else:
-        st.caption("Median and P90 hand-off delays in days for the current filtered cohort. Use the table for exact values.")
+        st.caption(
+            "Median and P90 hand-off delays in days for observed canonical transitions in the current filtered cohort. Use the table for exact values."
+        )
         aging_cols = st.columns([1.45, 1.0], gap="large")
         with aging_cols[0]:
             render_plotly_chart(
@@ -205,14 +209,14 @@ def _render_comparison_view(pre_view: dict[str, Any], post_view: dict[str, Any])
                 "eyebrow": "PRE",
                 "title": "FIT return rate",
                 "value": _format_rate(pre_view["kpis"].get("fit_return_rate")),
-                "body": "Baseline flow conversion.",
+                "body": _fit_return_body(pre_view["kpis"]),
                 "tone": "success",
             },
             {
                 "eyebrow": "POST",
                 "title": "FIT return rate",
                 "value": _format_rate(post_view["kpis"].get("fit_return_rate")),
-                "body": "Incident-period flow conversion.",
+                "body": _fit_return_body(post_view["kpis"]),
                 "tone": "neutral",
             },
         ]
@@ -230,7 +234,7 @@ def _render_comparison_view(pre_view: dict[str, Any], post_view: dict[str, Any])
                 "POST": _format_rate(post_view["kpis"].get("fit_return_rate")),
             },
             {
-                "Metric": "Colonoscopy completion",
+                "Metric": "Colonoscopy completion rate",
                 "PRE": _format_rate(pre_view["kpis"].get("colonoscopy_completion_rate")),
                 "POST": _format_rate(post_view["kpis"].get("colonoscopy_completion_rate")),
             },
@@ -251,17 +255,17 @@ def _render_comparison_view(pre_view: dict[str, Any], post_view: dict[str, Any])
     )
 
     if lens == "Stage flow":
-        st.caption("Weekly stage throughput comparison between the PRE and POST incident cohorts.")
+        st.caption("Weekly stage throughput comparison between the PRE and POST incident cohorts; unit is cases per sequential week.")
         render_plotly_chart(create_operational_flow_chart(pre_view["weekly_counts"], title="PRE weekly flow"), key="operational_pre_flow")
         render_plotly_chart(
             create_operational_flow_chart(post_view["weekly_counts"], title="POST weekly flow"), key="operational_post_flow"
         )
     elif lens == "Queue stock":
-        st.caption("Estimated queue accumulation comparison between the PRE and POST cohorts.")
+        st.caption("Estimated queue accumulation comparison between PRE and POST cohorts; stock is cumulative inflow minus outflow.")
         render_plotly_chart(create_queue_stock_chart(pre_view["stock_levels"], title="PRE queue stock"), key="operational_pre_stock")
         render_plotly_chart(create_queue_stock_chart(post_view["stock_levels"], title="POST queue stock"), key="operational_post_stock")
     else:
-        st.caption("Median and P90 delay comparison (days) between the PRE and POST cohorts.")
+        st.caption("Median and P90 delay comparison in days between PRE and POST cohorts, using observed canonical hand-offs.")
         render_plotly_chart(create_stage_aging_chart(pre_view["aging_metrics"], title="PRE stage aging"), key="operational_pre_aging")
         if not pre_view["aging_metrics"].empty:
             with st.expander("PRE exact values", expanded=False):
@@ -280,6 +284,27 @@ def _format_rate(value: Any) -> str:
     if value is None or pd.isna(value):
         return "N/A"
     return f"{float(value) * 100:.1f}%"
+
+
+def _fit_return_body(kpis: dict[str, Any]) -> str:
+    numerator = kpis.get("fit_return_cases")
+    denominator = kpis.get("invitation_cases")
+    if numerator is not None and denominator:
+        rate = kpis.get("fit_return_rate")
+        prefix = "Check denominator: " if rate is not None and not pd.isna(rate) and float(rate) > 1.0 else ""
+        return f"{prefix}{int(numerator):,} / {int(denominator):,} invited cases."
+    return "Observed return conversion."
+
+
+def _completion_body(kpis: dict[str, Any]) -> str:
+    numerator = kpis.get("colonoscopy_completion_numerator_count")
+    denominator = kpis.get("colonoscopy_completion_denominator_count")
+    denominator_label = str(kpis.get("colonoscopy_completion_denominator") or "eligible previous step")
+    rate = kpis.get("colonoscopy_completion_rate")
+    if numerator is not None and denominator:
+        prefix = "Check denominator: " if rate is not None and not pd.isna(rate) and float(rate) > 1.0 else ""
+        return f"{prefix}{int(numerator):,} / {int(denominator):,} after {denominator_label}."
+    return "Observed pathway completion."
 
 
 def _format_count(value: Any) -> str:

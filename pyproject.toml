@@ -59,7 +59,7 @@ crpm-analyze = "crpm.batch_cli:main"
 packages = ["crpm", "crpm.assets", "crpm.pages"]
 
 [tool.setuptools.package-data]
-crpm = ["assets/*"]
+crpm = ["assets/*", "py.typed"]
 
 [tool.ruff]
 target-version = "py310"

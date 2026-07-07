@@ -400,6 +400,20 @@ def test_render_comparison_page_renders_ranked_table_and_charts(monkeypatch) -> 
                 "precision": 0.8,
                 "discovery_time_s": 0.3,
             },
+            {
+                "model_name": "Alpha",
+                "alignment_fitness": 0.84,
+                "token_fitness": 0.82,
+                "precision": 0.78,
+                "discovery_time_s": 0.4,
+            },
+            {
+                "model_name": "ILP",
+                "alignment_fitness": 0.8,
+                "token_fitness": 0.79,
+                "precision": 0.74,
+                "discovery_time_s": 0.6,
+            },
         ]
     )
     comparison_page.render_comparison_page(_snapshot(comparison_df=comparison_df))
@@ -408,6 +422,27 @@ def test_render_comparison_page_renders_ranked_table_and_charts(monkeypatch) -> 
     assert not calls["table"][0].empty
     assert calls["table"][1]["label_column"] == "Model"
     assert len(calls["charts"]) == 2
+
+
+def test_render_comparison_page_uses_heatmap_only_for_sparse_candidates(monkeypatch) -> None:
+    calls = {"charts": []}
+    monkeypatch.setattr(comparison_page.st, "subheader", lambda *args, **kwargs: None)
+    monkeypatch.setattr(comparison_page.st, "caption", lambda *args, **kwargs: None)
+    monkeypatch.setattr(comparison_page.st, "markdown", lambda *args, **kwargs: None)
+    monkeypatch.setattr(comparison_page, "render_html_ranked_table", lambda *args, **kwargs: None)
+    monkeypatch.setattr(comparison_page, "render_plotly_chart", lambda fig, key: calls["charts"].append(key))
+    monkeypatch.setattr(comparison_page, "create_fitness_precision_scatter", lambda df: object())
+    monkeypatch.setattr(comparison_page, "create_model_comparison_heatmap", lambda df, metrics: object())
+
+    comparison_df = pd.DataFrame(
+        [
+            {"model_name": "Inductive", "alignment_fitness": 0.92, "token_fitness": 0.9, "precision": 0.85},
+            {"model_name": "Heuristics", "alignment_fitness": 0.88, "token_fitness": 0.86, "precision": 0.8},
+        ]
+    )
+    comparison_page.render_comparison_page(_snapshot(comparison_df=comparison_df))
+
+    assert calls["charts"] == ["shell_comparison_heatmap"]
 
 
 def test_render_operational_flow_page_renders_charts(monkeypatch) -> None:
@@ -491,6 +526,37 @@ def test_render_operational_flow_page_renders_charts(monkeypatch) -> None:
     assert calls["subheader"] == "Operational Flow"
     assert len(calls["charts"]) == 1
     assert any("weekly case volumes" in text.lower() for text in calls["captions"])
+    assert any("cases per sequential week" in text.lower() for text in calls["captions"])
+
+
+def test_operational_flow_rate_bodies_include_denominators() -> None:
+    kpis = {
+        "fit_return_cases": 75,
+        "invitation_cases": 100,
+        "fit_return_rate": 0.75,
+        "colonoscopy_completion_numerator_count": 28,
+        "colonoscopy_completion_denominator_count": 28,
+        "colonoscopy_completion_denominator": "PCC observation",
+        "colonoscopy_completion_rate": 1.0,
+    }
+
+    assert operational_flow_page._fit_return_body(kpis) == "75 / 100 invited cases."
+    assert operational_flow_page._completion_body(kpis) == "28 / 28 after PCC observation."
+
+
+def test_operational_flow_rate_bodies_flag_denominator_mismatch() -> None:
+    kpis = {
+        "fit_return_cases": 12,
+        "invitation_cases": 10,
+        "fit_return_rate": 1.2,
+        "colonoscopy_completion_numerator_count": 15,
+        "colonoscopy_completion_denominator_count": 2,
+        "colonoscopy_completion_denominator": "PCC observation",
+        "colonoscopy_completion_rate": 7.5,
+    }
+
+    assert operational_flow_page._fit_return_body(kpis).startswith("Check denominator:")
+    assert operational_flow_page._completion_body(kpis).startswith("Check denominator:")
 
 
 def test_render_operational_flow_page_uses_data_driven_period_defaults(
@@ -1708,6 +1774,58 @@ def test_reset_workflow_view_increments_viewport_nonce_without_mutating_filters_
     assert session_state[conformance_page._widget_key(snapshot, "workflow_metric_coloring")] == "Median delay"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_detail_level")] == "Research"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_viewport_nonce")] == 3
+
+
+def test_retained_workflow_state_bits_empty_for_default_conformance_state() -> None:
+    snapshot = SimpleNamespace(filter_key="filter", input_name="sample.xes")
+    controls = {
+        "workflow_mode": "explorer",
+        "coverage_view": "all",
+        "deviation_view": "All",
+        "metric_coloring": "Conformance bucket",
+        "detail_level": "analyst",
+        "conformance_lens": "% of paths",
+    }
+
+    assert (
+        conformance_page._retained_workflow_state_bits(
+            snapshot,
+            controls,
+            selection_kind="none",
+            selection_id=None,
+        )
+        == []
+    )
+
+
+def test_retained_workflow_state_chip_summarizes_persisted_pin_and_filters(monkeypatch) -> None:
+    snapshot = SimpleNamespace(filter_key="filter", input_name="sample.xes")
+    controls = {
+        "workflow_mode": "bpmn",
+        "coverage_view": "rare",
+        "deviation_view": "Log deviations",
+        "metric_coloring": "Median delay",
+        "detail_level": "research",
+        "conformance_lens": "% of activities",
+    }
+    calls: list[str] = []
+
+    monkeypatch.setattr(conformance_page.st, "markdown", lambda text, **kwargs: calls.append(text))
+
+    conformance_page._render_retained_workflow_state_chip(
+        snapshot,
+        controls,
+        selection_kind="node",
+        selection_id="FIT_mail",
+    )
+
+    rendered = " ".join(calls)
+    assert 'data-qa="retained-workflow-state"' in rendered
+    assert "State retained" in rendered
+    assert "pin: FIT mail" in rendered
+    assert "view: BPMN style" in rendered
+    assert "path: Rare" in rendered
+    assert "+3" in rendered
 
 
 def test_workflow_mode_banner_text_differs_by_mode(monkeypatch) -> None:

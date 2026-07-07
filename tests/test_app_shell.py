@@ -298,7 +298,7 @@ def test_render_header_prompts_rerun_with_note_and_toast(monkeypatch) -> None:
     assert calls["toast"]
 
 
-def test_render_header_renders_compact_shell_intro_for_non_conformance_pages(monkeypatch) -> None:
+def test_render_header_renders_compact_run_context_for_non_conformance_pages(monkeypatch) -> None:
     import crpm.app_shell as app_shell
 
     snapshot = SimpleNamespace(
@@ -308,16 +308,17 @@ def test_render_header_renders_compact_shell_intro_for_non_conformance_pages(mon
         comparison_df=pd.DataFrame([{"model_name": "Model"}]),
         input_name="running-example.xes",
         active_followup_label="Full available follow-up",
+        analysis_complete=True,
         config_change_message=None,
         filter_error_message=None,
     )
-    calls = {"markdown": [], "metrics": []}
+    calls = {"markdown": []}
     monkeypatch.setattr(
         app_shell,
         "st",
         SimpleNamespace(
             markdown=lambda text, **kwargs: calls["markdown"].append(text),
-            columns=lambda n: [SimpleNamespace(metric=lambda *args, **kwargs: calls["metrics"].append(args)) for _ in range(n)],
+            columns=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Run context should not render global metric columns")),
             caption=lambda *args, **kwargs: None,
             error=lambda *args, **kwargs: None,
             toast=lambda *args, **kwargs: None,
@@ -328,14 +329,17 @@ def test_render_header_renders_compact_shell_intro_for_non_conformance_pages(mon
     app_shell._render_header(snapshot, page="Discovery")
 
     rendered = " ".join(calls["markdown"])
-    assert "crpm-shell-hero--compact" in rendered
-    assert "Current run context" in rendered
+    assert 'data-qa="run-context-bar"' in rendered
+    assert "crpm-run-context__chip" in rendered
+    assert "Current run" in rendered
     assert "Screening Program Process Mining Workbench" not in rendered
     assert "running-example.xes" in rendered
-    assert len(calls["metrics"]) == 2
+    assert "Cases" in rendered
+    assert "Events" in rendered
+    assert "Models" in rendered
 
 
-def test_dfg_header_skips_global_metric_band_to_keep_map_first(monkeypatch) -> None:
+def test_dfg_header_uses_same_compact_run_context_to_keep_map_first(monkeypatch) -> None:
     import crpm.app_shell as app_shell
 
     snapshot = SimpleNamespace(
@@ -366,7 +370,7 @@ def test_dfg_header_skips_global_metric_band_to_keep_map_first(monkeypatch) -> N
     app_shell._render_header(snapshot, page="DFG Visualizations")
 
     rendered = " ".join(calls["markdown"])
-    assert "crpm-shell-hero--compact" in rendered
+    assert 'data-qa="run-context-bar"' in rendered
     assert "Read the directly-follows map first" in rendered
 
 
@@ -421,3 +425,24 @@ def test_render_header_brand_includes_author_site_badge(monkeypatch) -> None:
     assert app_shell.UP_HOME_URL in rendered
     assert 'rel="noopener noreferrer"' in rendered
     assert "data:image/svg+xml;base64" in rendered
+
+
+def test_render_footer_is_single_compact_provenance_signature(monkeypatch) -> None:
+    import crpm.app_shell as app_shell
+
+    calls = {"markdown": []}
+    monkeypatch.setattr(
+        app_shell,
+        "st",
+        SimpleNamespace(sidebar=SimpleNamespace(markdown=lambda text, **kwargs: calls["markdown"].append(text))),
+    )
+
+    app_shell._render_footer()
+
+    rendered = " ".join(calls["markdown"])
+    assert rendered.count('data-crpm-footer="sidebar"') == 1
+    assert "crpm-sidebar-provenance" in rendered
+    assert "PhD work" in rendered
+    assert app_shell.AUTHOR_WEBSITE in rendered
+    assert "crpm-footer__logo" not in rendered
+    assert app_shell.FMUP_BADGE_SRC not in rendered

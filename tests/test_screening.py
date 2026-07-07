@@ -11,6 +11,7 @@ from pm4py.objects.log.obj import EventLog, Trace
 from crpm.screening import (
     PeriodDefinition,
     build_normative_pathway_model,
+    compute_screening_kpis,
     filter_log_by_incident_period,
     split_log_by_periods,
     summarize_transition_benchmarks,
@@ -94,6 +95,33 @@ def test_normative_model_keeps_ordered_steps() -> None:
         "PCC_observation",
         "Colonoscopy_center",
     ]
+
+
+def test_colonoscopy_completion_prefers_pcc_observation_denominator() -> None:
+    log = EventLog(
+        [
+            make_trace("case-1", [("Lab_result", datetime(2024, 1, 1)), ("Colonoscopy_center", datetime(2024, 1, 10))]),
+            make_trace("case-2", [("Lab_result", datetime(2024, 1, 2)), ("Colonoscopy_center", datetime(2024, 1, 11))]),
+            make_trace("case-3", [("PCC_observation", datetime(2024, 1, 3)), ("Colonoscopy_center", datetime(2024, 1, 12))]),
+        ]
+    )
+
+    kpis = compute_screening_kpis(
+        log,
+        {
+            "invitation": "Invitation_mail",
+            "fit_mail": "FIT_mail",
+            "fit_return": "FIT_return",
+            "lab_result": "Lab_result",
+            "pcc_observation": "PCC_observation",
+            "colonoscopy": "Colonoscopy_center",
+        },
+    )
+
+    assert kpis["colonoscopy_completion_denominator"] == "PCC observation"
+    assert kpis["colonoscopy_completion_denominator_count"] == 1
+    assert kpis["colonoscopy_completion_numerator_count"] == 1
+    assert kpis["colonoscopy_completion_rate"] == pytest.approx(1.0)
 
 
 def test_transition_benchmarks_flag_breaches() -> None:

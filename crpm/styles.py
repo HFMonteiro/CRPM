@@ -66,7 +66,7 @@ def get_custom_css() -> str:
     }
 
     .block-container {
-        max-width: min(1580px, 100%) !important;
+        max-width: min(1720px, 100%) !important;
         width: 100% !important;
         margin: 0 auto !important;
         padding-top: 2.1rem !important;
@@ -106,6 +106,14 @@ def get_custom_css() -> str:
         font-size: 1.18rem !important;
         margin-top: 0.3rem !important;
         margin-bottom: 0.16rem !important;
+    }
+
+    [data-testid="stPlotlyChart"] {
+        min-height: 320px;
+    }
+
+    [data-testid="stPlotlyChart"] .js-plotly-plot {
+        min-height: 320px;
     }
 
     .crpm-dashboard-topbar {
@@ -421,7 +429,7 @@ def get_custom_css() -> str:
     .crpm-overview-map-frame {
         margin: 0 0 0.42rem 0;
         padding: 0.46rem;
-        height: clamp(280px, 38vh, 420px);
+        height: clamp(360px, 46vh, 540px);
         border-radius: 8px;
         border: 1px solid rgba(157, 173, 190, 0.34);
         background: #ffffff;
@@ -430,14 +438,22 @@ def get_custom_css() -> str:
     }
 
     .crpm-overview-map-frame .crpm-workflow-board {
+        display: flex;
+        align-items: center;
+        justify-content: center;
         margin: 0;
-        min-height: 280px;
+        min-height: 100%;
+        height: 100%;
         border-radius: 6px;
         box-shadow: none;
     }
 
     .crpm-overview-map-frame .crpm-workflow-board svg {
-        min-height: 280px;
+        width: auto !important;
+        max-width: 100% !important;
+        height: 100% !important;
+        max-height: 100% !important;
+        min-height: 0 !important;
     }
 
     .crpm-dashboard-map-toolbar {
@@ -1385,7 +1401,7 @@ def get_custom_css() -> str:
 
     .crpm-ranked-table__title {
         padding: 0.62rem 0.78rem 0.44rem 0.78rem;
-        font-size: 0.7rem;
+        font-size: 0.76rem;
         font-weight: 700;
         color: var(--crpm-forest-strong);
     }
@@ -1395,7 +1411,7 @@ def get_custom_css() -> str:
         max-width: 100%;
         min-width: 0;
         max-height: 360px;
-        overflow-x: hidden;
+        overflow-x: auto;
         overflow-y: auto;
         border-top: 1px solid rgba(71, 88, 79, 0.08);
     }
@@ -1406,7 +1422,7 @@ def get_custom_css() -> str:
         table-layout: fixed;
         border-collapse: separate;
         border-spacing: 0;
-        font-size: 0.66rem;
+        font-size: 0.74rem;
     }
 
     .crpm-ranked-table thead th {
@@ -1417,7 +1433,7 @@ def get_custom_css() -> str:
         background: #f4eff8;
         color: var(--crpm-forest-strong);
         text-align: left;
-        font-size: 0.7rem;
+        font-size: 0.76rem;
         font-weight: 700;
         letter-spacing: 0.02em;
         border-bottom: 1px solid rgba(71, 88, 79, 0.12);
@@ -1689,7 +1705,7 @@ def get_custom_css() -> str:
     }
 
     .crpm-table__cell {
-        padding: 0.44rem 0.52rem;
+        padding: 0.5rem 0.58rem;
         color: var(--crpm-text);
         border-bottom: 1px solid rgba(71, 88, 79, 0.08);
         vertical-align: middle;
@@ -1721,11 +1737,20 @@ def get_custom_css() -> str:
     .crpm-ranked-table .crpm-table__cell--label {
         max-width: none;
         min-width: 0;
+        line-height: 1.28;
+        overflow-wrap: break-word;
+        word-break: normal;
     }
 
     .crpm-ranked-table .crpm-table__cell--chip,
     .crpm-ranked-table .crpm-table__cell--num {
         white-space: normal;
+    }
+
+    .crpm-ranked-table .crpm-table__cell--num {
+        min-width: 4.2rem;
+        width: 1%;
+        line-height: 1.22;
     }
 
     .crpm-ranked-table .crpm-table__metric-track {
@@ -1877,27 +1902,28 @@ def get_custom_css() -> str:
 
     .crpm-dfg-vector {
         margin: 0.12rem 0 0.56rem 0;
-        padding: 0.72rem 0.82rem;
-        min-height: 272px;
+        padding: 0.44rem 0.56rem;
+        min-height: clamp(320px, 36vh, 460px);
         border-radius: 18px;
         border: 1px solid rgba(71, 88, 79, 0.12);
         background: rgba(252, 251, 253, 0.98);
         box-shadow: var(--crpm-shadow-soft);
-        overflow: hidden;
+        overflow-x: auto;
+        overflow-y: hidden;
     }
 
     .crpm-dfg-map-canvas {
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         justify-content: center;
-        min-height: 272px;
+        min-height: clamp(320px, 36vh, 460px);
     }
 
     .crpm-dfg-vector svg {
         width: 100%;
         max-width: 100%;
         min-width: 0;
-        height: clamp(240px, 30vh, 340px);
+        height: clamp(320px, 38vh, 480px);
     }
 
     .stMarkdown ul, .stMarkdown ol {
@@ -2080,6 +2106,118 @@ def get_custom_css() -> str:
         font-size: 0.72rem;
         line-height: 1.32;
         color: var(--crpm-muted);
+    }
+
+    .crpm-run-context {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 0.7rem;
+        margin: 0.04rem 0 0.34rem 0;
+        padding: 0.42rem 0.56rem;
+        border-radius: 8px;
+        border: 1px solid rgba(157, 173, 190, 0.26);
+        background: rgba(252, 251, 253, 0.88);
+        box-shadow: 0 3px 10px rgba(28, 45, 64, 0.035);
+    }
+
+    .crpm-run-context__copy {
+        min-width: 0;
+        display: flex;
+        align-items: baseline;
+        gap: 0.46rem;
+    }
+
+    .crpm-run-context__label {
+        flex: 0 0 auto;
+        font-size: 0.66rem;
+        font-weight: 800;
+        line-height: 1.08;
+        color: #315f96;
+        text-transform: uppercase;
+        letter-spacing: 0;
+    }
+
+    .crpm-run-context__body {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.76rem;
+        line-height: 1.18;
+        color: #536474;
+    }
+
+    .crpm-run-context__chips {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 0.26rem;
+        max-width: min(58vw, 54rem);
+    }
+
+    .crpm-run-context__chip {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.22rem;
+        max-width: 14rem;
+        padding: 0.18rem 0.38rem;
+        border-radius: 7px;
+        border: 1px solid rgba(151, 166, 184, 0.28);
+        background: #f8fafc;
+        color: #26384d;
+    }
+
+    .crpm-run-context__chip span {
+        flex: 0 0 auto;
+        font-size: 0.62rem;
+        line-height: 1.08;
+        color: #667789;
+    }
+
+    .crpm-run-context__chip strong {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.68rem;
+        line-height: 1.08;
+        color: #142233;
+    }
+
+    .crpm-retained-state-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.46rem;
+        max-width: 100%;
+        margin: 0.04rem 0 0.38rem 0;
+        padding: 0.28rem 0.48rem;
+        border-radius: 8px;
+        border: 1px solid rgba(49, 95, 150, 0.18);
+        background: rgba(236, 244, 255, 0.74);
+        color: #24364b;
+        box-shadow: 0 3px 10px rgba(28, 45, 64, 0.035);
+    }
+
+    .crpm-retained-state-chip span {
+        flex: 0 0 auto;
+        font-size: 0.64rem;
+        font-weight: 800;
+        line-height: 1.08;
+        color: #315f96;
+        text-transform: uppercase;
+        letter-spacing: 0;
+    }
+
+    .crpm-retained-state-chip strong {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.7rem;
+        line-height: 1.12;
+        color: #1d2f44;
     }
 
     .crpm-shell-panel {
@@ -2504,6 +2642,32 @@ def get_custom_css() -> str:
         letter-spacing: 0.01em;
     }
 
+    .crpm-sidebar-provenance {
+        margin: 0.78rem 0 0.2rem 0;
+        padding: 0.58rem 0.62rem;
+        border-radius: 8px;
+        border: 1px solid rgba(154, 171, 196, 0.18);
+        background: rgba(18, 25, 31, 0.72);
+        color: var(--crpm-sidebar-text-soft);
+        font-size: 0.68rem;
+        line-height: 1.35;
+    }
+
+    .crpm-sidebar-provenance span,
+    .crpm-sidebar-provenance a {
+        display: block;
+        color: var(--crpm-sidebar-text-soft) !important;
+        font-size: 0.68rem;
+        text-decoration: none;
+    }
+
+    .crpm-sidebar-provenance a {
+        margin-top: 0.16rem;
+        color: #d9e5f4 !important;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+
     .crpm-header-badges {
         position: static;
         top: 0.34rem;
@@ -2679,10 +2843,17 @@ def get_custom_css() -> str:
     }
 
     .crpm-footer {
-        margin-top: 1.8rem;
-        padding-top: 0.9rem;
-        padding-bottom: 3.8rem;
-        border-top: 1px solid rgba(71, 88, 79, 0.12);
+        margin: 0.9rem 0 0 0;
+        padding: 0.52rem 0 2rem 0;
+        border-top: 1px solid rgba(71, 88, 79, 0.08);
+        color: var(--crpm-text-soft);
+    }
+
+    .crpm-footer--compact {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 1.6rem;
     }
 
     .crpm-footer__row {
@@ -2725,8 +2896,10 @@ def get_custom_css() -> str:
     }
 
     .crpm-footer__text {
-        font-size: 0.9rem;
+        font-size: 0.78rem;
         color: var(--crpm-text-soft);
+        line-height: 1.35;
+        text-align: center;
     }
 
     .crpm-legal-bar {

@@ -242,6 +242,15 @@ def count_cases_with_activity(log: Optional[EventLog], activity_name: Optional[s
     return sum(1 for trace in log if any(event.get("concept:name") == activity_name for event in trace))
 
 
+def count_cases_with_all_activities(log: Optional[EventLog], activity_names: list[Optional[str]]) -> int:
+    """Count traces that contain every provided activity at least once."""
+    required = [activity for activity in activity_names if activity]
+    if log is None or len(required) != len(activity_names):
+        return 0
+    required_set = set(required)
+    return sum(1 for trace in log if required_set.issubset({event.get("concept:name") for event in trace}))
+
+
 def compute_screening_kpis(log: Optional[EventLog], step_map: Dict[str, Optional[str]]) -> Dict[str, Any]:
     """Compute manager-facing counts and rates for the mapped screening pathway."""
     total_cases = len(log) if log is not None else 0
@@ -253,12 +262,18 @@ def compute_screening_kpis(log: Optional[EventLog], step_map: Dict[str, Optional
     for step in STEP_ORDER:
         metrics[f"{step}_cases"] = count_cases_with_activity(log, step_map.get(step))
 
-    denominator_key = "lab_result_cases" if step_map.get("lab_result") else "pcc_observation_cases"
-    denominator_label = STEP_LABELS["lab_result"] if step_map.get("lab_result") else STEP_LABELS["pcc_observation"]
+    denominator_step = (
+        "pcc_observation" if step_map.get("pcc_observation") else "lab_result" if step_map.get("lab_result") else "fit_return"
+    )
+    denominator_key = f"{denominator_step}_cases"
+    denominator_label = STEP_LABELS[denominator_step]
+    denominator_activity = step_map.get(denominator_step)
     denominator = metrics.get(denominator_key, 0)
-    colonoscopy_cases = metrics.get("colonoscopy_cases", 0)
+    colonoscopy_cases = count_cases_with_all_activities(log, [denominator_activity, step_map.get("colonoscopy")])
 
     metrics["colonoscopy_completion_denominator"] = denominator_label
+    metrics["colonoscopy_completion_denominator_count"] = denominator
+    metrics["colonoscopy_completion_numerator_count"] = colonoscopy_cases
     metrics["colonoscopy_completion_rate"] = colonoscopy_cases / denominator if denominator else None
     metrics["fit_return_rate"] = metrics["fit_return_cases"] / metrics["invitation_cases"] if metrics["invitation_cases"] else None
     return metrics

@@ -126,6 +126,8 @@ def _inspect_wheel(root: Path) -> CheckResult:
         names = set(wheel.namelist())
     if "crpm/assets/crpm_logo.png" not in names:
         return CheckResult("package-artifact", False, "Missing packaged CRPM logo asset.")
+    if "crpm/py.typed" not in names:
+        return CheckResult("package-artifact", False, "Missing packaged PEP 561 typing marker.")
     return CheckResult("package-artifact", True, wheels[-1].name)
 
 

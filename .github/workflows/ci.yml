@@ -94,6 +94,8 @@ jobs:
               names = set(wheel.namelist())
           if "crpm/assets/crpm_logo.png" not in names:
               raise SystemExit("Missing packaged CRPM logo asset.")
+          if "crpm/py.typed" not in names:
+              raise SystemExit("Missing packaged PEP 561 typing marker.")
           PY
 
       - name: Dependency audit

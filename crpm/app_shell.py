@@ -96,10 +96,12 @@ def render_app() -> None:
     _render_analysis_controls(state)
     snapshot = build_analysis_snapshot(st.session_state)
     _render_sidebar_session_info(snapshot)
-
-    _render_header(snapshot, page=page)
-    PAGE_REGISTRY[page](snapshot)
     _render_footer()
+
+    page_surface = st.empty()
+    with page_surface.container():
+        _render_header(snapshot, page=page)
+        PAGE_REGISTRY[page](snapshot)
 
 
 def _reset_page_scroll_on_change(page: str) -> None:
@@ -188,7 +190,7 @@ def _render_sidebar_session_info(snapshot: AnalysisSnapshot) -> None:
 
 
 def _render_header(snapshot: AnalysisSnapshot, *, page: str) -> None:
-    """Render the main content header with hero and summary metrics."""
+    """Render the main content header with compact run context."""
     if page == "Conformance Analytics":
         if getattr(snapshot, "config_change_message", None):
             render_quiet_note(
@@ -201,30 +203,7 @@ def _render_header(snapshot: AnalysisSnapshot, *, page: str) -> None:
             st.error(snapshot.filter_error_message)
         return
 
-    context_bits = []
-    if getattr(snapshot, "input_name", None):
-        context_bits.append(snapshot.input_name)
-    if getattr(snapshot, "active_followup_label", None):
-        context_bits.append(snapshot.active_followup_label)
-    if getattr(snapshot, "analysis_complete", False):
-        context_bits.append(f"{snapshot.model_count:,} model(s)")
-    context_line = " · ".join(context_bits) if context_bits else "Load a log and run the analysis to populate the workbench."
-    intro_copy = _shell_intro_copy(page)
-    st.markdown(
-        f"""
-        <div class="crpm-shell-hero crpm-shell-hero--compact">
-            <div class="crpm-shell-hero__eyebrow">Current run context</div>
-            <div class="crpm-shell-hero__body">{_html.escape(intro_copy)}</div>
-            <div class="crpm-shell-hero__meta">{_html.escape(context_line)}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    if page != "DFG Visualizations":
-        meta_cols = st.columns(2)
-        meta_cols[0].metric("Cases", f"{snapshot.case_count:,}")
-        meta_cols[1].metric("Events", f"{snapshot.event_count:,}")
+    _render_run_context_bar(snapshot, page=page)
     if getattr(snapshot, "config_change_message", None):
         render_quiet_note(
             "Settings changed since the last successful run. "
@@ -234,6 +213,46 @@ def _render_header(snapshot: AnalysisSnapshot, *, page: str) -> None:
             st.toast("Settings changed. Run analysis to refresh results.", icon="ℹ️")
     if getattr(snapshot, "filter_error_message", None):
         st.error(snapshot.filter_error_message)
+
+
+def _render_run_context_bar(snapshot: AnalysisSnapshot, *, page: str) -> None:
+    """Render a low-height run context strip so page cockpits stay above the fold."""
+    intro_copy = _shell_intro_copy(page)
+    chips = []
+    if getattr(snapshot, "input_name", None):
+        chips.append(("Input", snapshot.input_name))
+    if getattr(snapshot, "active_followup_label", None):
+        chips.append(("Follow-up", snapshot.active_followup_label))
+    if getattr(snapshot, "analysis_complete", False):
+        chips.extend(
+            [
+                ("Cases", f"{int(getattr(snapshot, 'case_count', 0) or 0):,}"),
+                ("Events", f"{int(getattr(snapshot, 'event_count', 0) or 0):,}"),
+                ("Models", f"{int(getattr(snapshot, 'model_count', 0) or 0):,}"),
+            ]
+        )
+    if not chips:
+        chips.append(("Status", "Run analysis to populate the workbench"))
+
+    chip_markup = "".join(
+        "<span class='crpm-run-context__chip'>"
+        f"<span>{_html.escape(str(label))}</span>"
+        f"<strong>{_html.escape(str(value))}</strong>"
+        "</span>"
+        for label, value in chips
+    )
+    st.markdown(
+        f"""
+        <div class="crpm-run-context" data-qa="run-context-bar">
+            <div class="crpm-run-context__copy">
+                <span class="crpm-run-context__label">Current run</span>
+                <span class="crpm-run-context__body">{_html.escape(intro_copy)}</span>
+            </div>
+            <div class="crpm-run-context__chips">{chip_markup}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _shell_intro_copy(page: str) -> str:
@@ -283,19 +302,12 @@ def _render_header_brand() -> None:
 
 
 def _render_footer() -> None:
-    """Render the institutional footer at the bottom of the page."""
-    st.markdown(
+    """Render compact provenance in the sidebar to avoid interrupting analysis pages."""
+    st.sidebar.markdown(
         f"""
-        <div class="crpm-footer">
-            <div class="crpm-footer__row">
-                <a class="crpm-footer__logo-link" href="{FMUP_HOME_URL}" target="_blank" rel="noopener noreferrer" aria-label="Faculdade de Medicina da Universidade do Porto">
-                    <img class="crpm-footer__logo" src="{FMUP_BADGE_SRC}" alt="FMUP symbol" />
-                </a>
-                <div class="crpm-footer__text">
-                    Developed in the context of PhD work by Hugo Monteiro &middot;
-                    <a href="{AUTHOR_WEBSITE}" target="_blank" rel="noopener noreferrer">hfmonteiro.com</a>
-                </div>
-            </div>
+        <div class="crpm-sidebar-provenance" data-crpm-footer="sidebar" aria-label="CRPM provenance">
+            <span>PhD work · Hugo Monteiro</span>
+            <a href="{AUTHOR_WEBSITE}" target="_blank" rel="noopener noreferrer">hfmonteiro.com</a>
         </div>
         """,
         unsafe_allow_html=True,

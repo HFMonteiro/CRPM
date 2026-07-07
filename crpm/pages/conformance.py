@@ -149,6 +149,13 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
         current_selection_kind = "none"
         current_selection_id = None
 
+    _render_retained_workflow_state_chip(
+        snapshot,
+        controls,
+        selection_kind=current_selection_kind,
+        selection_id=current_selection_id,
+    )
+
     if has_workflow:
         _render_workflow_kpi_strip(
             snapshot,
@@ -870,6 +877,77 @@ def _workflow_controls_from_state(snapshot: AnalysisSnapshot) -> dict[str, Any]:
         "reset_filters": reset_triggered,
         "reset_graph_viewport": False,
     }
+
+
+def _retained_workflow_state_bits(
+    snapshot: AnalysisSnapshot,
+    controls: dict[str, Any],
+    *,
+    selection_kind: str,
+    selection_id: Optional[str],
+) -> list[str]:
+    bits: list[str] = []
+    normalized_kind = selection_kind if selection_kind in {"node", "edge"} else "none"
+    if normalized_kind != "none" and selection_id:
+        selection_label = humanize_activity_label(selection_id) or str(selection_id)
+        bits.append(f"pin: {selection_label}")
+
+    workflow_mode = _normalize_workflow_mode(controls.get("workflow_mode", WORKFLOW_FILTER_DEFAULTS["workflow_mode"]))
+    if workflow_mode != _normalize_workflow_mode(WORKFLOW_FILTER_DEFAULTS["workflow_mode"]):
+        bits.append(f"view: {_workflow_mode_label(workflow_mode)}")
+
+    coverage = str(controls.get("coverage_view", WORKFLOW_FILTER_DEFAULTS["coverage_view"]) or "all")
+    if coverage.lower() != str(WORKFLOW_FILTER_DEFAULTS["coverage_view"]).lower():
+        bits.append(f"path: {coverage.title()}")
+
+    deviation = str(controls.get("deviation_view", WORKFLOW_FILTER_DEFAULTS["deviation_view"]) or "All")
+    if deviation != str(WORKFLOW_FILTER_DEFAULTS["deviation_view"]):
+        bits.append(f"deviation: {deviation}")
+
+    metric = str(controls.get("metric_coloring", WORKFLOW_FILTER_DEFAULTS["metric_coloring"]) or "")
+    if metric and metric != str(WORKFLOW_FILTER_DEFAULTS["metric_coloring"]):
+        bits.append(f"color: {metric}")
+
+    detail = str(controls.get("detail_level", WORKFLOW_FILTER_DEFAULTS["detail_level"]) or "analyst")
+    if detail.lower() != str(WORKFLOW_FILTER_DEFAULTS["detail_level"]).lower():
+        bits.append(f"density: {detail.title()}")
+
+    lens = str(controls.get("conformance_lens", WORKFLOW_FILTER_DEFAULTS["conformance_lens"]) or "")
+    if lens and lens != str(WORKFLOW_FILTER_DEFAULTS["conformance_lens"]):
+        bits.append(f"lens: {lens}")
+
+    return bits
+
+
+def _render_retained_workflow_state_chip(
+    snapshot: AnalysisSnapshot,
+    controls: dict[str, Any],
+    *,
+    selection_kind: str,
+    selection_id: Optional[str],
+) -> None:
+    bits = _retained_workflow_state_bits(
+        snapshot,
+        controls,
+        selection_kind=selection_kind,
+        selection_id=selection_id,
+    )
+    if not bits:
+        return
+
+    visible_bits = bits[:4]
+    if len(bits) > len(visible_bits):
+        visible_bits.append(f"+{len(bits) - len(visible_bits)}")
+    summary = " · ".join(visible_bits)
+    st.markdown(
+        (
+            '<div class="crpm-retained-state-chip" data-qa="retained-workflow-state">'
+            "<span>State retained</span>"
+            f"<strong>{html.escape(summary)}</strong>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 def _render_workflow_controls(
