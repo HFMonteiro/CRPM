@@ -273,10 +273,10 @@ def _shell_intro_copy(page: str) -> str:
 
 
 def _render_header_brand() -> None:
-    """Render a persistent UP badge in the sticky header area."""
+    """Render persistent author and institutional links in the app header."""
     st.markdown(
         f"""
-            <div class="crpm-header-badges">
+        <div class="crpm-header-badges" data-qa="global-brand-strip" aria-label="CRPM institutional links">
             <a class="crpm-author-badge" href="{AUTHOR_WEBSITE}" target="_blank" rel="noopener noreferrer" aria-label="hfmonteiro.com">
                 <span>www.hfmonteiro.com</span>
             </a>

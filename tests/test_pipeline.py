@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from pathlib import Path
 
 import pytest
@@ -80,6 +80,35 @@ def test_filter_date_range_can_clip_events_in_event_mode() -> None:
     assert len(filtered) == 1
     assert len(filtered[0]) == 1
     assert filtered[0][0]["concept:name"] == "A"
+
+
+def test_filter_date_range_uses_earliest_timezone_aware_event() -> None:
+    log = EventLog(
+        [
+            make_trace(
+                "case-1",
+                [
+                    ("late", datetime(2024, 2, 1, 10, 0, tzinfo=timezone.utc)),
+                    ("early", datetime(2024, 1, 1, 10, 0, tzinfo=timezone.utc)),
+                ],
+            )
+        ]
+    )
+
+    filtered = pipeline.filter_date_range(log, date(2024, 1, 1), date(2024, 1, 31))
+
+    assert len(filtered) == 1
+    assert filtered[0].attributes["concept:name"] == "case-1"
+
+
+def test_filter_date_range_rejects_invalid_mode_without_bounds() -> None:
+    with pytest.raises(ValueError, match="Unknown date filter mode"):
+        pipeline.filter_date_range(EventLog(), None, None, mode="invalid")
+
+
+def test_filter_date_range_rejects_reversed_bounds() -> None:
+    with pytest.raises(ValueError, match="Start date must be on or before end date"):
+        pipeline.filter_date_range(EventLog(), date(2024, 2, 1), date(2024, 1, 1))
 
 
 def test_csv_to_event_log_rejects_null_case_ids() -> None:

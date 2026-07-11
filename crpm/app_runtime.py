@@ -478,6 +478,18 @@ def run_discovery_comparison_pipeline(
     source_metadata = loaded_log.metadata()
     stage_timings: dict[str, float] = {}
 
+    if start_date is not None and end_date is not None and start_date > end_date:
+        results.reset(
+            input_name=loaded_log.input_name,
+            log_signature=loaded_log.log_signature,
+            filter_key=filter_key,
+            active_followup_label=describe_followup_window(followup_days),
+            source_metadata=source_metadata,
+            workflow_cohort_policy=workflow_cohort_policy,
+            filter_error_message="Start date must be on or before end date.",
+        )
+        return
+
     if workflow_cohort_policy == "first_event_direct" and not selected_first:
         results.reset(
             input_name=loaded_log.input_name,

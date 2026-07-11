@@ -19,7 +19,9 @@ def main() -> None:
         st.error("CRPM cannot start until the runtime preflight passes.")
         for line in format_preflight_messages(report):
             st.markdown(line)
-        st.info("Install the package with `pip install .` for runtime use, including the interactive workflow dependency, or `pip install -e \".[dev]\"` for development, then restart the app.")
+        st.info(
+            'Install the package with `pip install .` for runtime use, including the interactive workflow dependency, or `pip install -e ".[dev]"` for development, then restart the app.'
+        )
         st.stop()
 
     from crpm.app_shell import render_app

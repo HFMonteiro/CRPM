@@ -4137,7 +4137,7 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
         f'<div class="crpm-explorer-toolbar__summary">{escape(coloring_hint)}</div>',
         '<div class="crpm-explorer-status-line">'
         '<div id="crpm-explorer-live-title" class="crpm-explorer-live-title">Overview mode</div>'
-        f'<div id="crpm-explorer-live-meta" class="crpm-explorer-live-meta">{escape(local_focus_hint)}</div>'
+        f'<div id="crpm-explorer-live-meta" class="crpm-explorer-live-meta" aria-live="polite">{escape(local_focus_hint)}</div>'
         "</div>",
         '<div class="crpm-explorer-legend">'
         '<span class="crpm-explorer-legend__item"><span class="crpm-explorer-legend__swatch" style="background:#9ed2a2;"></span>Conformance class</span>'
@@ -4293,6 +4293,7 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             f'data-base-opacity="{opacity}" '
             f'data-base-stroke="{base_stroke_width:.1f}" '
             f'data-marker-id="{escape(marker_id)}" '
+            f'role="button" tabindex="0" focusable="true" aria-label="Select transition {escape(str(edge.get("caption", "transition")))}: {escape(str(edge.get("frequency", 0)))} events, {escape(conformance_bucket)}" '
             'style="cursor:pointer;">'
             f"<title>{escape(' | '.join(label))}</title></path>"
         )
@@ -4364,6 +4365,7 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             f'data-bucket="{escape(str(node.get("conformance_bucket", "")))}" '
             f'data-severity="{escape(str(node.get("severity", "")))}" '
             f'data-branch="{escape(str(node.get("branch_role", "mainline")))}" '
+            f'role="button" tabindex="0" focusable="true" aria-label="Select activity {escape(str(node.get("business_label", "activity")))}: {escape(str(node.get("cases", 0)))} cases, {escape(str(node.get("conformance_bucket", "Conformant")))}" '
             'style="cursor:pointer;">'
         )
         if node["selected"]:
@@ -4566,12 +4568,17 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             "  liveTitle.textContent = caption;",
             "  liveMeta.textContent = `${freq} events · ${bucket} · median ${median} · endpoints ${source || 'n/a'} / ${target || 'n/a'}`;",
             "};",
-            "nodeEls.forEach((nodeEl) => {",
-            "  nodeEl.addEventListener('click', (event) => { event.stopPropagation(); focusNode(nodeEl); });",
-            "});",
-            "edgeEls.forEach((edgeEl) => {",
-            "  edgeEl.addEventListener('click', (event) => { event.stopPropagation(); focusEdge(edgeEl); });",
-            "});",
+            "const bindSelection = (element, focus) => {",
+            "  element.addEventListener('click', (event) => { event.stopPropagation(); focus(element); });",
+            "  element.addEventListener('keydown', (event) => {",
+            "    if (event.key !== 'Enter' && event.key !== ' ') return;",
+            "    event.preventDefault();",
+            "    event.stopPropagation();",
+            "    focus(element);",
+            "  });",
+            "};",
+            "nodeEls.forEach((nodeEl) => bindSelection(nodeEl, focusNode));",
+            "edgeEls.forEach((edgeEl) => bindSelection(edgeEl, focusEdge));",
             "svg.addEventListener('click', () => { resetFocusClasses(); setOverview(); });",
             "const zoomBy = (factor) => { zoomFactor = Math.max(0.56, Math.min(1.7, zoomFactor * factor)); apply(); };",
             "const clearFocus = () => { resetFocusClasses(); setOverview(); };",

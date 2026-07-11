@@ -2410,3 +2410,14 @@ def test_filter_workflow_payload_uses_semantic_edge_uid_fallback():
         "branch",
         "admin_review",
     )
+
+
+def test_workflow_explorer_html_supports_keyboard_selection() -> None:
+    explorer = create_workflow_interactive_payload(_bpmn_style_workflow_payload())
+
+    html = render_workflow_explorer_html(explorer)
+
+    assert 'role="button" tabindex="0" focusable="true"' in html
+    assert 'aria-live="polite"' in html
+    assert "const bindSelection" in html
+    assert "event.key !== 'Enter' && event.key !== ' '" in html

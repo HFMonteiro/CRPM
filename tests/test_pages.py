@@ -31,6 +31,16 @@ class _DummyContext:
         return None
 
 
+def test_store_cache_entry_bounds_plain_dict_and_refreshes_recency() -> None:
+    cache = {"a": 1, "b": 2}
+
+    common_page.store_cache_entry(cache, "a", 3, limit=2)
+    common_page.store_cache_entry(cache, "c", 4, limit=2)
+
+    assert cache == {"a": 3, "c": 4}
+    assert list(cache) == ["a", "c"]
+
+
 def _snapshot(*, discovery_results=None, comparison_df=None) -> AnalysisSnapshot:
     return AnalysisSnapshot(
         analysis_complete=True,
@@ -358,6 +368,11 @@ def test_render_overview_page_uses_dashboard_command_center(monkeypatch) -> None
     assert calls["workflow"][0]["kwargs"]["layout_mode"] == "vertical"
     assert calls["workflow"][0]["kwargs"]["detail_level"] == "executive"
     assert calls["download"]
+    assert any("Reproducibility record" in text for text in calls["markdown"])
+    download_args, download_kwargs = calls["download"][0]
+    assert download_args[0] == "Download run record (.json)"
+    assert download_kwargs["file_name"] == "crpm_run_manifest.json"
+    assert "audit or reproduce" in download_kwargs["help"]
 
 
 def test_render_comparison_page_renders_ranked_table_and_charts(monkeypatch) -> None:

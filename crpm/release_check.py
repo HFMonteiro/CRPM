@@ -37,8 +37,8 @@ def run_release_check(
 
     if not quick and not skip_tests:
         results.append(_run_command("pytest", [sys.executable, "-m", "pytest", "-q"], root))
-        results.append(_run_command("ruff", [sys.executable, "-m", "ruff", "check", "crpm", "tests"], root))
-        results.append(_run_command("black", [sys.executable, "-m", "black", "--check", "crpm", "tests"], root))
+        results.append(_run_command("ruff", [sys.executable, "-m", "ruff", "check", "crpm", "tests", "app.py"], root))
+        results.append(_run_command("black", [sys.executable, "-m", "black", "--check", "crpm", "tests", "app.py"], root))
 
     if not quick and not skip_build:
         results.append(_build_package(root))

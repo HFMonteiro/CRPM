@@ -528,11 +528,21 @@ def _denominator_max(registry: Mapping[str, Any]) -> float:
 def _render_manifest_download(snapshot: AnalysisSnapshot) -> None:
     if not snapshot.run_manifest:
         return
+    st.markdown(
+        """
+        <div class="crpm-manifest-download-note">
+            <strong>Reproducibility record</strong>
+            <span>JSON summary of the input, filters, algorithms and quality checks. Local paths are redacted.</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     st.download_button(
-        "Download run manifest",
+        "Download run record (.json)",
         data=manifest_to_json(snapshot.run_manifest),
         file_name="crpm_run_manifest.json",
         mime="application/json",
+        help="Use this record to audit or reproduce the current analysis run.",
         use_container_width=True,
     )
 

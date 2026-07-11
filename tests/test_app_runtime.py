@@ -628,6 +628,36 @@ def test_run_discovery_pipeline_requires_first_event_workflow_gate(monkeypatch) 
     assert state.results.workflow_cohort_policy == "first_event_direct"
 
 
+def test_run_discovery_pipeline_reports_reversed_date_range() -> None:
+    trace = Trace()
+    trace.append({"concept:name": "Invitation_mail", "time:timestamp": pd.Timestamp("2024-01-01")})
+    loaded_log = LoadedLog(log=EventLog([trace]), input_name="demo.xes", log_signature="sig")
+    state = get_crpm_state({})
+
+    run_discovery_comparison_pipeline(
+        state,
+        loaded_log=loaded_log,
+        start_filter="Invitation_mail",
+        date_filter_mode="case",
+        start_date=date(2024, 2, 1),
+        end_date=date(2024, 1, 1),
+        selected_algorithms=["Inductive (IMf)"],
+        enable_train_test=False,
+        random_seed=42,
+    )
+
+    assert not state.results.analysis_complete
+    assert state.results.filter_error_message == "Start date must be on or before end date."
+    assert state.results.filter_key == compute_filter_key(
+        "sig",
+        "Invitation_mail",
+        "case",
+        date(2024, 2, 1),
+        date(2024, 1, 1),
+        None,
+    )
+
+
 def test_resolve_xes_log_rejects_unsafe_xml_without_filename_leak() -> None:
     state = get_crpm_state({})
     unsafe_payload = b'<!DOCTYPE log [ <!ENTITY secret SYSTEM "file:///secret"> ]><log></log>'

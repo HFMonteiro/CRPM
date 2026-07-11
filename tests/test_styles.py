@@ -118,8 +118,10 @@ def test_dashboard_header_avoids_cockpit_clipping() -> None:
     assert '[data-testid="stHeader"]' in css
     assert "position: relative !important;" not in css
     assert "scroll-padding-top: 4.25rem;" in css
-    assert ".crpm-header-badges {\n        position: static;" in css
-    assert "z-index: auto;" in css
+    assert ".crpm-header-badges {\n        position: fixed;" in css
+    assert "left: calc(var(--crpm-sidebar-width) + 0.78rem);" in css
+    assert "max-width: calc(100vw - var(--crpm-sidebar-width) - 9.5rem);" in css
+    assert "z-index: 1000001;" in css
     assert ".crpm-dashboard-map-toolbar" in css
     assert "scroll-margin-top: 4.25rem;" in css
     assert "@media (max-width: 1180px)" in css
@@ -149,6 +151,7 @@ def test_conformance_model_cards_stay_inside_narrow_rails() -> None:
 
 def test_ranked_tables_do_not_force_right_rail_overflow() -> None:
     css = get_custom_css()
+    assert ".crpm-ranked-table caption" in css
     assert ".crpm-ranked-table {\n        border: 1px solid rgba(71, 88, 79, 0.1);" in css
     assert "max-width: 100%;" in css
     assert ".crpm-ranked-table__scroller {\n        width: 100%;" in css
@@ -157,6 +160,9 @@ def test_ranked_tables_do_not_force_right_rail_overflow() -> None:
     assert "overflow-wrap: anywhere;" in css
     assert "white-space: normal;" in css
     assert ".crpm-ranked-table .crpm-table__cell--label {" in css
+    assert ".crpm-ranked-table--wide th" in css
+    assert "min-width: 6.5rem;" in css
+    assert "min-width: 11rem;" in css
     assert "overflow-wrap: break-word;" in css
     assert ".crpm-ranked-table .crpm-table__cell--num {" in css
     assert "min-width: 4.2rem;" in css

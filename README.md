@@ -172,8 +172,8 @@ On Windows, install Graphviz from the official installer and add `dot` to `PATH`
 ```bash
 pip install -e ".[dev]"
 pytest -q
-ruff check crpm tests
-black --check crpm tests
+ruff check crpm tests app.py
+black --check crpm tests app.py
 crpm-release-check --quick
 ```
 

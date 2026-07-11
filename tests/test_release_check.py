@@ -18,6 +18,24 @@ def test_release_check_quick_composes_version_and_preflight(monkeypatch, tmp_pat
     assert all(result.ok for result in results)
 
 
+def test_release_check_lints_and_formats_streamlit_entrypoint(monkeypatch, tmp_path) -> None:
+    calls: list[list[str]] = []
+    passed = release_check.CheckResult("contract", True)
+    monkeypatch.setattr(release_check, "_check_versions", lambda root: passed)
+    monkeypatch.setattr(release_check, "_check_preflight", lambda root: passed)
+
+    def fake_run_command(name: str, command: list[str], cwd):
+        calls.append(command)
+        return release_check.CheckResult(name, True)
+
+    monkeypatch.setattr(release_check, "_run_command", fake_run_command)
+
+    release_check.run_release_check(repo_root=tmp_path, skip_build=True, skip_audit=True)
+
+    assert calls[1][-1] == "app.py"
+    assert calls[2][-1] == "app.py"
+
+
 def test_build_package_falls_back_when_build_module_is_missing(monkeypatch, tmp_path) -> None:
     calls: list[list[str]] = []
 

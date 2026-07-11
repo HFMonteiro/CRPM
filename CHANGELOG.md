@@ -30,6 +30,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 - Page navigation now resets the main viewport on page changes so users do not land mid-page after switching analytical surfaces.
 - Time-series monitoring normalizes timezone-aware timestamps before period grouping to avoid noisy runtime warnings.
+- Date filtering now uses the same earliest-event, timezone-safe semantics across the public conformance and pipeline APIs and rejects invalid ranges explicitly.
+- PDF report generation now handles models with missing fitness or precision metrics without crashing during recommendation selection.
+- Page caches remain bounded when backed by a standard dictionary, and the Streamlit entrypoint is covered by formatting and lint gates.
 
 ## [0.3.0] — 2026-03-16
 

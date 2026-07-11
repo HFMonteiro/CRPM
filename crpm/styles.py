@@ -1399,11 +1399,12 @@ def get_custom_css() -> str:
         overflow: hidden;
     }
 
-    .crpm-ranked-table__title {
+    .crpm-ranked-table caption {
         padding: 0.62rem 0.78rem 0.44rem 0.78rem;
         font-size: 0.76rem;
         font-weight: 700;
         color: var(--crpm-forest-strong);
+        text-align: left;
     }
 
     .crpm-ranked-table__scroller {
@@ -1446,6 +1447,18 @@ def get_custom_css() -> str:
         max-width: 0;
         overflow-wrap: anywhere;
         word-break: normal;
+    }
+
+    .crpm-ranked-table--wide th,
+    .crpm-ranked-table--wide td {
+        max-width: none;
+        min-width: 6.5rem;
+        overflow-wrap: normal;
+        word-break: normal;
+    }
+
+    .crpm-ranked-table--wide .crpm-table__cell--label {
+        min-width: 11rem;
     }
 
     .crpm-ranked-table tbody tr:nth-child(odd) {
@@ -1740,6 +1753,10 @@ def get_custom_css() -> str:
         line-height: 1.28;
         overflow-wrap: break-word;
         word-break: normal;
+    }
+
+    .crpm-ranked-table--wide .crpm-table__cell--label {
+        min-width: 11rem;
     }
 
     .crpm-ranked-table .crpm-table__cell--chip,
@@ -2669,14 +2686,16 @@ def get_custom_css() -> str:
     }
 
     .crpm-header-badges {
-        position: static;
-        top: 0.34rem;
-        z-index: auto;
+        position: fixed;
+        top: 0.42rem;
+        left: calc(var(--crpm-sidebar-width) + 0.78rem);
+        z-index: 1000001;
         display: flex;
         align-items: center;
         gap: 0.42rem;
         width: fit-content;
-        margin: 0 0 0.16rem 0;
+        max-width: calc(100vw - var(--crpm-sidebar-width) - 9.5rem);
+        margin: 0;
     }
 
     .crpm-up-badge,
@@ -2755,6 +2774,20 @@ def get_custom_css() -> str:
         font-weight: 700;
         letter-spacing: 0.01em;
         white-space: nowrap;
+    }
+
+    .crpm-manifest-download-note {
+        display: grid;
+        gap: 0.12rem;
+        margin: 0.15rem 0 0.42rem 0;
+        color: var(--crpm-text-soft);
+        font-size: 0.72rem;
+        line-height: 1.35;
+    }
+
+    .crpm-manifest-download-note strong {
+        color: var(--crpm-forest-strong);
+        font-size: 0.74rem;
     }
 
     .crpm-image {

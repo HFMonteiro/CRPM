@@ -418,6 +418,8 @@ def test_render_header_brand_includes_author_site_badge(monkeypatch) -> None:
 
     rendered = " ".join(calls["markdown"])
     assert "crpm-header-badges" in rendered
+    assert 'data-qa="global-brand-strip"' in rendered
+    assert 'aria-label="CRPM institutional links"' in rendered
     assert "crpm-author-badge" in rendered
     assert "crpm-fmup-badge" in rendered
     assert "hfmonteiro.com" in rendered
