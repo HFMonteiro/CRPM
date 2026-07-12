@@ -1075,6 +1075,66 @@ _WORKFLOW_MIX_THEME = {
     "model": {"label": "Model", "short": "M", "fill": "#d9deef", "ink": "#4c5f8e", "stroke": "#9cadcf"},
 }
 
+_WORKFLOW_CARE_PHASES = (
+    {
+        "key": "pre-primary",
+        "label": "Pre-primary care",
+        "description": "Invitation, FIT and laboratory",
+        "steps": frozenset({"invitation", "fit_mail", "fit_return", "lab_result"}),
+        "fill": "#edf4f6",
+        "stroke": "#b9cdd3",
+        "ink": "#405b65",
+    },
+    {
+        "key": "primary",
+        "label": "Primary care",
+        "description": "Clinical review",
+        "steps": frozenset({"pcc_observation"}),
+        "fill": "#edf5ef",
+        "stroke": "#b8d2bf",
+        "ink": "#3f6249",
+    },
+    {
+        "key": "hospital",
+        "label": "Hospital care",
+        "description": "Colonoscopy",
+        "steps": frozenset({"colonoscopy"}),
+        "fill": "#f7f1ed",
+        "stroke": "#d9c5b8",
+        "ink": "#6a5143",
+    },
+)
+
+
+def _workflow_care_phase(item: Mapping[str, Any] | pd.Series) -> Optional[Mapping[str, Any]]:
+    """Return the care setting for recognised screening-pathway nodes only."""
+    identifier = ""
+    for key in ("step", "activity", "id"):
+        value = item.get(key)
+        if value is None or pd.isna(value):
+            continue
+        identifier = str(value).strip()
+        if identifier:
+            break
+    if not identifier:
+        return None
+    from crpm.screening import classify_activity_steps
+
+    step = classify_activity_steps([identifier]).get(identifier)
+    if not step:
+        return None
+    return next((phase for phase in _WORKFLOW_CARE_PHASES if step in phase["steps"]), None)
+
+
+def _workflow_care_phase_groups(items: list[dict[str, Any]]) -> list[tuple[Mapping[str, Any], list[dict[str, Any]]]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for item in items:
+        phase = _workflow_care_phase(item.get("row", item))
+        if phase:
+            grouped[str(phase["key"])].append(item)
+    return [(phase, grouped[str(phase["key"])]) for phase in _WORKFLOW_CARE_PHASES if grouped.get(str(phase["key"]))]
+
+
 _WORKFLOW_TIMING_THEME = [
     ("Very fast", "Below the cohort median band", "#4d7f56"),
     ("Fast-moderate", "Near the cohort median band", "#7ca15f"),
@@ -1866,8 +1926,8 @@ def _workflow_horizontal_layout_profile(
         ):
             profile[key] = round(float(profile[key]) * executive_scale, 1)
         profile["board_min_height"] = 116 if bool(profile["simple_mainline_mode"]) else 148
-        profile["top_margin"] = 12.0
-        profile["bottom_margin"] = 14.0
+        profile["top_margin"] = 34.0
+        profile["bottom_margin"] = 18.0
         profile["lane_gap_y"] = round(max(40.0, float(profile["lane_gap_y"]) * 0.86), 1)
         profile["max_inter_step_gap"] = round(
             max(float(profile["min_inter_step_gap"]), float(profile["max_inter_step_gap"]) * 0.84),
@@ -2163,6 +2223,19 @@ def render_workflow_conformance_svg(
             '<rect x="0" y="0" width="100%" height="100%" fill="url(#workflow-bg)"/>',
         ]
 
+        for phase, phase_items in _workflow_care_phase_groups(nodes_layout):
+            phase_x = max(6.0, min(float(item["x"]) for item in phase_items) - 10.0)
+            phase_right = min(
+                float(board_width) - 6.0,
+                max(float(item["x"]) + float(item["width"]) for item in phase_items) + 10.0,
+            )
+            svg_parts.extend(
+                [
+                    f'<rect x="{phase_x:.1f}" y="6" width="{phase_right - phase_x:.1f}" height="{board_height - 12:.1f}" rx="14" ry="14" fill="{phase["fill"]}" fill-opacity="0.72" stroke="{phase["stroke"]}" stroke-width="1" data-qa="workflow-phase-band" data-phase="{escape(str(phase["key"]))}"/>',
+                    f'<text x="{phase_x + 10.0:.1f}" y="22" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" font-weight="800" fill="{phase["ink"]}">{escape(str(phase["label"]))}</text>',
+                ]
+            )
+
         top_branch_items = [
             item
             for item in nodes_layout
@@ -2316,11 +2389,6 @@ def render_workflow_conformance_svg(
 
     board_width = 1180
     center_x = board_width / 2
-    lane_x = {
-        "left": center_x - 285,
-        "center": center_x,
-        "right": center_x + 285,
-    }
     mainline_width = 424.0
     branch_width = 208.0
     mainline_height = 110.0
@@ -2423,10 +2491,20 @@ def render_workflow_conformance_svg(
         "</marker>",
         "</defs>",
         '<rect x="0" y="0" width="100%" height="100%" fill="url(#workflow-bg)"/>',
-        f'<line x1="{lane_x["center"]:.1f}" y1="{top_margin - 6}" x2="{lane_x["center"]:.1f}" y2="{board_height - 30}" stroke="#c4bacf" stroke-width="3.2" stroke-dasharray="6 7"/>',
-        f'<line x1="{lane_x["left"]:.1f}" y1="{top_margin + 12}" x2="{lane_x["left"]:.1f}" y2="{board_height - 42}" stroke="#d7cfdf" stroke-width="1.1" stroke-dasharray="4 10"/>',
-        f'<line x1="{lane_x["right"]:.1f}" y1="{top_margin + 12}" x2="{lane_x["right"]:.1f}" y2="{board_height - 42}" stroke="#d7cfdf" stroke-width="1.1" stroke-dasharray="4 10"/>',
     ]
+
+    for phase, phase_items in _workflow_care_phase_groups(nodes_layout):
+        phase_y = max(8.0, min(float(item["y"]) for item in phase_items) - 30.0)
+        phase_bottom = min(
+            float(board_height) - 8.0,
+            max(float(item["y"]) + float(item["height"]) for item in phase_items) + 30.0,
+        )
+        svg_parts.extend(
+            [
+                f'<rect x="18" y="{phase_y:.1f}" width="{board_width - 36:.1f}" height="{phase_bottom - phase_y:.1f}" rx="20" ry="20" fill="{phase["fill"]}" fill-opacity="0.74" stroke="{phase["stroke"]}" stroke-width="1.2" data-qa="workflow-phase-band" data-phase="{escape(str(phase["key"]))}"/>',
+                f'<text x="36" y="{phase_y + 19.0:.1f}" font-family="Segoe UI, Arial, sans-serif" font-size="11" font-weight="800" fill="{phase["ink"]}">{escape(str(phase["label"]))}</text>',
+            ]
+        )
 
     max_frequency = max((_safe_int(row.get("frequency", 0)) for _, row in normalized_edges.iterrows()), default=0)
     for item in edge_records:
@@ -4039,7 +4117,6 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
     bottom_band_y = float(lane_bands.get("bottom_y", mainline_band_y + 156.0))
     top_band_height = max(18.0 if not has_top_branches else 52.0, mainline_band_y - top_band_y - (14.0 if has_top_branches else 8.0))
     primary_path_nodes = _workflow_primary_path_nodes(node_items)
-    mainline_nodes = primary_path_nodes or [node for node in node_items if str(node.get("branch_role", "mainline")) == "mainline"]
     anchor_nodes = primary_path_nodes or node_items
     first_anchor_x = drawable_width / 2.0
     last_anchor_x = drawable_width / 2.0
@@ -4053,9 +4130,7 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
         last_anchor_x = float(last_node.get("center_x", drawable_width / 2.0))
         start_anchor_y = float(first_node.get("y", 60.0)) - 18.0
         end_anchor_y = float(last_node.get("y", 60.0)) + float(last_node.get("height", 84.0)) + 32.0
-    mainline_band_height = max(82.0, bottom_band_y - mainline_band_y - 10.0)
     bottom_band_height = max(18.0 if not has_bottom_branches else 52.0, (end_anchor_y + 20.0) - bottom_band_y)
-    anchor_y = mainline_band_y + (mainline_band_height / 2.0)
     if not node_items and not edge_items:
         return (
             '<div class="crpm-workflow-explorer">'
@@ -4078,17 +4153,21 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
     case_scope_badge = f'<span class="crpm-explorer-badge">{escape(case_scope_label)}</span>' if case_scope_label else ""
     coloring_hint = _workflow_metric_coloring_hint(metric_coloring)
     lens_hint = "Activity lens" if "activit" in conformance_lens.lower() else "Path lens"
-    mainline_backbone_points: list[tuple[float, float]] = [(first_anchor_x, start_anchor_y)]
-    for node in sorted(mainline_nodes, key=lambda item: float(item.get("center_y", 0.0))):
-        mainline_backbone_points.append((float(node.get("center_x", canvas_width / 2.0)), float(node.get("center_y", anchor_y))))
-    mainline_backbone_points.append((last_anchor_x, end_anchor_y))
-    if len(mainline_backbone_points) >= 2:
-        backbone_segments = [f"M {mainline_backbone_points[0][0]:.1f} {mainline_backbone_points[0][1]:.1f}"]
-        for point_x, point_y in mainline_backbone_points[1:]:
-            backbone_segments.append(f"L {point_x:.1f} {point_y:.1f}")
-        mainline_backbone_path = " ".join(backbone_segments)
-    else:
-        mainline_backbone_path = ""
+
+    phase_band_parts: list[str] = []
+    for phase, phase_items in _workflow_care_phase_groups(node_items):
+        phase_y = max(8.0, min(float(item["y"]) for item in phase_items) - 44.0)
+        phase_bottom = min(
+            float(drawable_height) - 8.0,
+            max(float(item["y"]) + float(item["height"]) for item in phase_items) + 14.0,
+        )
+        phase_band_parts.extend(
+            [
+                f'<rect x="10" y="{phase_y:.1f}" width="{drawable_width - 20:.1f}" height="{phase_bottom - phase_y:.1f}" rx="14" ry="14" fill="{phase["fill"]}" fill-opacity="0.78" stroke="{phase["stroke"]}" stroke-width="1" data-testid="explorer-phase-band" data-qa="explorer-phase-band" data-phase="{escape(str(phase["key"]))}"/>',
+                f'<text x="24" y="{phase_y + 17.0:.1f}" font-size="10.5" font-weight="800" fill="{phase["ink"]}">{escape(str(phase["label"]))}</text>',
+                f'<text x="24" y="{phase_y + 30.0:.1f}" font-size="8.5" font-weight="500" fill="{phase["ink"]}" fill-opacity="0.78">{escape(str(phase["description"]))}</text>',
+            ]
+        )
 
     parts = [
         f'<div class="crpm-workflow-explorer" data-instance="{instance_id}" data-renderer-role="{escape(renderer_role)}" style="font-family:Segoe UI, Arial, sans-serif;">',
@@ -4209,29 +4288,16 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
 
     parts.extend(
         [
-            f'<rect id="crpm-workflow-mainline-band" x="6" y="{mainline_band_y:.1f}" width="{drawable_width - 12:.1f}" height="{mainline_band_height:.1f}" rx="12" ry="12" fill="#ffffff" fill-opacity="1" stroke="#d8dfe6" stroke-width="1.15" data-testid="explorer-mainline-band" data-qa="explorer-mainline-band"/>',
-            f'<text x="22" y="{mainline_band_y - 8:.1f}" font-size="10.5" font-weight="800" fill="#5c6d7b">Reference flow</text>',
             "</g>",
             '<g id="crpm-workflow-content" data-testid="explorer-content" data-qa="explorer-content">',
         ]
     )
+    parts.extend(phase_band_parts)
 
     start_width = 48.0
     start_height = 28.0
     parts.extend(
         [
-            (
-                f'<path d="{mainline_backbone_path}" fill="none" stroke="#f4f7f8" stroke-width="3.8" '
-                'stroke-linecap="round" stroke-linejoin="round" opacity="0.72"/>'
-                if mainline_backbone_path
-                else ""
-            ),
-            (
-                f'<path d="{mainline_backbone_path}" fill="none" stroke="#c8d4d8" stroke-width="0.8" '
-                'stroke-linecap="round" stroke-linejoin="round" opacity="0.42"/>'
-                if mainline_backbone_path
-                else ""
-            ),
             f'<g id="crpm-workflow-start-anchor" data-testid="explorer-start-anchor" data-qa="explorer-start-anchor"><rect x="{first_anchor_x - start_width / 2:.1f}" y="{start_anchor_y - start_height / 2:.1f}" width="{start_width:.1f}" height="{start_height:.1f}" rx="14" ry="14" fill="#ffffff" stroke="#243744" stroke-width="1.5"/><text x="{first_anchor_x:.1f}" y="{start_anchor_y + 4.8:.1f}" text-anchor="middle" font-size="{anchor_font_size:.1f}" font-weight="700" fill="#243744">Start</text></g>',
             f'<g id="crpm-workflow-end-anchor" data-testid="explorer-end-anchor" data-qa="explorer-end-anchor"><rect x="{last_anchor_x - start_width / 2:.1f}" y="{end_anchor_y - start_height / 2:.1f}" width="{start_width:.1f}" height="{start_height:.1f}" rx="14" ry="14" fill="#ffffff" stroke="#243744" stroke-width="1.5"/><text x="{last_anchor_x:.1f}" y="{end_anchor_y + 4.8:.1f}" text-anchor="middle" font-size="{anchor_font_size:.1f}" font-weight="700" fill="#243744">End</text></g>',
         ]

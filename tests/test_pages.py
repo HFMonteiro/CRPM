@@ -334,6 +334,11 @@ def test_render_overview_page_uses_dashboard_command_center(monkeypatch) -> None
         lambda text, **kwargs: calls["markdown"].append(text),
     )
     monkeypatch.setattr(overview_page.st, "columns", _columns)
+    monkeypatch.setattr(
+        overview_page.st,
+        "segmented_control",
+        lambda *args, **kwargs: "Process map",
+    )
     monkeypatch.setattr(overview_page.st, "expander", lambda *args, **kwargs: _DummyContext())
     monkeypatch.setattr(overview_page.st, "download_button", lambda *args, **kwargs: calls["download"].append((args, kwargs)))
     monkeypatch.setattr(
@@ -351,28 +356,32 @@ def test_render_overview_page_uses_dashboard_command_center(monkeypatch) -> None
     assert any("Direct workflow mode" in text for text in calls["markdown"])
     assert any("crpm-overview-command-center" in text for text in calls["markdown"])
     assert any("crpm-overview-map-frame" in text for text in calls["markdown"])
-    assert any("crpm-dashboard-bar-list" in text for text in calls["markdown"])
-    assert any("Denominators" in text for text in calls["markdown"])
-    assert any("Event log quality" in text for text in calls["markdown"])
-    assert any("Source validation" in text for text in calls["markdown"])
-    assert any("Loop/rework posture" in text for text in calls["markdown"])
-    assert any("Cohort lenses" in text for text in calls["markdown"])
-    assert any("Latest period" in text for text in calls["markdown"])
-    assert any("Resource perspective" in text for text in calls["markdown"])
-    assert any("Root-cause summary" in text for text in calls["markdown"])
+    assert not any("crpm-dashboard-bar-list" in text for text in calls["markdown"])
     assert not any(r"C:\Analyst\Private" in text for text in calls["markdown"])
     assert not any("crpm-overview-hero" in text for text in calls["markdown"])
     assert any("crpm-reading-order-band" in text for text in calls["markdown"])
     assert any("crpm-page-card-grid" in text for text in calls["markdown"])
     assert calls["workflow"]
-    assert calls["workflow"][0]["kwargs"]["layout_mode"] == "vertical"
-    assert calls["workflow"][0]["kwargs"]["detail_level"] == "executive"
-    assert calls["download"]
-    assert any("Reproducibility record" in text for text in calls["markdown"])
-    download_args, download_kwargs = calls["download"][0]
-    assert download_args[0] == "Download run record (.json)"
-    assert download_kwargs["file_name"] == "crpm_run_manifest.json"
-    assert "audit or reproduce" in download_kwargs["help"]
+    assert calls["workflow"][0]["kwargs"]["layout_mode"] == "horizontal"
+    assert calls["workflow"][0]["kwargs"]["detail_level"] == "analyst"
+    assert not calls["download"]
+
+
+def test_overview_view_selector_uses_full_page_surfaces(monkeypatch) -> None:
+    snapshot = SimpleNamespace(filter_key="run")
+    calls = []
+
+    monkeypatch.setattr(
+        overview_page.st,
+        "segmented_control",
+        lambda label, options, **kwargs: calls.append((label, options, kwargs)) or "Evidence",
+    )
+
+    selected = overview_page._overview_view_selector(snapshot)
+
+    assert selected == "Evidence"
+    assert calls[0][1] == overview_page.OVERVIEW_VIEWS
+    assert calls[0][2]["selection_mode"] == "single"
 
 
 def test_render_comparison_page_renders_ranked_table_and_charts(monkeypatch) -> None:
@@ -1020,25 +1029,27 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
     assert any("crpm-model-card-grid" in text for text in calls["markdown"])
     assert any("crpm-ranked-table" in text for text in calls["markdown"])
     assert not any("crpm-mode-banner" in text for text in calls["markdown"])
-    assert any("Root-cause watchlist" in str(text) for text in calls["markdown"])
-    assert any("Resource perspective" in str(text) for text in calls["markdown"])
+    assert not any("Root-cause watchlist" in str(text) for text in calls["markdown"])
+    assert not any("Resource perspective" in str(text) for text in calls["markdown"])
     assert any("crpm-dashboard-topbar" in str(text) for text in calls["markdown"])
     assert not any("crpm-conformance-hero" in str(text) for text in calls["markdown"])
     assert not any("crpm-conformance-report-band" in str(text) for text in calls["markdown"])
-    assert any("crpm-conformance-side-rail--inspector" in str(text) for text in calls["markdown"])
-    assert any("crpm-conformance-panel--rail" in str(text) for text in calls["markdown"])
+    assert any("crpm-inspector-deck-marker" in str(text) for text in calls["markdown"])
+    assert any("crpm-inspector-deck__heading" in str(text) and "Focus" in str(text) for text in calls["markdown"])
     assert any("crpm-filter-parent-label" in str(text) for text in calls["markdown"])
     assert any("crpm-filter-composer" in str(text) for text in calls["markdown"])
     assert any("crpm-active-filter-summary" in str(text) for text in calls["markdown"])
     assert any("crpm-dashboard-bar-list" in str(text) for text in calls["markdown"])
     assert any(label == "Report/export view" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
-    inspector_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-conformance-side-title--inspector" in str(text))
+    assert any(label == "Detailed drilldown" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
+    assert "←" in calls["buttons"]
+    assert "→" in calls["buttons"]
+    inspector_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-inspector-deck-marker" in str(text))
     selection_index = next(idx for idx, text in enumerate(calls["markdown"]) if "Selection focus</div>" in str(text))
-    watchlist_index = next(idx for idx, text in enumerate(calls["markdown"]) if idx > selection_index and "Watchlist</div>" in str(text))
-    assert inspector_index < selection_index < watchlist_index
+    assert inspector_index < selection_index
     assert not any("Pinned exact metrics</div>" in str(text) for text in calls["markdown"])
     assert not any("Lead-time watchlist</div>" in str(text) for text in calls["markdown"])
-    assert any(label == "Context" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
+    assert not any(label in {"Context", "Drilldown"} for label, _ in calls["expanders"])
     assert not any("Evidence rail</div>" in str(text) for text in calls["markdown"])
     top_transitions_index = next(
         idx for idx, text in enumerate(calls["markdown"]) if "Top transitions" in str(text) or "Top activities" in str(text)
@@ -1047,6 +1058,23 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
     composer_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-filter-composer" in str(text))
     active_filter_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-active-filter-summary" in str(text))
     assert top_transitions_index < filter_parent_index < composer_index < active_filter_index
+
+
+def test_inspector_navigation_rotation_wraps_in_both_directions(monkeypatch) -> None:
+    snapshot = SimpleNamespace(filter_key="run", input_name="input")
+    panel_key = conformance_page._widget_key(snapshot, "inspector_panel")
+    session_state = {panel_key: "Focus"}
+
+    monkeypatch.setattr(conformance_page.st, "session_state", session_state)
+
+    conformance_page._rotate_inspector_panel(snapshot, 1)
+    assert session_state[panel_key] == "Watchlists"
+    conformance_page._rotate_inspector_panel(snapshot, 1)
+    assert session_state[panel_key] == "Context"
+    conformance_page._rotate_inspector_panel(snapshot, 1)
+    assert session_state[panel_key] == "Focus"
+    conformance_page._rotate_inspector_panel(snapshot, -1)
+    assert session_state[panel_key] == "Context"
 
 
 def test_conformance_label_helpers_humanize_raw_workflow_labels() -> None:

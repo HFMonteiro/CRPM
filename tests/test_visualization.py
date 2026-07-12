@@ -686,6 +686,8 @@ def test_workflow_board_svg_simple_mainline_export_uses_compact_content_height()
     }
 
     svg = render_workflow_conformance_svg(payload, layout_mode="horizontal", detail_level="executive")
+    vertical_svg = render_workflow_conformance_svg(payload, layout_mode="vertical", detail_level="analyst")
+    explorer_html = render_workflow_explorer_html(create_workflow_interactive_payload(payload))
 
     viewbox_match = re.search(r'viewBox="0 0 (\d+) (\d+)"', svg)
     invitation_match = re.search(
@@ -707,6 +709,15 @@ def test_workflow_board_svg_simple_mainline_export_uses_compact_content_height()
     assert 'style="display:block;width:100%;max-width:100%;height:auto;"' in svg
     assert 'data-qa="workflow-board-card"' in svg
     assert 'data-qa="workflow-board-chip"' in svg
+    assert svg.count('data-qa="workflow-phase-band"') == 3
+    assert vertical_svg.count('data-qa="workflow-phase-band"') == 3
+    assert explorer_html.count('data-qa="explorer-phase-band"') == 3
+    for phase_label in ("Pre-primary care", "Primary care", "Hospital care"):
+        assert phase_label in svg
+        assert phase_label in vertical_svg
+        assert phase_label in explorer_html
+    assert 'data-qa="explorer-mainline-band"' not in explorer_html
+    assert "Reference flow" not in explorer_html
     board_height = int(viewbox_match.group(2))
     node_y = float(invitation_match.group(1))
     node_height = float(invitation_match.group(3))
@@ -717,7 +728,7 @@ def test_workflow_board_svg_simple_mainline_export_uses_compact_content_height()
     assert int(viewbox_match.group(1)) > board_height
     assert 110 <= board_height <= 190
     assert node_height <= 96.0
-    assert node_y <= 24.0
+    assert node_y <= 40.0
     assert board_height - (node_y + node_height) <= 56.0
     assert title_y >= chip_y + chip_height + 6.0
     assert "35.0 d me..." not in svg
@@ -794,6 +805,32 @@ def test_workflow_board_svg_handles_empty_inputs():
     assert 'class="crpm-workflow-board' in svg
     assert "<svg" in svg
     assert "No workflow conformance structure available" in svg
+
+
+def test_workflow_phase_classification_ignores_missing_step_values():
+    payload = {
+        "nodes": pd.DataFrame(
+            [
+                {
+                    "step": pd.NA,
+                    "activity": "PCC_observation",
+                    "display_name": "PCC observation",
+                    "cases": 10,
+                    "occurrences": 10,
+                    "step_rank": 4,
+                    "branch_role": "mainline",
+                    "lane": "center",
+                }
+            ]
+        ),
+        "edges": pd.DataFrame(),
+        "legend": pd.DataFrame(),
+    }
+
+    svg = render_workflow_conformance_svg(payload, layout_mode="horizontal")
+
+    assert 'data-phase="primary"' in svg
+    assert "Primary care" in svg
 
 
 def test_workflow_board_svg_handles_partial_nodes_only():
@@ -1841,7 +1878,7 @@ def test_workflow_explorer_html_uses_lighter_arrowheads():
     assert 'id="workflow-explorer-arrow-model"' in html
     assert 'id="workflow-explorer-arrow-neutral"' in html
     assert 'marker-end="url(#workflow-explorer-arrow-mainline)"' in html
-    assert 'stroke="#c8d4d8" stroke-width="0.8"' in html
+    assert 'stroke="#c8d4d8" stroke-width="0.8"' not in html
     assert 'preserveAspectRatio="xMidYMin meet"' in html
     assert "aspect-ratio:900/420" in html
     assert 'class="crpm-explorer-figure" style="width:100%;"' in html

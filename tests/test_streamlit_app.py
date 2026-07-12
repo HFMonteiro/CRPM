@@ -7,7 +7,8 @@ def test_app_navigation_renders_each_workspace_page() -> None:
     app = AppTest.from_file("app.py")
     app.run(timeout=45)
 
-    page_selector = next(radio for radio in app.radio if radio.label == "Page")
-    for page in page_selector.options:
+    pages = next(radio for radio in app.radio if radio.label == "Page").options
+    for page in pages:
+        page_selector = next(radio for radio in app.radio if radio.label == "Page")
         page_selector.set_value(page).run(timeout=45)
         assert not app.exception, f"{page} failed to render: {app.exception}"

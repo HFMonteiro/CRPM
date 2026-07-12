@@ -62,6 +62,7 @@ WORKFLOW_FILTER_DEFAULTS = {
 WORKFLOW_FILTER_CATEGORIES = ["Pathway", "Deviation", "Display", "Actions"]
 WORKFLOW_VIEW_OPTIONS = ["Explorer", "Board", "BPMN style"]
 WORKFLOW_VIEW_LABELS = {"explorer": "Explorer", "board": "Board", "bpmn": "BPMN style"}
+INSPECTOR_PANELS = ("Focus", "Watchlists", "Context")
 
 
 def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
@@ -208,11 +209,6 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
                 "No workflow graph is available for this selection. Use the model and deviation summaries in the inspector."
             )
     with detail_col:
-        _render_conformance_side_intro(
-            title="Inspector",
-            lead="Pin one node or transition only when exact evidence is needed.",
-            variant="inspector",
-        )
         pinned_kind, pinned_id = _render_right_panel(
             snapshot=snapshot,
             model_summary_df=model_summary_df,
@@ -232,6 +228,14 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
         workflow_selection_id=pinned_id,
         selected_workflow_node_id=pinned_id if pinned_kind == "node" else None,
         selected_workflow_edge_id=pinned_id if pinned_kind == "edge" else None,
+    )
+    _render_conformance_drilldown(
+        model_summary_df=model_summary_df,
+        deviation_summary_df=deviation_summary_df,
+        trace_deviation_df=trace_deviation_df,
+        legend_df=filtered_legend_df,
+        workflow=filtered_workflow,
+        controls=controls,
     )
     if has_workflow:
         _render_board_export_view(
@@ -394,46 +398,117 @@ def _render_right_panel(
     selection_kind: str,
     selection_id: Optional[str],
 ) -> tuple[str, Optional[str]]:
-    st.markdown(
-        "<div class='crpm-conformance-side-subtitle'>Selection focus</div>",
-        unsafe_allow_html=True,
-    )
-    selected_kind, selected_id, node_row, edge_row = _render_selection_focus(
-        snapshot=snapshot,
-        nodes_df=nodes_df,
-        edges_df=edges_df,
-        workflow=workflow,
-        selection_kind=selection_kind,
-        selection_id=selection_id,
-    )
-    if selected_id:
+    active_panel = _render_inspector_navigation(snapshot)
+    selected_kind = selection_kind
+    selected_id = selection_id
+
+    if active_panel == "Focus":
         st.markdown(
-            "<div class='crpm-conformance-side-subtitle'>Pinned exact metrics</div>",
+            "<div class='crpm-conformance-side-subtitle'>Selection focus</div>",
             unsafe_allow_html=True,
         )
-        _render_event_process_details(
-            model_summary_df=model_summary_df,
+        selected_kind, selected_id, _, _ = _render_selection_focus(
+            snapshot=snapshot,
             nodes_df=nodes_df,
             edges_df=edges_df,
-            metric_coloring=controls["metric_coloring"],
-            detail_level=controls["detail_level"],
-            selected_node_id=selected_id if selected_kind == "node" else None,
-            selected_edge_id=selected_id if selected_kind == "edge" else None,
+            workflow=workflow,
+            selection_kind=selection_kind,
+            selection_id=selection_id,
         )
-
-    st.markdown(
-        "<div class='crpm-conformance-side-subtitle'>Watchlist</div>",
-        unsafe_allow_html=True,
-    )
-    _render_root_cause_watchlist(snapshot)
-    _render_workflow_lead_time_rail(workflow=workflow, nodes_df=nodes_df, edges_df=edges_df)
-
-    with st.expander("Context", expanded=False):
+        if selected_id:
+            st.markdown(
+                "<div class='crpm-conformance-side-subtitle'>Pinned exact metrics</div>",
+                unsafe_allow_html=True,
+            )
+            _render_event_process_details(
+                model_summary_df=model_summary_df,
+                nodes_df=nodes_df,
+                edges_df=edges_df,
+                metric_coloring=controls["metric_coloring"],
+                detail_level=controls["detail_level"],
+                selected_node_id=selected_id if selected_kind == "node" else None,
+                selected_edge_id=selected_id if selected_kind == "edge" else None,
+            )
+    elif active_panel == "Watchlists":
+        _render_root_cause_watchlist(snapshot)
+        _render_workflow_lead_time_rail(workflow=workflow, nodes_df=nodes_df, edges_df=edges_df)
+    else:
         _render_workflow_scope_rail(workflow)
         _render_resource_perspective(snapshot)
         _render_insight_action_panel(workflow, controls)
 
-    with st.expander("Drilldown", expanded=False):
+    return selected_kind, selected_id
+
+
+def _rotate_inspector_panel(snapshot: AnalysisSnapshot, delta: int) -> None:
+    panel_key = _widget_key(snapshot, "inspector_panel")
+    active_panel = str(st.session_state.get(panel_key, INSPECTOR_PANELS[0]))
+    if active_panel not in INSPECTOR_PANELS:
+        active_panel = INSPECTOR_PANELS[0]
+    active_index = INSPECTOR_PANELS.index(active_panel)
+    st.session_state[panel_key] = INSPECTOR_PANELS[(active_index + delta) % len(INSPECTOR_PANELS)]
+
+
+def _render_inspector_navigation(snapshot: AnalysisSnapshot) -> str:
+    panel_key = _widget_key(snapshot, "inspector_panel")
+    active_panel = str(st.session_state.get(panel_key, INSPECTOR_PANELS[0]))
+    if active_panel not in INSPECTOR_PANELS:
+        active_panel = INSPECTOR_PANELS[0]
+
+    active_index = INSPECTOR_PANELS.index(active_panel)
+    st.markdown(
+        (
+            f"<div class='crpm-inspector-deck-marker' data-active-panel='{html.escape(active_panel)}'></div>"
+            "<div class='crpm-inspector-deck__heading'>"
+            "<span>Inspector</span>"
+            f"<strong>{html.escape(active_panel)}</strong>"
+            f"<small>{active_index + 1} / {len(INSPECTOR_PANELS)}</small>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+    label_col, previous_col, next_col = st.columns([0.56, 0.22, 0.22], gap="small")
+    with label_col:
+        st.caption(
+            {
+                "Focus": "Pinned node or transition evidence.",
+                "Watchlists": "Priority causes and lead-time signals.",
+                "Context": "Scope, resources and analytical posture.",
+            }[active_panel]
+        )
+    with previous_col:
+        st.button(
+            "←",
+            key=_widget_key(snapshot, "inspector_previous"),
+            help="Previous inspector view",
+            use_container_width=True,
+            on_click=_rotate_inspector_panel,
+            args=(snapshot, -1),
+        )
+    with next_col:
+        st.button(
+            "→",
+            key=_widget_key(snapshot, "inspector_next"),
+            help="Next inspector view",
+            use_container_width=True,
+            on_click=_rotate_inspector_panel,
+            args=(snapshot, 1),
+        )
+    st.session_state[panel_key] = active_panel
+    return active_panel
+
+
+def _render_conformance_drilldown(
+    *,
+    model_summary_df: pd.DataFrame,
+    deviation_summary_df: pd.DataFrame,
+    trace_deviation_df: pd.DataFrame,
+    legend_df: pd.DataFrame,
+    workflow: dict[str, Any],
+    controls: dict[str, Any],
+) -> None:
+    with st.expander("Detailed drilldown", expanded=False):
         _render_reference_model_panel(model_summary_df)
         if model_summary_df.empty:
             render_inline_empty("No model posture is available for this selection.")
@@ -446,7 +521,6 @@ def _render_right_panel(
             trace_deviation_df=trace_deviation_df,
             controls=controls,
         )
-    return selected_kind, selected_id
 
 
 def _render_workflow_evidence_rail(*, workflow: dict[str, Any], nodes_df: pd.DataFrame, edges_df: pd.DataFrame) -> None:

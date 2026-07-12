@@ -57,6 +57,11 @@ def test_conformance_compact_shell_styles_exist() -> None:
     css = get_custom_css()
     assert ".crpm-conformance-kpi-strip" in css
     assert ".crpm-conformance-kpi-strip--rail" in css
+    assert '[data-testid="stColumn"]:has(.crpm-inspector-deck-marker)' in css
+    assert "max-height: calc(100vh - 5rem);" in css
+    assert "overflow-y: auto;" in css
+    assert ".crpm-inspector-deck__heading" in css
+    assert "min-height: 2rem;" in css
     assert "max-height: 360px;" in css
     assert ".crpm-workflow-board--horizontal" in css
 
@@ -74,9 +79,12 @@ def test_overview_and_bi_card_styles_exist() -> None:
     assert ".crpm-overview-command-center" in css
     assert ".crpm-overview-map-frame" in css
     assert "height: clamp(360px, 46vh, 540px);" in css
+    assert ".crpm-overview-map-frame--expanded" in css
+    assert "height: clamp(330px, 52vh, 610px);" in css
     assert ".crpm-overview-map-frame .crpm-workflow-board {\n        display: flex;" in css
     assert ".crpm-overview-map-frame .crpm-workflow-board svg {\n        width: auto !important;" in css
     assert "height: 100% !important;" in css
+    assert "width: 100% !important;" in css
     assert ".crpm-bi-card-grid" in css
     assert ".crpm-page-card-grid" in css
     assert ".crpm-reading-order-band" in css

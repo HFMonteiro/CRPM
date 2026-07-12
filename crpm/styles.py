@@ -437,6 +437,11 @@ def get_custom_css() -> str:
         overflow: auto;
     }
 
+    .crpm-overview-map-frame--expanded {
+        height: clamp(330px, 52vh, 610px);
+        overflow: auto hidden;
+    }
+
     .crpm-overview-map-frame .crpm-workflow-board {
         display: flex;
         align-items: center;
@@ -454,6 +459,13 @@ def get_custom_css() -> str:
         height: 100% !important;
         max-height: 100% !important;
         min-height: 0 !important;
+    }
+
+    .crpm-overview-map-frame--expanded .crpm-workflow-board svg {
+        width: 100% !important;
+        max-width: none !important;
+        height: auto !important;
+        max-height: none !important;
     }
 
     .crpm-dashboard-map-toolbar {
@@ -1603,6 +1615,70 @@ def get_custom_css() -> str:
         color: var(--crpm-text-soft);
         margin-top: -0.02rem;
         max-width: 23rem;
+    }
+
+    [data-testid="stColumn"]:has(.crpm-inspector-deck-marker) {
+        position: sticky;
+        top: 4.15rem;
+        align-self: flex-start;
+        max-height: calc(100vh - 5rem);
+        padding-right: 0.18rem;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+    }
+
+    .crpm-inspector-deck-marker {
+        display: none;
+    }
+
+    .crpm-inspector-deck__heading {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: end;
+        gap: 0.08rem 0.35rem;
+        margin: 0 0 0.12rem 0;
+        padding: 0.42rem 0.48rem;
+        border: 1px solid rgba(157, 173, 190, 0.26);
+        border-radius: 8px;
+        background: #ffffff;
+    }
+
+    .crpm-inspector-deck__heading span {
+        grid-column: 1 / -1;
+        color: var(--crpm-muted);
+        font-size: 0.6rem;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .crpm-inspector-deck__heading strong {
+        min-width: 0;
+        color: var(--crpm-forest-strong);
+        font-size: 0.82rem;
+        line-height: 1.1;
+        overflow-wrap: anywhere;
+    }
+
+    .crpm-inspector-deck__heading small {
+        color: var(--crpm-text-soft);
+        font-size: 0.68rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    [data-testid="stColumn"]:has(.crpm-inspector-deck-marker) [data-testid="stCaptionContainer"] {
+        margin: 0;
+    }
+
+    [data-testid="stColumn"]:has(.crpm-inspector-deck-marker) [data-testid="stHorizontalBlock"] button {
+        min-height: 2rem;
+        padding: 0.18rem 0.28rem;
+        color: var(--crpm-forest-strong);
+        font-size: 1rem;
+        font-weight: 800;
+        line-height: 1;
     }
 
     .crpm-conformance-hero,
