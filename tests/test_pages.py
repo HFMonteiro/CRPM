@@ -1042,8 +1042,8 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
     assert any("crpm-dashboard-bar-list" in str(text) for text in calls["markdown"])
     assert any(label == "Report/export view" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
     assert any(label == "Detailed drilldown" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
-    assert "←" in calls["buttons"]
-    assert "→" in calls["buttons"]
+    assert {"1", "2", "3"}.issubset(set(calls["buttons"]))
+    assert any("crpm-inspector-orbit" in str(text) for text in calls["markdown"])
     inspector_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-inspector-deck-marker" in str(text))
     selection_index = next(idx for idx, text in enumerate(calls["markdown"]) if "Selection focus</div>" in str(text))
     assert inspector_index < selection_index
@@ -1075,6 +1075,11 @@ def test_inspector_navigation_rotation_wraps_in_both_directions(monkeypatch) -> 
     assert session_state[panel_key] == "Focus"
     conformance_page._rotate_inspector_panel(snapshot, -1)
     assert session_state[panel_key] == "Context"
+
+    conformance_page._set_inspector_panel(snapshot, "Watchlists")
+    assert session_state[panel_key] == "Watchlists"
+    conformance_page._set_inspector_panel(snapshot, "unknown")
+    assert session_state[panel_key] == "Focus"
 
 
 def test_conformance_label_helpers_humanize_raw_workflow_labels() -> None:

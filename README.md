@@ -84,7 +84,7 @@ The public sample bundle lives in `examples/`:
 - `running-example.xes` - small didactic baseline log
 - `screening_conformance_demo.xes` - main synthetic CRC screening demo log
 - `screening_conformance_demo.csv` - event-level CSV companion for onboarding and validation
-- `idealized_event_log.xes` and `idealized_petri_net.pnml` - idealized reference artefacts for conformance-oriented checks
+- `idealized_event_log.xes` and `idealized_petri_net.pnml` - idealized reference artefacts for conformance-oriented checks; the log contains 1,200 synthetic cases
 
 The bundled `screening_conformance_demo.*` files are **synthetic** and intentionally shaped to expose dominant and rare pathways, deviations, PRE/POST drift, and timing bottlenecks.
 

@@ -135,10 +135,12 @@ def test_render_analysis_controls_invalidates_stale_results(monkeypatch) -> None
     monkeypatch.setattr(app_shell, "resolve_xes_log", lambda *args, **kwargs: _loaded_log())
     monkeypatch.setattr(
         app_shell,
-        "compute_log_stats",
-        lambda *_args, **_kwargs: {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+        "get_log_profile",
+        lambda *_args, **_kwargs: {
+            "stats": {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+            "first_events": ["Start"],
+        },
     )
-    monkeypatch.setattr(app_shell, "first_event_names", lambda *_args, **_kwargs: ["Start"])
 
     _render_analysis_controls(state)
 
@@ -175,10 +177,12 @@ def test_render_analysis_controls_failure_clears_previous_results(monkeypatch) -
     monkeypatch.setattr(app_shell, "resolve_xes_log", lambda *args, **kwargs: _loaded_log())
     monkeypatch.setattr(
         app_shell,
-        "compute_log_stats",
-        lambda *_args, **_kwargs: {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+        "get_log_profile",
+        lambda *_args, **_kwargs: {
+            "stats": {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+            "first_events": ["Start"],
+        },
     )
-    monkeypatch.setattr(app_shell, "first_event_names", lambda *_args, **_kwargs: ["Start"])
     monkeypatch.setattr(app_shell, "run_discovery_comparison_pipeline", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
 
     _render_analysis_controls(state)
@@ -207,10 +211,12 @@ def test_render_analysis_controls_shows_sidebar_messages(monkeypatch) -> None:
     monkeypatch.setattr(app_shell, "resolve_xes_log", lambda *args, **kwargs: _loaded_log())
     monkeypatch.setattr(
         app_shell,
-        "compute_log_stats",
-        lambda *_args, **_kwargs: {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+        "get_log_profile",
+        lambda *_args, **_kwargs: {
+            "stats": {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+            "first_events": ["Start"],
+        },
     )
-    monkeypatch.setattr(app_shell, "first_event_names", lambda *_args, **_kwargs: ["Start"])
 
     _render_analysis_controls(state)
 
@@ -230,10 +236,12 @@ def test_render_analysis_controls_places_run_button_before_advanced_and_log_stat
     monkeypatch.setattr(app_shell, "resolve_xes_log", lambda *args, **kwargs: _loaded_log())
     monkeypatch.setattr(
         app_shell,
-        "compute_log_stats",
-        lambda *_args, **_kwargs: {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+        "get_log_profile",
+        lambda *_args, **_kwargs: {
+            "stats": {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+            "first_events": ["Start"],
+        },
     )
-    monkeypatch.setattr(app_shell, "first_event_names", lambda *_args, **_kwargs: ["Start"])
 
     _render_analysis_controls(state)
 

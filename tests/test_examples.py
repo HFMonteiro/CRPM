@@ -19,6 +19,16 @@ def _load_screening_demo():
     return xes_importer.apply("examples/screening_conformance_demo.xes")
 
 
+def test_idealized_reference_log_uses_1200_case_sample() -> None:
+    log = xes_importer.apply("examples/idealized_event_log.xes")
+    variants = Counter(_variant(trace) for trace in log)
+
+    assert len(log) == 1200
+    assert sum(len(trace) for trace in log) == 4126
+    assert len({trace.attributes["concept:name"] for trace in log}) == 1200
+    assert sorted(variants.values()) == [34, 405, 761]
+
+
 def _variant(trace) -> tuple[str, ...]:
     return tuple(event["concept:name"] for event in trace)
 

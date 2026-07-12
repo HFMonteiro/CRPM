@@ -1633,6 +1633,75 @@ def get_custom_css() -> str:
         display: none;
     }
 
+    .crpm-inspector-orbit {
+        position: relative;
+        height: 2rem;
+        margin: 0.08rem 0 0.16rem;
+    }
+
+    .crpm-inspector-orbit__track {
+        position: absolute;
+        top: 0.94rem;
+        left: 14%;
+        right: 14%;
+        height: 1px;
+        background: #c9d3dc;
+    }
+
+    .crpm-inspector-orbit__point,
+    .crpm-inspector-orbit__thumb {
+        position: absolute;
+        top: 0.63rem;
+        width: 0.66rem;
+        height: 0.66rem;
+        border-radius: 50%;
+        transform: translateX(-50%);
+    }
+
+    .crpm-inspector-orbit__point {
+        border: 1px solid #9fafbb;
+        background: #f7f9fb;
+    }
+
+    .crpm-inspector-orbit__point--one,
+    .crpm-inspector-orbit[data-active-index="0"] .crpm-inspector-orbit__thumb {
+        left: 14%;
+    }
+
+    .crpm-inspector-orbit__point--two,
+    .crpm-inspector-orbit[data-active-index="1"] .crpm-inspector-orbit__thumb {
+        left: 50%;
+    }
+
+    .crpm-inspector-orbit__point--three,
+    .crpm-inspector-orbit[data-active-index="2"] .crpm-inspector-orbit__thumb {
+        left: 86%;
+    }
+
+    .crpm-inspector-orbit__thumb {
+        width: 0.92rem;
+        height: 0.92rem;
+        top: 0.5rem;
+        z-index: 2;
+        border: 2px solid #ffffff;
+        background: var(--crpm-forest-strong);
+        box-shadow: 0 0 0 1px rgba(44, 78, 65, 0.24);
+        transition: left 180ms ease-out, transform 180ms ease-out;
+        animation: crpm-inspector-phase-arrive 180ms ease-out;
+    }
+
+    @keyframes crpm-inspector-phase-arrive {
+        from { transform: translateX(-50%) scale(0.76); opacity: 0.7; }
+        to { transform: translateX(-50%) scale(1); opacity: 1; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .crpm-inspector-orbit__thumb {
+            transition: none;
+            animation: none;
+        }
+    }
+
     .crpm-inspector-deck__heading {
         display: grid;
         grid-template-columns: 1fr auto;

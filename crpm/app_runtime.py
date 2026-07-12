@@ -182,6 +182,21 @@ def compute_log_stats(log: EventLog) -> dict[str, Optional[object]]:
     }
 
 
+def get_log_profile(state: CRPMState, loaded_log: LoadedLog) -> dict[str, Any]:
+    """Return immutable input metadata without rescanning a log on every rerun."""
+    cache_key = loaded_log.log_signature
+    cached = bounded_cache_get(state, "log_profile_cache", cache_key)
+    if isinstance(cached, Mapping):
+        return dict(cached)
+
+    profile = {
+        "stats": compute_log_stats(loaded_log.log),
+        "first_events": first_event_names(loaded_log.log),
+    }
+    bounded_cache_put(state, "log_profile_cache", cache_key, profile)
+    return profile
+
+
 def build_analysis_summary(
     *,
     log: EventLog | None,
@@ -291,7 +306,7 @@ def _validate_xes_bytes(raw_bytes: bytes) -> None:
         raise ValueError("XES validation failed: root element must be a XES log.")
 
 
-def _validate_xes_file(path: Path) -> int:
+def _validate_xes_file_metadata(path: Path) -> int:
     if _is_unc_path(path):
         raise ValueError("XES validation failed: network paths are not allowed.")
     if path.suffix.lower() != ".xes":
@@ -303,6 +318,11 @@ def _validate_xes_file(path: Path) -> int:
         raise ValueError("XES validation failed: file is empty.")
     if size > MAX_UPLOAD_BYTES:
         raise ValueError("XES validation failed: selected file exceeds the supported size limit.")
+    return size
+
+
+def _validate_xes_file(path: Path) -> int:
+    size = _validate_xes_file_metadata(path)
     _reject_unsafe_xml_file(path)
     try:
         parser = ET.iterparse(path, events=("start",))
@@ -370,10 +390,11 @@ def resolve_xes_log(
         raise ValueError("Select a XES log or upload one to continue.")
 
     path = Path(selected_path)
-    source_size = _validate_xes_file(path)
+    source_size = _validate_xes_file_metadata(path)
     signature = make_file_signature(path)
     cached_log = bounded_cache_get(state, "log_cache", signature)
     if cached_log is None:
+        _validate_xes_file(path)
         cached_log = load_log(path)
         bounded_cache_put(state, "log_cache", signature, cached_log)
     display_name = _redacted_source_label("XES", "local")

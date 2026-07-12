@@ -61,6 +61,8 @@ def test_conformance_compact_shell_styles_exist() -> None:
     assert "max-height: calc(100vh - 5rem);" in css
     assert "overflow-y: auto;" in css
     assert ".crpm-inspector-deck__heading" in css
+    assert ".crpm-inspector-orbit__thumb" in css
+    assert "prefers-reduced-motion: reduce" in css
     assert "min-height: 2rem;" in css
     assert "max-height: 360px;" in css
     assert ".crpm-workflow-board--horizontal" in css

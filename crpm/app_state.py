@@ -30,6 +30,7 @@ WORKFLOW_COHORT_POLICIES = {
 STATE_VERSION = 7
 CACHE_LIMITS = {
     "log_cache": 4,
+    "log_profile_cache": 4,
     "dataframe_cache": 2,
     "filtered_cache": 8,
     "model_cache": 4,

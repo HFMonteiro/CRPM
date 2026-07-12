@@ -134,7 +134,14 @@ def render_dfg_page(snapshot: AnalysisSnapshot) -> None:
         if dfg:
             with st.spinner("Rendering process map…"):
                 try:
-                    svg_markup = render_dfg_to_svg(dfg, starts, ends, variant=vis_variant)
+                    svg_markup = cached_payload.get("svg_markup")
+                    if svg_markup is None:
+                        svg_markup = render_dfg_to_svg(dfg, starts, ends, variant=vis_variant)
+                        cached_payload["svg_markup"] = svg_markup
+                        try:
+                            store_cache_entry(snapshot.dfg_cache, cache_key, cached_payload)
+                        except Exception:
+                            pass
                     st.markdown(
                         f'<div class="crpm-dfg-vector crpm-dfg-map-canvas">{svg_markup}</div>',
                         unsafe_allow_html=True,

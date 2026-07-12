@@ -14,8 +14,7 @@ import streamlit.components.v1 as components
 from crpm.app_runtime import (
     AVAILABLE_ALGORITHMS,
     compute_analysis_signature,
-    compute_log_stats,
-    first_event_names,
+    get_log_profile,
     list_safe_local_xes_files,
     preview_csv_dataframe,
     resolve_csv_log,
@@ -45,6 +44,7 @@ AUTHOR_WEBSITE = "https://hfmonteiro.com"
 LEGAL_NOTICE = (
     "For research and operational monitoring support only. Not a substitute for clinical judgment or institutional decision-making."
 )
+CONFORMANCE_PAGE_FRAGMENT = st.fragment(PAGE_REGISTRY["Conformance Analytics"])
 
 
 def _svg_data_uri(svg_markup: str) -> str:
@@ -98,10 +98,9 @@ def render_app() -> None:
     _render_sidebar_session_info(snapshot)
     _render_footer()
 
-    page_surface = st.empty()
-    with page_surface.container():
-        _render_header(snapshot, page=page)
-        PAGE_REGISTRY[page](snapshot)
+    _render_header(snapshot, page=page)
+    page_renderer = CONFORMANCE_PAGE_FRAGMENT if page == "Conformance Analytics" else PAGE_REGISTRY[page]
+    page_renderer(snapshot)
 
 
 def _reset_page_scroll_on_change(page: str) -> None:
@@ -139,8 +138,9 @@ def _reset_page_scroll_on_change(page: str) -> None:
             } catch (_) {}
           };
           reset();
-          try { window.parent.requestAnimationFrame(reset); } catch (_) {}
-          [50, 150, 350, 700, 1200].forEach((delay) => setTimeout(reset, delay));
+          try {
+            window.parent.requestAnimationFrame(() => window.parent.requestAnimationFrame(reset));
+          } catch (_) {}
         })();
         </script>
         """,
@@ -429,8 +429,9 @@ def _render_analysis_controls(state: CRPMState) -> None:
         results.source_metadata = loaded_log.metadata()
         results.workflow_cohort_policy = config.workflow_cohort_policy
 
-    log_stats = compute_log_stats(loaded_log.log)
-    start_options = ["All"] + first_event_names(loaded_log.log)
+    log_profile = get_log_profile(state, loaded_log)
+    log_stats = log_profile["stats"]
+    start_options = ["All"] + list(log_profile["first_events"])
     if config.workflow_cohort_policy == WORKFLOW_COHORT_FIRST_EVENT_DIRECT and config.start_filter == "All" and len(start_options) > 1:
         config.start_filter = start_options[1]
     config.start_filter = st.sidebar.selectbox(

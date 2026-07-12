@@ -169,7 +169,16 @@ def test_dfg_statistics_returns_expected_keys(log):
 
 
 def test_render_dfg_page_uses_coverage_slider_and_ranked_table(monkeypatch):
-    calls = {"labels": [], "charts": 0, "tables": [], "notes": [], "captions": [], "metrics": [], "markdown": []}
+    calls = {
+        "labels": [],
+        "charts": 0,
+        "tables": [],
+        "notes": [],
+        "captions": [],
+        "metrics": [],
+        "markdown": [],
+        "svg_renders": 0,
+    }
 
     class _Column:
         def __init__(self, index: int):
@@ -248,9 +257,15 @@ def test_render_dfg_page_uses_coverage_slider_and_ranked_table(monkeypatch):
         "discover_dfg_performance",
         lambda log: ({("A", "B"): 10, ("B", "C"): 6, ("C", "D"): 3, ("D", "E"): 1}, {"A": 1}, {"E": 1}),
     )
-    monkeypatch.setattr(dfg_page, "render_dfg_to_svg", lambda *args, **kwargs: "<svg><text>demo</text></svg>")
+
+    def _render_svg(*args, **kwargs):
+        calls["svg_renders"] += 1
+        return "<svg><text>demo</text></svg>"
+
+    monkeypatch.setattr(dfg_page, "render_dfg_to_svg", _render_svg)
     monkeypatch.setattr(dfg_page, "render_dfg_to_png", lambda *args, **kwargs: b"png")
 
+    dfg_page.render_dfg_page(snapshot)
     dfg_page.render_dfg_page(snapshot)
 
     assert "Edge coverage band (%)" in calls["labels"]
@@ -262,6 +277,7 @@ def test_render_dfg_page_uses_coverage_slider_and_ranked_table(monkeypatch):
     assert any("crpm-dfg-map-canvas" in text for text in calls["markdown"])
     assert calls["markdown"].index("#### Directly-follows map") < calls["markdown"].index("#### Ranked edge detail")
     assert calls["charts"] == 0
+    assert calls["svg_renders"] == 1
 
 
 def test_render_dfg_page_supports_performance_mode(monkeypatch):

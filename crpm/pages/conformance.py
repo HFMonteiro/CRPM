@@ -449,6 +449,11 @@ def _rotate_inspector_panel(snapshot: AnalysisSnapshot, delta: int) -> None:
     st.session_state[panel_key] = INSPECTOR_PANELS[(active_index + delta) % len(INSPECTOR_PANELS)]
 
 
+def _set_inspector_panel(snapshot: AnalysisSnapshot, panel: str) -> None:
+    panel_key = _widget_key(snapshot, "inspector_panel")
+    st.session_state[panel_key] = panel if panel in INSPECTOR_PANELS else INSPECTOR_PANELS[0]
+
+
 def _render_inspector_navigation(snapshot: AnalysisSnapshot) -> str:
     panel_key = _widget_key(snapshot, "inspector_panel")
     active_panel = str(st.session_state.get(panel_key, INSPECTOR_PANELS[0]))
@@ -458,7 +463,7 @@ def _render_inspector_navigation(snapshot: AnalysisSnapshot) -> str:
     active_index = INSPECTOR_PANELS.index(active_panel)
     st.markdown(
         (
-            f"<div class='crpm-inspector-deck-marker' data-active-panel='{html.escape(active_panel)}'></div>"
+            f"<div class='crpm-inspector-deck-marker' data-active-panel='{html.escape(active_panel)}' data-active-index='{active_index}'></div>"
             "<div class='crpm-inspector-deck__heading'>"
             "<span>Inspector</span>"
             f"<strong>{html.escape(active_panel)}</strong>"
@@ -468,33 +473,37 @@ def _render_inspector_navigation(snapshot: AnalysisSnapshot) -> str:
         unsafe_allow_html=True,
     )
 
-    label_col, previous_col, next_col = st.columns([0.56, 0.22, 0.22], gap="small")
-    with label_col:
-        st.caption(
-            {
-                "Focus": "Pinned node or transition evidence.",
-                "Watchlists": "Priority causes and lead-time signals.",
-                "Context": "Scope, resources and analytical posture.",
-            }[active_panel]
-        )
-    with previous_col:
-        st.button(
-            "←",
-            key=_widget_key(snapshot, "inspector_previous"),
-            help="Previous inspector view",
-            use_container_width=True,
-            on_click=_rotate_inspector_panel,
-            args=(snapshot, -1),
-        )
-    with next_col:
-        st.button(
-            "→",
-            key=_widget_key(snapshot, "inspector_next"),
-            help="Next inspector view",
-            use_container_width=True,
-            on_click=_rotate_inspector_panel,
-            args=(snapshot, 1),
-        )
+    st.markdown(
+        (
+            f"<div class='crpm-inspector-orbit' data-active-index='{active_index}' aria-label='Inspector view position'>"
+            "<span class='crpm-inspector-orbit__track'></span>"
+            "<span class='crpm-inspector-orbit__point crpm-inspector-orbit__point--one'></span>"
+            "<span class='crpm-inspector-orbit__point crpm-inspector-orbit__point--two'></span>"
+            "<span class='crpm-inspector-orbit__point crpm-inspector-orbit__point--three'></span>"
+            "<span class='crpm-inspector-orbit__thumb'></span>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        {
+            "Focus": "Pinned node or transition evidence.",
+            "Watchlists": "Priority causes and lead-time signals.",
+            "Context": "Scope, resources and analytical posture.",
+        }[active_panel]
+    )
+    point_columns = st.columns(len(INSPECTOR_PANELS), gap="small")
+    for index, (panel, column) in enumerate(zip(INSPECTOR_PANELS, point_columns), start=1):
+        with column:
+            st.button(
+                str(index),
+                key=_widget_key(snapshot, f"inspector_point_{panel.lower()}"),
+                help=f"Open {panel} inspector view",
+                use_container_width=True,
+                disabled=panel == active_panel,
+                on_click=_set_inspector_panel,
+                args=(snapshot, panel),
+            )
     st.session_state[panel_key] = active_panel
     return active_panel
 

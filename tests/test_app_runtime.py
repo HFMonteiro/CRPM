@@ -5,12 +5,14 @@ import pandas as pd
 import pytest
 from pm4py.objects.log.obj import EventLog, Trace
 
+import crpm.app_runtime as app_runtime
 from crpm.app_runtime import (
     LoadedLog,
     _delay_bucket,
     build_conformance_workspace_payload,
     build_model_comparison_dataframe,
     compute_filter_key,
+    get_log_profile,
     list_safe_local_xes_files,
     resolve_xes_log,
     run_discovery_comparison_pipeline,
@@ -691,6 +693,45 @@ def test_resolve_xes_log_rejects_unsafe_xml_after_large_prefix(tmp_path) -> None
     message = str(exc_info.value)
     assert "unsafe XML declaration" in message
     assert str(unsafe_file) not in message
+
+
+def test_resolve_xes_log_skips_full_xml_validation_for_unchanged_cached_file(tmp_path, monkeypatch) -> None:
+    state = get_crpm_state({})
+    xes_file = tmp_path / "cohort.xes"
+    xes_file.write_text("<log></log>", encoding="utf-8")
+    validation_calls = []
+
+    monkeypatch.setattr(app_runtime, "_validate_xes_file", lambda path: validation_calls.append(path) or path.stat().st_size)
+    monkeypatch.setattr(app_runtime, "load_log", lambda _path: EventLog())
+
+    first = resolve_xes_log(state, selected_path=str(xes_file), uploaded_bytes=None, uploaded_name=None)
+    second = resolve_xes_log(state, selected_path=str(xes_file), uploaded_bytes=None, uploaded_name=None)
+
+    assert first.log is second.log
+    assert validation_calls == [xes_file]
+
+
+def test_get_log_profile_reuses_stats_and_first_events(monkeypatch) -> None:
+    state = get_crpm_state({})
+    loaded_log = LoadedLog(log=EventLog(), input_name="Local XES log", log_signature="xes::stable")
+    calls = {"stats": 0, "first_events": 0}
+
+    def fake_stats(_log):
+        calls["stats"] += 1
+        return {"traces": 12, "events": 44, "start": None, "end": None}
+
+    def fake_first_events(_log):
+        calls["first_events"] += 1
+        return ["Invitation_mail"]
+
+    monkeypatch.setattr(app_runtime, "compute_log_stats", fake_stats)
+    monkeypatch.setattr(app_runtime, "first_event_names", fake_first_events)
+
+    first = get_log_profile(state, loaded_log)
+    second = get_log_profile(state, loaded_log)
+
+    assert first == second
+    assert calls == {"stats": 1, "first_events": 1}
 
 
 def test_resolve_xes_log_rejects_unc_network_paths_without_touching_share() -> None:
