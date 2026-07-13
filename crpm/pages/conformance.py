@@ -22,7 +22,6 @@ from crpm.formatting import format_metric_value as format_display_metric
 from crpm.interpretations import assess_fitness, assess_precision
 from crpm.pages.common import (
     render_dashboard_bar_list,
-    render_dashboard_topbar,
     render_empty_state,
     render_html_card_grid,
     render_html_ranked_table,
@@ -49,7 +48,7 @@ except Exception:  # pragma: no cover - optional dependency
 
 logger = logging.getLogger(__name__)
 WORKFLOW_VIEW_CACHE_VERSION = "workflow-view-v3"
-WORKFLOW_LOCAL_FOCUS_HINT = "Local focus is visual only. Pin from the right rail for exact metrics."
+WORKFLOW_LOCAL_FOCUS_HINT = "Local focus is visual only. Open Inspector and evidence for exact metrics."
 WORKFLOW_FILTER_DEFAULTS = {
     "workflow_mode": "Explorer",
     "filter_category": "Pathway",
@@ -89,6 +88,10 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
 
     if has_workflow:
         controls = _workflow_controls_from_state(snapshot)
+        with st.expander("Filters and display", expanded=False):
+            _render_workflow_top_transition_rail(workflow)
+            controls = _render_workflow_controls(snapshot, controls=controls, layout="toolbar")
+            _render_filter_context_note()
     else:
         controls = {
             "workflow_mode": _normalize_workflow_mode(WORKFLOW_FILTER_DEFAULTS["workflow_mode"]),
@@ -166,49 +169,38 @@ def render_conformance_page(snapshot: AnalysisSnapshot) -> None:
             grid_class="crpm-conformance-kpi-strip crpm-conformance-kpi-strip--cockpit",
         )
 
-    filter_col, main_col, detail_col = st.columns([0.5, 2.86, 0.7], gap="small")
-
-    with filter_col:
-        _render_conformance_filter_rail(
+    st.markdown("<div class='crpm-conformance-workbench-marker'></div>", unsafe_allow_html=True)
+    stage_actions = _render_workflow_stage_toolbar(snapshot=snapshot, workflow=filtered_workflow, controls=controls)
+    if stage_actions["reset_selection"]:
+        _clear_workflow_selection(snapshot)
+        _store_workflow_state(
             snapshot,
-            filtered_workflow,
-            controls,
-            model_summary_df=model_summary_df,
+            workflow_selection_kind="none",
+            workflow_selection_id=None,
+            selected_workflow_node_id=None,
+            selected_workflow_edge_id=None,
         )
+        current_selection_kind = "none"
+        current_selection_id = None
 
-    with main_col:
-        stage_actions = _render_workflow_stage_toolbar(snapshot=snapshot, workflow=filtered_workflow, controls=controls)
-        if stage_actions["reset_selection"]:
-            _clear_workflow_selection(snapshot)
-            _store_workflow_state(
-                snapshot,
-                workflow_selection_kind="none",
-                workflow_selection_id=None,
-                selected_workflow_node_id=None,
-                selected_workflow_edge_id=None,
-            )
-            current_selection_kind = "none"
-            current_selection_id = None
+    if has_workflow:
+        selection_kind, selection_id = _render_workflow_board_or_graph(
+            workflow=filtered_workflow,
+            nodes_df=filtered_nodes_df,
+            edges_df=filtered_edges_df,
+            workflow_mode=workflow_mode,
+            snapshot=snapshot,
+            metric_coloring=controls["metric_coloring"],
+            detail_level=controls["detail_level"],
+            selection_kind=current_selection_kind,
+            selection_id=current_selection_id,
+        )
+    else:
+        selection_kind = "none"
+        selection_id = None
+        render_inline_empty("No workflow graph is available for this selection. Use the model and deviation summaries in the inspector.")
 
-        if has_workflow:
-            selection_kind, selection_id = _render_workflow_board_or_graph(
-                workflow=filtered_workflow,
-                nodes_df=filtered_nodes_df,
-                edges_df=filtered_edges_df,
-                workflow_mode=workflow_mode,
-                snapshot=snapshot,
-                metric_coloring=controls["metric_coloring"],
-                detail_level=controls["detail_level"],
-                selection_kind=current_selection_kind,
-                selection_id=current_selection_id,
-            )
-        else:
-            selection_kind = "none"
-            selection_id = None
-            render_inline_empty(
-                "No workflow graph is available for this selection. Use the model and deviation summaries in the inspector."
-            )
-    with detail_col:
+    with st.expander("Inspector and evidence", expanded=bool(selection_id)):
         pinned_kind, pinned_id = _render_right_panel(
             snapshot=snapshot,
             model_summary_df=model_summary_df,
@@ -493,10 +485,10 @@ def _render_inspector_navigation(snapshot: AnalysisSnapshot) -> str:
         }[active_panel]
     )
     point_columns = st.columns(len(INSPECTOR_PANELS), gap="small")
-    for index, (panel, column) in enumerate(zip(INSPECTOR_PANELS, point_columns), start=1):
+    for panel, column in zip(INSPECTOR_PANELS, point_columns):
         with column:
             st.button(
-                str(index),
+                panel,
                 key=_widget_key(snapshot, f"inspector_point_{panel.lower()}"),
                 help=f"Open {panel} inspector view",
                 use_container_width=True,
@@ -1409,17 +1401,14 @@ def _render_conformance_header(*, workflow: dict[str, Any], model_summary_df: pd
         else "Read the process map first, then isolate deviations only where the pathway or delay story breaks."
     )
     st.markdown(
-        "<div class='crpm-conformance-page-marker crpm-conformance-cockpit-marker' aria-hidden='true'></div>",
+        (
+            "<div class='crpm-conformance-page-marker crpm-conformance-cockpit-marker' aria-hidden='true'></div>"
+            "<div class='crpm-conformance-summary-strip'>"
+            f"<span>Direct workflow mode · {html.escape(summary_text)}</span>"
+            f"<strong>Reference: {html.escape(reference_model)}</strong>"
+            "</div>"
+        ),
         unsafe_allow_html=True,
-    )
-    render_dashboard_topbar(
-        title="Conformance cockpit",
-        subtitle=summary_text,
-        badges=[
-            {"label": "Mode", "value": "Direct workflow mode", "tone": "accent"},
-            {"label": "Reference", "value": reference_model, "tone": "neutral"},
-        ],
-        meta=["First-event workflow gate", "Board/export view is report-only"],
     )
 
 

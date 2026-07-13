@@ -68,7 +68,7 @@ class _DummySidebar:
 
     def expander(self, *args, **kwargs):
         self.visible_order.append(("expander", args[0] if args else ""))
-        return _DummyContext()
+        return _DummyContext(self)
 
     def empty(self):
         index = len(self.visible_order)
@@ -87,6 +87,9 @@ class _DummySidebarSlot:
 
 
 class _DummyContext:
+    def __init__(self, sidebar: _DummySidebar | None = None) -> None:
+        self.sidebar = sidebar
+
     def __enter__(self):
         return self
 
@@ -94,7 +97,31 @@ class _DummyContext:
         return False
 
     def caption(self, *args, **kwargs):
+        if self.sidebar is not None:
+            return self.sidebar.caption(*args, **kwargs)
         return None
+
+    def markdown(self, *args, **kwargs):
+        if self.sidebar is not None:
+            return self.sidebar.markdown(*args, **kwargs)
+        return None
+
+    def radio(self, *args, **kwargs):
+        return self.sidebar.radio(*args, **kwargs)
+
+    def text_input(self, *args, **kwargs):
+        return self.sidebar.text_input(*args, **kwargs)
+
+    def file_uploader(self, *args, **kwargs):
+        return self.sidebar.file_uploader(*args, **kwargs)
+
+    def selectbox(self, *args, **kwargs):
+        return self.sidebar.selectbox(*args, **kwargs)
+
+    def popover(self, label, *args, **kwargs):
+        if self.sidebar is not None:
+            self.sidebar.visible_order.append(("popover", label))
+        return self
 
 
 def _dummy_streamlit(sidebar: _DummySidebar, session_state: dict) -> SimpleNamespace:
@@ -224,7 +251,7 @@ def test_render_analysis_controls_shows_sidebar_messages(monkeypatch) -> None:
     assert "Run failed" in calls["error"]
 
 
-def test_render_analysis_controls_places_run_button_before_advanced_and_log_stats(monkeypatch) -> None:
+def test_render_analysis_controls_places_run_button_before_data_drawer_and_log_summary(monkeypatch) -> None:
     import crpm.app_shell as app_shell
 
     session_state = {}
@@ -246,9 +273,10 @@ def test_render_analysis_controls_places_run_button_before_advanced_and_log_stat
     _render_analysis_controls(state)
 
     run_index = sidebar.visible_order.index(("button", "Run analysis"))
-    advanced_index = sidebar.visible_order.index(("expander", "Advanced setup"))
-    log_stats_index = sidebar.visible_order.index(("markdown", "### Log Statistics"))
-    assert run_index < advanced_index < log_stats_index
+    drawer_index = sidebar.visible_order.index(("expander", "Data & run"))
+    advanced_index = sidebar.visible_order.index(("popover", "Advanced setup"))
+    log_stats_index = sidebar.visible_order.index(("markdown", "#### Log summary"))
+    assert run_index < drawer_index < advanced_index < log_stats_index
 
 
 def test_page_change_scroll_reset_is_only_emitted_on_page_change(monkeypatch) -> None:

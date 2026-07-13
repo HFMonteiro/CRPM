@@ -200,7 +200,7 @@ def test_dashboard_helpers_escape_and_redact_sensitive_values(monkeypatch) -> No
     assert "<script>" not in bar_markup
 
 
-def test_render_overview_page_uses_dashboard_command_center(monkeypatch) -> None:
+def test_render_overview_page_prioritises_process_map(monkeypatch) -> None:
     calls = {"markdown": [], "workflow": [], "download": []}
     snapshot = AnalysisSnapshot(
         analysis_complete=True,
@@ -352,14 +352,15 @@ def test_render_overview_page_uses_dashboard_command_center(monkeypatch) -> None
     )
     overview_page.render_overview_page(snapshot)
 
-    assert any("crpm-dashboard-topbar" in text for text in calls["markdown"])
-    assert any("Direct workflow mode" in text for text in calls["markdown"])
-    assert any("crpm-overview-command-center" in text for text in calls["markdown"])
+    assert any("crpm-overview-workbench" in text for text in calls["markdown"])
+    assert any("crpm-overview-kpi-strip" in text for text in calls["markdown"])
+    assert not any("crpm-dashboard-topbar" in text for text in calls["markdown"])
+    assert not any("crpm-overview-command-center" in text for text in calls["markdown"])
     assert any("crpm-overview-map-frame" in text for text in calls["markdown"])
     assert not any("crpm-dashboard-bar-list" in text for text in calls["markdown"])
     assert not any(r"C:\Analyst\Private" in text for text in calls["markdown"])
     assert not any("crpm-overview-hero" in text for text in calls["markdown"])
-    assert any("crpm-reading-order-band" in text for text in calls["markdown"])
+    assert not any("crpm-reading-order-band" in text for text in calls["markdown"])
     assert any("crpm-page-card-grid" in text for text in calls["markdown"])
     assert calls["workflow"]
     assert calls["workflow"][0]["kwargs"]["layout_mode"] == "horizontal"
@@ -1013,17 +1014,18 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
     assert "workflow pathway board" not in explanatory_text
     assert "direct workflow mode" in explanatory_text
     assert not any(label == "Mode" for label, _ in calls["segmented"])
-    assert {"Pathway", "Deviation", "Display", "Actions"}.issubset(set(calls["buttons"]))
+    assert {"Focus", "Watchlists", "Context"}.issubset(set(calls["buttons"]))
     assert any(label == "Path view" for label, _ in calls["segmented"])
-    assert not any(label == "Deviation focus" for label, _ in calls["segmented"])
-    assert not any(label == "Density" for label, _ in calls["segmented"])
-    assert not any(label == "Lens" for label, _ in calls["segmented"])
+    assert any(label == "Deviation focus" for label, _ in calls["segmented"])
+    assert any(label == "Density" for label, _ in calls["segmented"])
+    assert any(label == "Lens" for label, _ in calls["segmented"])
     assert any(label == "Pinned metric type" for label, _ in calls["segmented"])
-    assert not any(label == "Color" for label, _ in calls["selectbox"])
+    assert any(label == "Color" for label, _ in calls["selectbox"])
     assert "Clear pin" in calls["buttons"]
     assert "Reset filters" in calls["buttons"]
     assert "Reset view" in calls["buttons"]
-    assert (0.5, 2.86, 0.7) in calls["columns"]
+    assert (0.5, 2.86, 0.7) not in calls["columns"]
+    assert (1.02, 1.1, 0.82, 0.86, 0.78, 0.82, 0.6) in calls["columns"]
     assert (0.74, 0.13, 0.13) in calls["columns"]
     assert any("crpm-selection-card" in text for text in calls["markdown"])
     assert any("crpm-model-card-grid" in text for text in calls["markdown"])
@@ -1031,18 +1033,22 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
     assert not any("crpm-mode-banner" in text for text in calls["markdown"])
     assert not any("Root-cause watchlist" in str(text) for text in calls["markdown"])
     assert not any("Resource perspective" in str(text) for text in calls["markdown"])
-    assert any("crpm-dashboard-topbar" in str(text) for text in calls["markdown"])
+    assert not any("crpm-dashboard-topbar" in str(text) for text in calls["markdown"])
+    assert any("crpm-conformance-summary-strip" in str(text) for text in calls["markdown"])
+    assert any("crpm-conformance-workbench-marker" in str(text) for text in calls["markdown"])
     assert not any("crpm-conformance-hero" in str(text) for text in calls["markdown"])
     assert not any("crpm-conformance-report-band" in str(text) for text in calls["markdown"])
     assert any("crpm-inspector-deck-marker" in str(text) for text in calls["markdown"])
     assert any("crpm-inspector-deck__heading" in str(text) and "Focus" in str(text) for text in calls["markdown"])
-    assert any("crpm-filter-parent-label" in str(text) for text in calls["markdown"])
-    assert any("crpm-filter-composer" in str(text) for text in calls["markdown"])
-    assert any("crpm-active-filter-summary" in str(text) for text in calls["markdown"])
+    assert not any("crpm-filter-parent-label" in str(text) for text in calls["markdown"])
+    assert not any("crpm-filter-composer" in str(text) for text in calls["markdown"])
+    assert not any("crpm-active-filter-summary" in str(text) for text in calls["markdown"])
     assert any("crpm-dashboard-bar-list" in str(text) for text in calls["markdown"])
     assert any(label == "Report/export view" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
     assert any(label == "Detailed drilldown" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
-    assert {"1", "2", "3"}.issubset(set(calls["buttons"]))
+    assert any(label == "Filters and display" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
+    assert any(label == "Inspector and evidence" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
+    assert not {"1", "2", "3"}.intersection(set(calls["buttons"]))
     assert any("crpm-inspector-orbit" in str(text) for text in calls["markdown"])
     inspector_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-inspector-deck-marker" in str(text))
     selection_index = next(idx for idx, text in enumerate(calls["markdown"]) if "Selection focus</div>" in str(text))
@@ -1051,13 +1057,7 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
     assert not any("Lead-time watchlist</div>" in str(text) for text in calls["markdown"])
     assert not any(label in {"Context", "Drilldown"} for label, _ in calls["expanders"])
     assert not any("Evidence rail</div>" in str(text) for text in calls["markdown"])
-    top_transitions_index = next(
-        idx for idx, text in enumerate(calls["markdown"]) if "Top transitions" in str(text) or "Top activities" in str(text)
-    )
-    filter_parent_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-filter-parent-label" in str(text))
-    composer_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-filter-composer" in str(text))
-    active_filter_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-active-filter-summary" in str(text))
-    assert top_transitions_index < filter_parent_index < composer_index < active_filter_index
+    assert any("Top transitions" in str(text) or "Top activities" in str(text) for text in calls["markdown"])
 
 
 def test_inspector_navigation_rotation_wraps_in_both_directions(monkeypatch) -> None:

@@ -82,7 +82,7 @@ def test_overview_and_bi_card_styles_exist() -> None:
     assert ".crpm-overview-map-frame" in css
     assert "height: clamp(360px, 46vh, 540px);" in css
     assert ".crpm-overview-map-frame--expanded" in css
-    assert "height: clamp(330px, 52vh, 610px);" in css
+    assert "height: clamp(500px, 66vh, 760px);" in css
     assert ".crpm-overview-map-frame .crpm-workflow-board {\n        display: flex;" in css
     assert ".crpm-overview-map-frame .crpm-workflow-board svg {\n        width: auto !important;" in css
     assert "height: 100% !important;" in css
@@ -139,7 +139,7 @@ def test_dashboard_header_avoids_cockpit_clipping() -> None:
 
 def test_sidebar_width_is_tokenized_for_process_map_space() -> None:
     css = get_custom_css()
-    assert "--crpm-sidebar-width: 14rem;" in css
+    assert "--crpm-sidebar-width: 12.75rem;" in css
     assert "min(1720px, 100%)" in css
     assert "min-width: var(--crpm-sidebar-width) !important;" in css
     assert "width: var(--crpm-sidebar-width) !important;" in css

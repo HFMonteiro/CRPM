@@ -15,7 +15,7 @@ def get_custom_css() -> str:
         --crpm-sidebar-text: #eef3f8;
         --crpm-sidebar-text-soft: #b4c0cd;
         --crpm-sidebar-accent: #6f88c6;
-        --crpm-sidebar-width: 14rem;
+        --crpm-sidebar-width: 12.75rem;
         --crpm-surface: #fcfbfd;
         --crpm-surface-alt: #f7f4fa;
         --crpm-forest: #365348;
@@ -74,6 +74,76 @@ def get_custom_css() -> str:
         padding-left: 0.9rem !important;
         padding-right: 0.9rem !important;
         color: var(--crpm-text) !important;
+    }
+
+    .crpm-sidebar-section-label {
+        margin: 0.22rem 0 0.18rem;
+        color: #dbe5ef;
+        font-size: 0.68rem;
+        font-weight: 800;
+        text-transform: uppercase;
+    }
+
+    .crpm-workspace-nav-marker {
+        display: none;
+    }
+
+    div[role="radiogroup"][aria-label="View"] {
+        display: flex;
+        width: fit-content;
+        max-width: 100%;
+        gap: 0.18rem;
+        margin: 0 0 0.34rem;
+        padding: 0.2rem;
+        border: 1px solid rgba(132, 149, 168, 0.28);
+        border-radius: 8px;
+        background: #ffffff;
+        box-shadow: 0 2px 8px rgba(28, 45, 64, 0.04);
+    }
+
+    div[role="radiogroup"][aria-label="View"] label {
+        min-height: 1.9rem;
+        padding: 0.28rem 0.56rem;
+        border-radius: 6px;
+        color: #435367;
+        font-size: 0.78rem;
+        font-weight: 700;
+    }
+
+    .crpm-overview-workbench {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 1rem;
+        margin: 0 0 0.28rem;
+        padding: 0.2rem 0.08rem 0.3rem;
+        border-bottom: 1px solid rgba(132, 149, 168, 0.24);
+    }
+
+    .crpm-overview-workbench div {
+        display: grid;
+        gap: 0.04rem;
+    }
+
+    .crpm-overview-workbench span {
+        color: #6b7a8a;
+        font-size: 0.62rem;
+        font-weight: 800;
+        text-transform: uppercase;
+    }
+
+    .crpm-overview-workbench strong {
+        color: #21384a;
+        font-size: 1.02rem;
+        line-height: 1.15;
+    }
+
+    .crpm-overview-workbench p {
+        max-width: 46rem;
+        margin: 0;
+        color: #5b6a78;
+        font-size: 0.76rem;
+        text-align: right;
     }
 
     .main .block-container,
@@ -438,8 +508,46 @@ def get_custom_css() -> str:
     }
 
     .crpm-overview-map-frame--expanded {
-        height: clamp(330px, 52vh, 610px);
+        height: clamp(500px, 66vh, 760px);
         overflow: auto hidden;
+    }
+
+    .crpm-overview-kpi-strip {
+        margin-bottom: 0.24rem;
+    }
+
+    .crpm-overview-kpi-strip .crpm-bi-card {
+        border-radius: 7px;
+        box-shadow: 0 2px 8px rgba(28, 45, 64, 0.035);
+    }
+
+    .crpm-conformance-summary-strip {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin: -0.15rem 0 0.28rem;
+        padding: 0.36rem 0.5rem;
+        border: 1px solid rgba(132, 149, 168, 0.26);
+        border-radius: 7px;
+        background: rgba(255, 255, 255, 0.82);
+        color: #536373;
+        font-size: 0.74rem;
+    }
+
+    .crpm-conformance-summary-strip strong {
+        color: #294438;
+        white-space: nowrap;
+    }
+
+    .crpm-conformance-workbench-marker {
+        display: none;
+    }
+
+    [data-testid="stExpander"]:has(.crpm-inspector-deck-marker) {
+        margin-top: 0.35rem;
+        border-radius: 8px !important;
+        background: rgba(255, 255, 255, 0.72);
     }
 
     .crpm-overview-map-frame .crpm-workflow-board {
@@ -1743,11 +1851,19 @@ def get_custom_css() -> str:
 
     [data-testid="stColumn"]:has(.crpm-inspector-deck-marker) [data-testid="stHorizontalBlock"] button {
         min-height: 2rem;
-        padding: 0.18rem 0.28rem;
+        padding: 0.24rem 0.38rem;
         color: var(--crpm-forest-strong);
-        font-size: 1rem;
+        font-size: 0.74rem;
         font-weight: 800;
         line-height: 1;
+    }
+
+    [data-testid="stExpander"]:has(.crpm-inspector-deck-marker) [data-testid="stHorizontalBlock"] button {
+        min-height: 2.1rem;
+        padding: 0.28rem 0.46rem;
+        color: var(--crpm-forest-strong);
+        font-size: 0.78rem;
+        font-weight: 800;
     }
 
     .crpm-conformance-hero,

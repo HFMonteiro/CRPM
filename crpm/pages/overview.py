@@ -14,10 +14,8 @@ from crpm.pages.common import (
     format_metric_value,
     redact_dashboard_value,
     render_dashboard_bar_list,
-    render_dashboard_topbar,
     render_html_card_grid,
     render_inline_empty,
-    render_metric_card_grid,
 )
 from crpm.run_manifest import manifest_to_json
 from crpm.visualization import render_workflow_conformance_svg
@@ -69,45 +67,49 @@ OVERVIEW_VIEWS = ("Process map", "Cohort", "Evidence")
 
 def render_overview_page(snapshot: AnalysisSnapshot) -> None:
     summary = _analysis_summary(snapshot)
-    _render_overview_topbar(snapshot, summary)
-
-    render_metric_card_grid(
+    st.markdown(
+        (
+            "<div class='crpm-overview-workbench'>"
+            "<div><span>Explore</span><strong>Process overview</strong></div>"
+            "<p>Start with the process map, then open cohort or evidence views when the pathway raises a question.</p>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+    render_html_card_grid(
         [
             {
                 "eyebrow": "Cohort",
                 "title": "Cases",
                 "value": format_metric_value(summary.get("cases"), kind="count"),
-                "body": "Current filtered run.",
+                "body": "Filtered run",
                 "tone": "neutral",
             },
             {
                 "eyebrow": "Cohort",
                 "title": "Events",
                 "value": format_metric_value(summary.get("events"), kind="count"),
-                "body": "Observed activity records.",
+                "body": "Activity records",
                 "tone": "accent",
             },
             {
                 "eyebrow": "Pathway",
                 "title": "Dominant path",
                 "value": _display_optional(summary.get("dominant_path_share"), kind="percent"),
-                "body": "Mainline concentration.",
+                "body": "Mainline concentration",
                 "tone": "success",
             },
             {
                 "eyebrow": "Timing",
                 "title": "Median throughput",
                 "value": _display_optional(summary.get("median_throughput_days"), kind="days"),
-                "body": "Current cohort median.",
+                "body": "Cohort median",
                 "tone": "neutral",
             },
-        ]
+        ],
+        grid_class="crpm-conformance-kpi-strip crpm-overview-kpi-strip",
     )
 
-    st.markdown(
-        "<div class='crpm-overview-command-center' aria-hidden='true'></div>",
-        unsafe_allow_html=True,
-    )
     active_view = _overview_view_selector(snapshot)
 
     if active_view == "Cohort":
@@ -166,17 +168,7 @@ def render_overview_page(snapshot: AnalysisSnapshot) -> None:
         return
 
     _render_overview_pathway_preview(snapshot)
-    st.markdown(
-        (
-            "<div class='crpm-reading-order-band'>"
-            "<span class='crpm-reading-order-band__eyebrow'>Guide</span>"
-            "<span class='crpm-reading-order-band__title'>Reading order</span>"
-            "<span class='crpm-reading-order-band__body'>Open the sequence below to see the recommended page flow for this run.</span>"
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
-    with st.expander("Reading order", expanded=False):
+    with st.expander("Workspace guide", expanded=False):
         st.markdown(
             _render_page_guide_html(snapshot.analysis_complete),
             unsafe_allow_html=True,
@@ -206,36 +198,6 @@ def _overview_view_selector(snapshot: AnalysisSnapshot) -> str:
             horizontal=True,
             label_visibility="collapsed",
         )
-    )
-
-
-def _render_overview_topbar(snapshot: AnalysisSnapshot, summary: Mapping[str, Any]) -> None:
-    title = "Overview command center"
-    subtitle = (
-        "First-event workflow gate remains the production discovery mode for this filtered run."
-        if snapshot.analysis_complete
-        else "Load an event log and run analysis to populate the cockpit."
-    )
-    render_dashboard_topbar(
-        title=title,
-        subtitle=subtitle,
-        badges=[
-            {"label": "Mode", "value": "Direct workflow mode", "tone": "accent"},
-            {
-                "label": "Follow-up",
-                "value": snapshot.active_followup_label or "Full available follow-up",
-                "tone": "success",
-            },
-            {
-                "label": "Models",
-                "value": f"{snapshot.model_count:,}",
-                "tone": "neutral",
-            },
-        ],
-        meta=[
-            snapshot.input_name or "No log loaded",
-            summary.get("period_label") or "Period unavailable",
-        ],
     )
 
 
