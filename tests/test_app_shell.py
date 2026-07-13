@@ -12,8 +12,9 @@ from crpm.app_state import get_crpm_state
 
 
 class _DummySidebar:
-    def __init__(self, *, button_result: bool = False) -> None:
+    def __init__(self, *, button_result: bool = False, checkbox_values: dict[str, bool] | None = None) -> None:
         self.button_result = button_result
+        self.checkbox_values = checkbox_values or {}
         self.info_messages = []
         self.visible_order = []
 
@@ -51,7 +52,8 @@ class _DummySidebar:
         return options[index]
 
     def checkbox(self, label, value=False, key=None, **kwargs):
-        return value
+        self.visible_order.append(("checkbox", label))
+        return self.checkbox_values.get(key, value)
 
     def date_input(self, label, value=None, key=None, **kwargs):
         return value
@@ -118,10 +120,17 @@ class _DummyContext:
     def selectbox(self, *args, **kwargs):
         return self.sidebar.selectbox(*args, **kwargs)
 
-    def popover(self, label, *args, **kwargs):
-        if self.sidebar is not None:
-            self.sidebar.visible_order.append(("popover", label))
-        return self
+    def checkbox(self, *args, **kwargs):
+        return self.sidebar.checkbox(*args, **kwargs)
+
+    def date_input(self, *args, **kwargs):
+        return self.sidebar.date_input(*args, **kwargs)
+
+    def multiselect(self, *args, **kwargs):
+        return self.sidebar.multiselect(*args, **kwargs)
+
+    def number_input(self, *args, **kwargs):
+        return self.sidebar.number_input(*args, **kwargs)
 
 
 def _dummy_streamlit(sidebar: _DummySidebar, session_state: dict) -> SimpleNamespace:
@@ -274,9 +283,42 @@ def test_render_analysis_controls_places_run_button_before_data_drawer_and_log_s
 
     run_index = sidebar.visible_order.index(("button", "Run analysis"))
     drawer_index = sidebar.visible_order.index(("expander", "Data & run"))
-    advanced_index = sidebar.visible_order.index(("popover", "Advanced setup"))
+    advanced_index = sidebar.visible_order.index(("checkbox", "Advanced setup"))
     log_stats_index = sidebar.visible_order.index(("markdown", "#### Log summary"))
     assert run_index < drawer_index < advanced_index < log_stats_index
+
+
+def test_render_analysis_controls_keeps_advanced_settings_inline(monkeypatch) -> None:
+    import crpm.app_shell as app_shell
+
+    session_state = {}
+    state = get_crpm_state(session_state)
+    state.config.selected_log_path = str(Path("examples") / "running-example.xes")
+    sidebar = _DummySidebar(
+        checkbox_values={
+            "crpm_show_advanced_setup": True,
+            "crpm_discovery_algorithm_0": True,
+            "crpm_discovery_algorithm_3": True,
+        }
+    )
+
+    monkeypatch.setattr(app_shell, "st", _dummy_streamlit(sidebar, session_state))
+    monkeypatch.setattr(app_shell, "resolve_xes_log", lambda *args, **kwargs: _loaded_log())
+    monkeypatch.setattr(
+        app_shell,
+        "get_log_profile",
+        lambda *_args, **_kwargs: {
+            "stats": {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+            "first_events": ["Start"],
+        },
+    )
+
+    _render_analysis_controls(state)
+
+    assert ("checkbox", "Apply date filter") in sidebar.visible_order
+    assert ("checkbox", "Heuristics classic") in sidebar.visible_order
+    assert ("checkbox", "Inductive IMf") in sidebar.visible_order
+    assert state.config.selected_algorithms == ["Heuristics (Classic)", "Inductive (IMf)"]
 
 
 def test_page_change_scroll_reset_is_only_emitted_on_page_change(monkeypatch) -> None:

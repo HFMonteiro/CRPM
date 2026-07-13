@@ -489,8 +489,15 @@ def _render_analysis_controls(state: CRPMState) -> None:
         key="crpm_start_filter",
         help="Production discovery/conformance/DFG mode keeps cases whose first event matches this gate. Use All only outside the paper-aligned production workflow.",
     )
-    with controls_panel.popover("Advanced setup", use_container_width=True):
-        config.apply_date_filter = st.checkbox(
+    show_advanced_setup = controls_panel.checkbox(
+        "Advanced setup",
+        value=False,
+        key="crpm_show_advanced_setup",
+        help="Show date, discovery, follow-up, and validation settings in this sidebar panel.",
+    )
+    if show_advanced_setup:
+        controls_panel.markdown("---")
+        config.apply_date_filter = controls_panel.checkbox(
             "Apply date filter",
             value=config.apply_date_filter,
             key="crpm_apply_date_filter",
@@ -498,7 +505,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
         )
 
         if config.apply_date_filter:
-            config.date_filter_mode = st.selectbox(
+            config.date_filter_mode = controls_panel.selectbox(
                 "Date filter mode",
                 options=["case", "event"],
                 index=0 if config.date_filter_mode != "event" else 1,
@@ -508,12 +515,12 @@ def _render_analysis_controls(state: CRPMState) -> None:
             )
             default_start = log_stats["start"].date() if log_stats.get("start") else date.today()
             default_end = log_stats["end"].date() if log_stats.get("end") else default_start
-            config.start_date = st.date_input(
+            config.start_date = controls_panel.date_input(
                 "Start date",
                 value=config.start_date or default_start,
                 key="crpm_filter_start_date",
             )
-            config.end_date = st.date_input(
+            config.end_date = controls_panel.date_input(
                 "End date",
                 value=config.end_date or default_end,
                 key="crpm_filter_end_date",
@@ -523,16 +530,31 @@ def _render_analysis_controls(state: CRPMState) -> None:
             config.start_date = None
             config.end_date = None
 
-        selected_algorithms = st.multiselect(
-            "Discovery algorithms",
-            options=list(AVAILABLE_ALGORITHMS.keys()),
-            default=config.selected_algorithms,
-            key="crpm_selected_algorithms",
-            help="Select the process discovery algorithms to compare. Fewer algorithms reduce runtime on large logs.",
-        )
-        config.selected_algorithms = selected_algorithms or ["Heuristics (Classic)"]
+        controls_panel.caption("Discovery algorithms")
+        algorithm_labels = {
+            "Heuristics (Classic)": "Heuristics classic",
+            "Heuristics (PLUS)": "Heuristics plus",
+            "Inductive (IM)": "Inductive IM",
+            "Inductive (IMf)": "Inductive IMf",
+            "Inductive (IMd)": "Inductive IMd",
+            "Alpha (Classic)": "Alpha classic",
+            "Alpha+": "Alpha+",
+        }
+        active_algorithms = set(config.selected_algorithms) or {"Heuristics (Classic)"}
+        selected_algorithms = []
+        for index, algorithm_name in enumerate(AVAILABLE_ALGORITHMS):
+            is_last_active = len(active_algorithms) == 1 and algorithm_name in active_algorithms
+            if controls_panel.checkbox(
+                algorithm_labels.get(algorithm_name, algorithm_name),
+                value=algorithm_name in active_algorithms,
+                key=f"crpm_discovery_algorithm_{index}",
+                disabled=is_last_active,
+                help="At least one discovery algorithm must remain selected." if is_last_active else None,
+            ):
+                selected_algorithms.append(algorithm_name)
+        config.selected_algorithms = selected_algorithms
 
-        config.apply_followup_window = st.checkbox(
+        config.apply_followup_window = controls_panel.checkbox(
             "Apply follow-up horizon",
             value=config.apply_followup_window,
             key="crpm_apply_followup_window",
@@ -540,7 +562,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
         )
         if config.apply_followup_window:
             config.followup_days = int(
-                st.number_input(
+                controls_panel.number_input(
                     "Follow-up horizon (days)",
                     min_value=30,
                     max_value=730,
@@ -550,7 +572,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
                 )
             )
 
-        config.enable_train_test = st.checkbox(
+        config.enable_train_test = controls_panel.checkbox(
             "Enable train/test split (80/20)",
             value=config.enable_train_test,
             key="crpm_enable_train_test",
@@ -558,7 +580,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
         )
         if config.enable_train_test:
             config.random_seed = int(
-                st.number_input(
+                controls_panel.number_input(
                     "Random seed",
                     min_value=1,
                     max_value=9999,
