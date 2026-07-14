@@ -470,6 +470,23 @@ def test_render_comparison_page_uses_heatmap_only_for_sparse_candidates(monkeypa
     assert calls["charts"] == ["shell_comparison_heatmap"]
 
 
+def test_comparison_variable_guide_explains_table_metrics(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(comparison_page.st, "markdown", lambda text, **kwargs: calls.append(text))
+
+    comparison_page._render_comparison_variable_guide()
+
+    assert len(calls) == 1
+    guide = calls[0]
+    assert 'data-qa="comparison-variable-guide"' in guide
+    assert "Alignment fitness" in guide
+    assert "Token fitness" in guide
+    assert "Precision" in guide
+    assert "Transitions" in guide
+    assert "PM4Py variant" in guide
+    assert "Discovery time" in guide
+
+
 def test_render_operational_flow_page_renders_charts(monkeypatch) -> None:
     calls = {"charts": [], "notes": [], "captions": []}
     log = [
@@ -582,6 +599,7 @@ def test_operational_flow_rate_bodies_flag_denominator_mismatch() -> None:
 
     assert operational_flow_page._fit_return_body(kpis).startswith("Check denominator:")
     assert operational_flow_page._completion_body(kpis).startswith("Check denominator:")
+    assert operational_flow_page._format_rate(7.5) == "Review denominator"
 
 
 def test_render_operational_flow_page_uses_data_driven_period_defaults(
@@ -1005,7 +1023,7 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
 
     assert calls["subheader"] == "Conformance Analytics"
     assert calls["html"][0]["html"] == "<div>interactive explorer</div>"
-    assert calls["html"][0]["kwargs"]["height"] == calls["explorer_payload"]["frame_height"] + 56
+    assert calls["html"][0]["kwargs"]["height"] == min(920, max(760, calls["explorer_payload"]["frame_height"] + 56))
     assert calls["workflow"]
     assert calls["notes"]
     assert ("Legend", "Deviations", "Trace") in calls["tabs"]
@@ -2136,6 +2154,80 @@ def test_render_performance_page_reuses_timing_buckets(monkeypatch) -> None:
     assert calls["case_buckets"] is not None
     assert calls["charts"]
     assert any("no bottleneck transitions were detected" in text.lower() for text in calls["empties"])
+
+
+def test_render_performance_page_renders_performance_bpmn_map(monkeypatch) -> None:
+    calls = {"maps": []}
+    transitions = pd.DataFrame(
+        {
+            "activity": ["Invitation"],
+            "next_activity": ["FIT_mail"],
+            "transition": ["Invitation -> FIT_mail"],
+            "frequency": [20],
+            "min_duration_s": [86400],
+            "avg_duration_s": [2 * 86400],
+            "median_duration_s": [2 * 86400],
+            "max_duration_s": [4 * 86400],
+            "p90_duration_s": [3 * 86400],
+            "std_duration_s": [86400],
+        }
+    )
+    activities = pd.DataFrame(
+        {
+            "activity": ["Invitation", "FIT_mail"],
+            "frequency": [20, 20],
+            "median_duration_s": [86400, 86400],
+            "p90_duration_s": [2 * 86400, 2 * 86400],
+        }
+    )
+    cases = pd.DataFrame({"case_id": ["case-1"], "duration_days": [4.0]})
+    snapshot = AnalysisSnapshot(
+        analysis_complete=True,
+        input_name="sample.xes",
+        filter_key="filter",
+        filtered_log=[[{"concept:name": "Invitation"}]],
+        discovery_results={},
+        comparison_df=pd.DataFrame(),
+        split_info={},
+        analysis_summary={},
+        active_followup_label="Full available follow-up",
+        config_change_message=None,
+        filter_error_message=None,
+        performance_cache={
+            "filter::performance": {
+                "activity_stats": activities,
+                "transition_stats": transitions,
+                "bottlenecks": transitions.assign(bottleneck_score=0.8),
+                "case_durations": cases,
+                "timings": {},
+            }
+        },
+        variant_cache={},
+        dfg_cache={},
+        conformance_results={},
+        conformance_workspace={},
+        selected_algorithms=("Heuristics (Classic)",),
+        stage_timings={},
+    )
+
+    monkeypatch.setattr(performance_page.st, "subheader", lambda *args, **kwargs: None)
+    monkeypatch.setattr(performance_page.st, "markdown", lambda *args, **kwargs: None)
+    monkeypatch.setattr(performance_page.st, "caption", lambda *args, **kwargs: None)
+    monkeypatch.setattr(performance_page.st, "columns", _columns)
+    monkeypatch.setattr(performance_page, "render_plotly_chart", lambda *args, **kwargs: None)
+    monkeypatch.setattr(performance_page, "render_quiet_note", lambda *args, **kwargs: None)
+    monkeypatch.setattr(performance_page, "render_inline_empty", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        performance_page,
+        "render_performance_bpmn_svg",
+        lambda *args, **kwargs: calls["maps"].append((args, kwargs)) or '<svg data-qa="performance-bpmn-board"></svg>',
+    )
+
+    performance_page.render_performance_page(snapshot)
+
+    assert len(calls["maps"]) == 1
+    assert calls["maps"][0][0][0].equals(transitions)
+    assert calls["maps"][0][1]["activity_stats"].equals(activities)
 
 
 def test_render_performance_page_uses_bi_case_duration_summary(monkeypatch) -> None:

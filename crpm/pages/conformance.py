@@ -336,7 +336,8 @@ def _render_interactive_workflow_graph(
             selected_edge_id=selected_edge_id,
         )
         explorer_payload["instance_id"] = f"{_widget_key(snapshot, 'workflow_explorer_html')}_{viewport_nonce}"
-        initial_frame_height = int(explorer_payload.get("frame_height", int(explorer_payload.get("height", 520)) + 116)) + 56
+        requested_frame_height = int(explorer_payload.get("frame_height", int(explorer_payload.get("height", 520)) + 116)) + 56
+        initial_frame_height = min(920, max(760, requested_frame_height))
         components.html(
             render_workflow_explorer_html(explorer_payload),
             height=initial_frame_height,
@@ -1291,7 +1292,7 @@ def _render_workflow_top_transition_rail(workflow: dict[str, Any]) -> None:
         "Top transitions",
         [
             {
-                "label": "Dominant path",
+                "label": "Mainline coverage",
                 "value": _coerce_float(summary.get("dominant_path_share")) or 0.0,
                 "tone": "success",
             },
@@ -1390,7 +1391,7 @@ def _render_conformance_header(*, workflow: dict[str, Any], model_summary_df: pd
     throughput = _coerce_float(summary.get("median_throughput_days"))
     summary_bits = []
     if dominant_share is not None:
-        summary_bits.append(f"dominant path {dominant_share:.1f}%")
+        summary_bits.append(f"mainline coverage {dominant_share:.1f}%")
     if deviation_share is not None:
         summary_bits.append(f"deviation share {deviation_share:.1f}%")
     if throughput is not None:
@@ -1420,7 +1421,7 @@ def _render_board_summary(*, workflow: dict[str, Any], model_summary_df: pd.Data
     top_model = _top_model_name(model_summary_df)
     story_bits = []
     if dominant_share is not None:
-        story_bits.append(f"dominant path covers {dominant_share:.1f}% of visible cases")
+        story_bits.append(f"mainline covers {dominant_share:.1f}% of visible cases")
     if deviation_share is not None:
         story_bits.append(f"deviation share is {deviation_share:.1f}%")
     if throughput is not None:
@@ -1837,7 +1838,7 @@ def _render_workflow_kpi_strip(
             },
             {
                 "eyebrow": "Pathway",
-                "title": "Dominant path",
+                "title": "Mainline coverage",
                 "value": "N/A" if dominant_share is None else f"{dominant_share:.1f}%",
                 "body": "",
                 "tone": "success",

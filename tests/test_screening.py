@@ -13,6 +13,7 @@ from crpm.screening import (
     build_normative_pathway_model,
     compute_screening_kpis,
     filter_log_by_incident_period,
+    infer_step_mapping,
     split_log_by_periods,
     summarize_transition_benchmarks,
 )
@@ -122,6 +123,39 @@ def test_colonoscopy_completion_prefers_pcc_observation_denominator() -> None:
     assert kpis["colonoscopy_completion_denominator_count"] == 1
     assert kpis["colonoscopy_completion_numerator_count"] == 1
     assert kpis["colonoscopy_completion_rate"] == pytest.approx(1.0)
+
+
+def test_infer_step_mapping_prefers_canonical_activity_over_variants() -> None:
+    mapping = infer_step_mapping(
+        [
+            "Lab_rejection",
+            "Lab_return",
+            "Lab_result",
+            "PCC_FIT_rejection",
+            "PCC_fwd",
+            "PCC_observation",
+        ]
+    )
+
+    assert mapping["lab_result"] == "Lab_result"
+    assert mapping["pcc_observation"] == "PCC_observation"
+
+
+def test_completion_rate_stays_within_the_eligible_denominator() -> None:
+    kpis = compute_screening_kpis(
+        EventLog([make_trace("case-1", [("PCC_observation", datetime(2024, 1, 1)), ("Colonoscopy_center", datetime(2024, 1, 2))])]),
+        {
+            "invitation": "Invitation_mail",
+            "fit_mail": "FIT_mail",
+            "fit_return": "FIT_return",
+            "lab_result": "Lab_result",
+            "pcc_observation": "PCC_observation",
+            "colonoscopy": "Colonoscopy_center",
+        },
+    )
+
+    assert kpis["colonoscopy_completion_rate"] == pytest.approx(1.0)
+    assert kpis["colonoscopy_completion_rate_valid"] is True
 
 
 def test_transition_benchmarks_flag_breaches() -> None:

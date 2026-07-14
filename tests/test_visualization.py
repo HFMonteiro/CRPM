@@ -23,6 +23,7 @@ from crpm.visualization import (
     create_workflow_cytoscape_payload,
     create_workflow_conformance_sankey,
     _workflow_primary_path_nodes,
+    render_performance_bpmn_svg,
     render_workflow_bpmn_style_svg,
     render_workflow_explorer_html,
     render_workflow_conformance_svg,
@@ -62,6 +63,81 @@ def test_bottleneck_chart_collapses_equal_median_and_p90_values():
     assert fig.data[0].type == "bar"
     assert fig.data[1].type == "scatter"
     assert any("Flat interval" in annotation.text for annotation in fig.layout.annotations)
+
+
+def test_performance_bpmn_svg_encodes_transfer_speed_and_volume():
+    transitions = pd.DataFrame(
+        {
+            "activity": ["invitation", "fit_mail", "fit_return", "pcc_observation"],
+            "next_activity": ["fit_mail", "fit_return", "pcc_observation", "colonoscopy"],
+            "frequency": [1000, 900, 800, 120],
+            "median_duration_s": [86400, 3 * 86400, 10 * 86400, 30 * 86400],
+            "p90_duration_s": [2 * 86400, 5 * 86400, 15 * 86400, 45 * 86400],
+        }
+    )
+    activities = pd.DataFrame(
+        {
+            "activity": ["invitation", "fit_mail", "fit_return", "pcc_observation", "colonoscopy"],
+            "frequency": [1000, 1000, 900, 800, 120],
+            "median_duration_s": [3600, 7200, 14400, 28800, 43200],
+            "p90_duration_s": [7200, 14400, 28800, 57600, 86400],
+        }
+    )
+
+    svg = render_performance_bpmn_svg(transitions, activity_stats=activities)
+
+    assert 'data-qa="performance-bpmn-board"' in svg
+    assert svg.count('data-qa="performance-bpmn-task"') == 5
+    assert svg.count('data-qa="performance-sequence-flow"') == 4
+    assert 'data-qa="performance-bpmn-start"' in svg
+    assert 'data-qa="performance-bpmn-end"' in svg
+    assert "Speed of transfer" in svg
+    assert "speed of transfer" in svg
+    assert "transfers/day" in svg
+    assert "Pre-primary care" in svg
+    assert "Primary care" in svg
+    assert "Hospital care" in svg
+    assert "#3f8f6b" in svg
+    assert "#c95d68" in svg
+
+
+def test_performance_bpmn_svg_reduces_variation_spaghetti():
+    transitions = pd.DataFrame(
+        {
+            "activity": [
+                "invitation",
+                "fit_mail",
+                "fit_return",
+                "lab_result",
+                "pcc_observation",
+                "reminder_mail",
+                "admin_review",
+                "reschedule_mail",
+                "pcc_observation",
+            ],
+            "next_activity": [
+                "fit_mail",
+                "fit_return",
+                "lab_result",
+                "pcc_observation",
+                "colonoscopy",
+                "fit_return",
+                "colonoscopy",
+                "colonoscopy",
+                "admin_review",
+            ],
+            "frequency": [1000, 900, 800, 700, 600, 80, 70, 60, 40],
+            "median_duration_s": [86400, 2 * 86400, 3 * 86400, 4 * 86400, 5 * 86400, 6 * 86400, 7 * 86400, 8 * 86400, 9 * 86400],
+            "p90_duration_s": [2 * 86400, 3 * 86400, 4 * 86400, 5 * 86400, 6 * 86400, 7 * 86400, 8 * 86400, 9 * 86400, 10 * 86400],
+        }
+    )
+
+    svg = render_performance_bpmn_svg(transitions)
+
+    assert svg.count('data-qa="performance-sequence-flow"') <= 10
+    assert svg.count('data-qa="performance-edge-label"') <= 6
+    assert 'data-edge-kind="variation"' in svg
+    assert "showing" in svg
 
 
 def test_activity_duration_chart_returns_figure():
@@ -136,10 +212,35 @@ def test_model_comparison_heatmap_returns_figure():
     fig = create_model_comparison_heatmap(df, metrics=["alignment_fitness", "precision"])
     assert isinstance(fig, go.Figure)
     assert fig.layout.width is None
-    assert fig.layout.height == 300
-    assert fig.layout.margin.l == 72
+    assert fig.layout.height == 340
+    assert fig.layout.margin.l == 148
+    assert fig.layout.title.text is None
+    assert tuple(fig.data[0].y) == ("Alignment fitness", "Precision")
+    assert fig.layout.yaxis.autorange == "reversed"
+    assert fig.layout.xaxis.tickfont.size == 14
     assert fig.data[0].colorscale[0] == (0.0, "#b57a3e")
-    assert fig.data[0].textfont.size == 12
+    assert fig.data[0].textfont.size == 16
+    assert fig.data[0].xgap == 3
+    assert fig.data[0].ygap == 3
+    assert fig.data[0].zmin == 0
+    assert fig.data[0].zmax == 1
+    assert fig.data[0].colorbar.title.text == "Score"
+
+
+def test_model_comparison_heatmap_preserves_missing_metrics_as_gaps():
+    df = pd.DataFrame(
+        {
+            "model_name": ["IM", "IMf"],
+            "alignment_fitness": [0.9, None],
+        }
+    )
+
+    fig = create_model_comparison_heatmap(df, metrics=["alignment_fitness", "precision"])
+
+    assert fig.data[0].z[0][1] is None
+    assert tuple(fig.data[0].z[1]) == (None, None)
+    assert fig.data[0].text[0][1] == "N/A"
+    assert tuple(fig.data[0].text[1]) == ("N/A", "N/A")
 
 
 def test_operational_flow_chart_returns_figure():
@@ -154,9 +255,13 @@ def test_operational_flow_chart_returns_figure():
     fig = create_operational_flow_chart(df)
     assert isinstance(fig, go.Figure)
     assert fig.layout.font.color
-    assert fig.layout.hoverlabel.font.color == "#ffffff"
+    assert fig.layout.hoverlabel.bgcolor == "#ffffff"
+    assert fig.layout.hoverlabel.font.color == "#1f2c25"
+    assert fig.layout.hoverlabel.namelength == -1
     assert fig.layout.legend.font.color == "#1f2c25"
     assert fig.layout.legend.bgcolor == "rgba(251, 249, 253, 0.99)"
+    assert fig.layout.legend.y == -0.18
+    assert fig.layout.margin.b == 92
 
 
 def test_queue_stock_chart_returns_figure():
@@ -446,14 +551,15 @@ def test_workflow_board_svg_returns_markup():
     svg = render_workflow_conformance_svg(payload, layout_mode="horizontal", detail_level="executive")
     assert 'class="crpm-workflow-board crpm-workflow-board--horizontal"' in svg
     assert "<svg" in svg
-    assert "min-width:100%;height:auto;" in svg
+    assert 'data-fit-mode="shelf"' in svg
+    assert 'style="display:block;width:100%;max-width:100%;height:auto;"' in svg
     assert "Invitation" in svg
     assert "FIT mail" in svg
     assert "stroke-dasharray" in svg
     assert 'data-branch-role="mainline"' in svg
     assert 'data-branch-role="side"' in svg
     assert 'aria-label="Workflow conformance board"' in svg
-    assert "Upper variation" in svg
+    assert "Upstream activities" in svg
     assert "Deviation &amp; Timing Legend" not in svg
     assert "Editorial board view" not in svg
     assert "Mainline backbone</text>" not in svg
@@ -554,11 +660,140 @@ def test_workflow_board_svg_preserves_horizontal_layout_with_upper_and_lower_var
 
     svg = render_workflow_conformance_svg(payload, layout_mode="horizontal", detail_level="executive")
 
-    assert "Upper variation" in svg
-    assert "Lower variation" in svg
+    assert "Upstream activities" in svg
+    assert "Related activities" in svg
     assert "Upper branch" in svg
     assert "Lower branch" in svg
+    assert 'data-layout-band="upper"' in svg
+    assert 'data-layout-band="lower"' in svg
+    assert 'data-qa="workflow-variation-band"' in svg
     assert "crpm-workflow-explorer" not in svg
+
+
+def test_workflow_board_svg_uses_compact_shelves_for_related_activities():
+    mainline = [
+        ("Invitation_mail", "Invitation", "invitation"),
+        ("FIT_mail", "FIT mail", "fit_mail"),
+        ("FIT_return", "FIT return", "fit_return"),
+        ("Lab_result", "Lab result", "lab_result"),
+        ("PCC_observation", "PCC observation", "pcc_observation"),
+        ("Colonoscopy", "Colonoscopy", "colonoscopy"),
+    ]
+    related = [
+        ("Reminder_mail", "Reminder", 1),
+        ("PCC_FIT_rejection", "PCC FIT rejection", 2),
+        ("Admin_review", "Admin review", 3),
+        ("Reschedule_mail", "Rescheduled", 5),
+    ]
+    nodes = [
+        {
+            "step": step,
+            "activity": activity,
+            "display_name": label,
+            "cases": 900,
+            "occurrences": 900,
+            "severity": "Low",
+            "conformance_bucket": "Conformant",
+            "branch_role": "mainline",
+            "lane": "center",
+            "step_rank": rank,
+        }
+        for rank, (activity, label, step) in enumerate(mainline)
+    ]
+    nodes.extend(
+        {
+            "activity": activity,
+            "display_name": label,
+            "cases": 20,
+            "occurrences": 20,
+            "severity": "Moderate",
+            "conformance_bucket": "Model deviation",
+            "branch_role": "side",
+            "lane": "right",
+            "step_rank": rank,
+        }
+        for activity, label, rank in related
+    )
+    edges = [
+        {
+            "source": source[0],
+            "target": target[0],
+            "frequency": 800,
+            "severity": "Low",
+            "conformance_bucket": "Conformant",
+            "branch_role": "mainline",
+        }
+        for source, target in zip(mainline, mainline[1:])
+    ]
+    edges.extend(
+        [
+            {"source": "Invitation_mail", "target": "Reminder_mail", "frequency": 22, "branch_role": "side"},
+            {"source": "Reminder_mail", "target": "FIT_mail", "frequency": 20, "branch_role": "side"},
+            {"source": "Reminder_mail", "target": "Reminder_mail", "frequency": 4, "branch_role": "side"},
+            {"source": "FIT_return", "target": "PCC_FIT_rejection", "frequency": 18, "branch_role": "side"},
+            {"source": "PCC_FIT_rejection", "target": "Admin_review", "frequency": 16, "branch_role": "side"},
+            {"source": "Admin_review", "target": "Lab_result", "frequency": 14, "branch_role": "side"},
+            {"source": "Colonoscopy", "target": "Reschedule_mail", "frequency": 12, "branch_role": "side"},
+        ]
+    )
+
+    svg = render_workflow_conformance_svg(
+        {"nodes": pd.DataFrame(nodes), "edges": pd.DataFrame(edges), "legend": pd.DataFrame()},
+        layout_mode="horizontal",
+        detail_level="analyst",
+    )
+
+    viewbox = re.search(r'viewBox="0 0 (\d+) (\d+)"', svg)
+    assert viewbox is not None
+    assert int(viewbox.group(1)) <= 1120
+    assert int(viewbox.group(2)) <= 300
+    assert 'data-fit-mode="shelf"' in svg
+    assert svg.count('data-layout-band="mainline"') == 6
+    assert svg.count('data-layout-band="lower"') == 4
+    assert "Related activities" in svg
+    assert "PCC FIT rejection" in svg
+    assert "PCC FIT rej..." not in svg
+
+    mainline_y = re.findall(
+        r'data-activity="[^"]+" data-branch-role="mainline"[^>]*>\s*<rect x="[^"]+" y="([^"]+)"',
+        svg,
+    )
+    related_rects = re.findall(
+        r'data-activity="([^"]+)" data-branch-role="side" data-layout-band="lower"[^>]*>\s*<rect x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)"',
+        svg,
+    )
+    assert len(set(mainline_y)) == 1
+    assert len(related_rects) == 4
+    assert len({y for _, _, y, _, _ in related_rects}) == 1
+    ordered_related = sorted((float(x), float(width)) for _, x, _, width, _ in related_rects)
+    for (left_x, left_width), (right_x, _) in zip(ordered_related, ordered_related[1:]):
+        assert left_x + left_width + 8.0 <= right_x
+
+    related_content = re.findall(
+        r'<g[^>]*data-activity="([^"]+)"[^>]*data-branch-role="side"[^>]*>'
+        r'.*?<rect x="[^"]+" y="([^"]+)" width="[^"]+" height="([^"]+)"[^>]*/>'
+        r'.*?<text x="[^"]+" y="([^"]+)"[^>]*data-qa="workflow-board-meta">',
+        svg,
+        re.S,
+    )
+    assert len(related_content) == 4
+    for _, node_y, node_height, meta_y in related_content:
+        assert float(meta_y) <= float(node_y) + float(node_height) - 14.0
+
+    phase_heights = [
+        float(value)
+        for value in re.findall(
+            r'<rect[^>]*height="([^"]+)"[^>]*data-qa="workflow-phase-band"[^>]*/>',
+            svg,
+        )
+    ]
+    assert len(phase_heights) == 3
+    assert all(height < int(viewbox.group(2)) * 0.7 for height in phase_heights)
+    reminder_loop = re.search(r'<path d="([^"]+)"[^>]*data-edge-id="Reminder_mail -&gt; Reminder_mail"', svg)
+    assert reminder_loop is not None
+    loop_coordinates = [float(value) for value in re.findall(r"-?\d+(?:\.\d+)?", reminder_loop.group(1))]
+    assert len(loop_coordinates) % 2 == 0
+    assert max(loop_coordinates[1::2]) <= int(viewbox.group(2)) - 8.0
 
 
 def test_workflow_board_svg_simple_mainline_export_uses_compact_content_height():
@@ -686,10 +921,12 @@ def test_workflow_board_svg_simple_mainline_export_uses_compact_content_height()
     }
 
     svg = render_workflow_conformance_svg(payload, layout_mode="horizontal", detail_level="executive")
+    analyst_svg = render_workflow_conformance_svg(payload, layout_mode="horizontal", detail_level="analyst")
     vertical_svg = render_workflow_conformance_svg(payload, layout_mode="vertical", detail_level="analyst")
     explorer_html = render_workflow_explorer_html(create_workflow_interactive_payload(payload))
 
     viewbox_match = re.search(r'viewBox="0 0 (\d+) (\d+)"', svg)
+    analyst_viewbox_match = re.search(r'viewBox="0 0 (\d+) (\d+)"', analyst_svg)
     invitation_match = re.search(
         r'data-activity="Invitation_mail".*?<rect x="[^"]+" y="([^"]+)" width="([^"]+)" height="([^"]+)"',
         svg,
@@ -703,6 +940,7 @@ def test_workflow_board_svg_simple_mainline_export_uses_compact_content_height()
     )
 
     assert viewbox_match is not None
+    assert analyst_viewbox_match is not None
     assert invitation_match is not None
     assert invitation_chip_match is not None
     assert 'data-fit-mode="shelf"' in svg
@@ -727,6 +965,7 @@ def test_workflow_board_svg_simple_mainline_export_uses_compact_content_height()
 
     assert int(viewbox_match.group(1)) > board_height
     assert 110 <= board_height <= 190
+    assert 200 <= int(analyst_viewbox_match.group(2)) <= 250
     assert node_height <= 96.0
     assert node_y <= 40.0
     assert board_height - (node_y + node_height) <= 56.0
@@ -1199,10 +1438,17 @@ def test_workflow_interactive_html_uses_compact_shell_defaults():
     }
     html = render_workflow_explorer_html(explorer)
     assert "const computeBaselineFit = () => {" in html
-    assert "baselineScale = Math.min(availableWidth / boundsWidth, availableHeight / boundsHeight);" in html
-    assert "Math.max(0.56, Math.min(1.7, zoomFactor * factor))" in html
-    assert 'class="crpm-explorer-figure" style="width:100%;"' in html
-    assert 'style="display:block;width:100%;height:auto;aspect-ratio:760/520;overflow:visible;margin:0 auto;"' in html
+    assert "baselineScale = Math.min(1.0, availableWidth / boundsWidth, availableHeight / boundsHeight);" in html
+    assert "Math.max(0.56, Math.min(2.4, nextZoom))" in html
+    assert 'class="crpm-explorer-figure" style="width:100%;height:100%;"' in html
+    assert 'style="display:block;width:100%;height:100%;overflow:visible;margin:0 auto;"' in html
+    assert "Wheel to zoom | drag to pan | hover for detail." in html
+    assert 'data-testid="crpm-explorer-tooltip"' in html
+    assert "figure.addEventListener('wheel'" in html
+    assert "figure.addEventListener('pointerdown'" in html
+    assert "figure.addEventListener('pointermove'" in html
+    assert "const zoomAt = (factor, event) =>" in html
+    assert "is-hover" in html
     assert 'id="crpm-workflow-static-frame"' in html
     assert 'id="crpm-workflow-content"' in html
     assert 'data-drawable-min-x="' in html
@@ -1677,6 +1923,12 @@ def test_workflow_interactive_payload_prefers_wider_single_line_mainline_cards()
     assert all(len(node.get("title_lines_render", [])) == 1 for node in mainline_nodes)
     assert all(len(node.get("timing_lines_render", [])) <= 1 for node in mainline_nodes)
     assert all(len(node.get("footer_lines_render", [])) <= 1 for node in mainline_nodes)
+    assert all(not node.get("inline_detail") for node in mainline_nodes)
+    assert all(
+        float(node.get("timing_origin_y", 0.0)) > float(node.get("title_origin_y", 0.0))
+        for node in mainline_nodes
+        if node.get("timing_lines_render")
+    )
     assert all(
         "path " in str(node.get("timing_lines_render", [""])[0]).lower() for node in mainline_nodes if node.get("timing_lines_render")
     )
@@ -1880,15 +2132,25 @@ def test_workflow_explorer_html_uses_lighter_arrowheads():
     assert 'marker-end="url(#workflow-explorer-arrow-mainline)"' in html
     assert 'stroke="#c8d4d8" stroke-width="0.8"' not in html
     assert 'preserveAspectRatio="xMidYMin meet"' in html
-    assert "aspect-ratio:900/420" in html
-    assert 'class="crpm-explorer-figure" style="width:100%;"' in html
-    assert 'style="display:block;width:100%;height:auto;aspect-ratio:900/420;overflow:visible;margin:0 auto;"' in html
+    assert 'viewBox="0 0 900 420"' in html
+    assert 'class="crpm-explorer-figure" style="width:100%;height:100%;"' in html
+    assert 'style="display:block;width:100%;height:100%;overflow:visible;margin:0 auto;"' in html
     assert 'data-content-min-x="' in html
     assert 'data-drawable-min-x="' in html
     assert 'data-fit-pad-bottom="' in html
     assert "const computeBaselineFit = () => {" in html
     assert "const drawableMaxY = Number(svg.getAttribute('data-drawable-max-y') || String((viewBox.height || 0) - 12));" in html
-    assert "translate(${baselineTx} ${baselineTy}) scale(${baselineScale * zoomFactor})" in html
+    assert "const fitPadTop = Number(svg.getAttribute('data-fit-pad-top') || '0');" in html
+    assert "baselineScale = Math.min(1.0, availableWidth / boundsWidth, availableHeight / boundsHeight);" in html
+    assert "const scale = baselineScale * zoomFactor;" in html
+    assert "translate(${tx} ${ty}) scale(${scale})" in html
+    assert (
+        ".crpm-explorer-canvas{position:relative;height:clamp(500px,68vh,720px);min-height:500px;border:1px solid #d9dfe6;border-radius:18px;background:#ffffff;overflow:hidden;"
+        in html
+    )
+    assert "const panLimits = (scale) => {" in html
+    assert "const setZoomFactor = (nextZoom, anchorPoint) =>" in html
+    assert "const finishDrag = (event) => {" in html
     assert "streamlit:setFrameHeight" not in html
     assert "window.setTimeout(notifyFrameHeight" not in html
     end_text_match = re.search(
@@ -1911,6 +2173,68 @@ def test_workflow_primary_path_nodes_prefers_dominant_left_lane_when_mainline_mi
     primary = _workflow_primary_path_nodes(nodes)
 
     assert [node["id"] for node in primary] == ["invitation", "fit_mail", "colonoscopy"]
+
+
+def test_workflow_primary_path_nodes_keeps_all_steps_when_only_side_nodes_are_visible():
+    nodes = [
+        {"id": "reminder", "step_rank": 0, "lane_position": "right", "cases": 57, "center_y": 44.0, "branch_role": "side"},
+        {"id": "admin", "step_rank": 1, "lane_position": "right", "cases": 32, "center_y": 108.0, "branch_role": "side"},
+        {"id": "reschedule", "step_rank": 2, "lane_position": "right", "cases": 18, "center_y": 172.0, "branch_role": "side"},
+    ]
+
+    primary = _workflow_primary_path_nodes(nodes)
+
+    assert [node["id"] for node in primary] == ["reminder", "admin", "reschedule"]
+
+
+def test_workflow_explorer_hides_variation_separator_without_reference_mainline():
+    payload = {
+        "nodes": pd.DataFrame(
+            [
+                {
+                    "activity": "Reminder_mail",
+                    "display_name": "Reminder mail",
+                    "cases": 57,
+                    "occurrences": 57,
+                    "median_next_delay_days": 1.1,
+                    "severity": "Low",
+                    "conformance_bucket": "Model deviation",
+                    "branch_role": "side",
+                    "lane": "right",
+                    "step_rank": 0,
+                },
+                {
+                    "activity": "Admin_review",
+                    "display_name": "Admin review",
+                    "cases": 32,
+                    "occurrences": 32,
+                    "median_next_delay_days": 1.0,
+                    "severity": "Low",
+                    "conformance_bucket": "Model deviation",
+                    "branch_role": "side",
+                    "lane": "right",
+                    "step_rank": 0,
+                },
+            ]
+        ),
+        "edges": pd.DataFrame(),
+        "legend": pd.DataFrame(),
+    }
+
+    explorer = create_workflow_interactive_payload(payload)
+    html = render_workflow_explorer_html(explorer)
+
+    assert explorer["has_bottom_branches"] is True
+    assert all(node.get("branch_role") != "mainline" for node in explorer["nodes"])
+    last_node_bottom = max(float(node["y"]) + float(node["height"]) for node in explorer["nodes"])
+    assert float(explorer["anchor_bounds"]["max_y"]) > last_node_bottom + 24.0
+    assert "Lower variation" not in html
+    end_anchor_match = re.search(
+        r'<g id="crpm-workflow-end-anchor"[^>]*><rect x="[^"]+" y="([^"]+)"',
+        html,
+    )
+    assert end_anchor_match is not None
+    assert float(end_anchor_match.group(1)) > last_node_bottom
 
 
 def test_workflow_interactive_payload_collapses_duplicate_nodes_and_edges():

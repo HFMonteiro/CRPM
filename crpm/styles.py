@@ -508,8 +508,10 @@ def get_custom_css() -> str:
     }
 
     .crpm-overview-map-frame--expanded {
-        height: clamp(500px, 66vh, 760px);
-        overflow: auto hidden;
+        height: auto;
+        min-height: 0;
+        overflow-x: auto;
+        overflow-y: hidden;
     }
 
     .crpm-overview-kpi-strip {
@@ -574,6 +576,12 @@ def get_custom_css() -> str:
         max-width: none !important;
         height: auto !important;
         max-height: none !important;
+    }
+
+    .crpm-overview-map-frame--expanded .crpm-workflow-board {
+        height: auto;
+        min-height: 0;
+        align-items: flex-start;
     }
 
     .crpm-dashboard-map-toolbar {
@@ -2031,6 +2039,104 @@ def get_custom_css() -> str:
         line-height: 1.22;
     }
 
+    .crpm-variable-guide {
+        display: grid;
+        gap: 0.7rem;
+        margin-top: 0.72rem;
+        padding: 0.82rem 0.9rem 0.9rem;
+        border: 1px solid rgba(119, 140, 154, 0.28);
+        border-radius: 10px;
+        background: #fbfcfd;
+        box-shadow: 0 3px 10px rgba(28, 45, 64, 0.04);
+    }
+
+    .crpm-variable-guide__header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.6rem;
+    }
+
+    .crpm-variable-guide__header h5 {
+        margin: 0;
+        color: #21342b;
+        font-size: 0.88rem;
+        font-weight: 800;
+        line-height: 1.1;
+    }
+
+    .crpm-variable-guide__header p {
+        margin: 0.2rem 0 0;
+        color: #65736d;
+        font-size: 0.72rem;
+        line-height: 1.25;
+    }
+
+    .crpm-variable-guide__grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.62rem;
+        align-items: start;
+    }
+
+    .crpm-variable-guide__group {
+        min-width: 0;
+        padding: 0.6rem 0.68rem 0.66rem;
+        border: 1px solid rgba(119, 140, 154, 0.22);
+        border-top: 3px solid #5a7fa6;
+        border-radius: 8px;
+        background: #ffffff;
+    }
+
+    .crpm-variable-guide__group--quality {
+        border-top-color: #4f8d6e;
+        background: #f8fcfa;
+    }
+
+    .crpm-variable-guide__group--structure {
+        border-top-color: #587ca8;
+        background: #f8fbfe;
+    }
+
+    .crpm-variable-guide__group--configuration {
+        border-top-color: #ad7a3e;
+        background: #fffaf3;
+    }
+
+    .crpm-variable-guide__group h6 {
+        margin: 0 0 0.44rem;
+        color: #30443b;
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    .crpm-variable-guide__group dl {
+        display: grid;
+        gap: 0.44rem;
+        margin: 0;
+    }
+
+    .crpm-variable-guide__group dl > div {
+        display: grid;
+        gap: 0.08rem;
+    }
+
+    .crpm-variable-guide__group dt {
+        color: #263b32;
+        font-size: 0.72rem;
+        font-weight: 800;
+        line-height: 1.16;
+    }
+
+    .crpm-variable-guide__group dd {
+        margin: 0;
+        color: #607069;
+        font-size: 0.69rem;
+        line-height: 1.25;
+    }
+
     .crpm-ranked-table .crpm-table__metric-track {
         min-width: 0;
     }
@@ -2154,6 +2260,15 @@ def get_custom_css() -> str:
     }
 
     .js-plotly-plot .legend text {
+        fill: #1f2c25 !important;
+    }
+
+    .js-plotly-plot .hovertext path {
+        fill: #ffffff !important;
+        stroke: #cbd5de !important;
+    }
+
+    .js-plotly-plot .hovertext text {
         fill: #1f2c25 !important;
     }
 
@@ -2961,7 +3076,8 @@ def get_custom_css() -> str:
 
     .crpm-up-badge,
     .crpm-fmup-badge,
-    .crpm-author-badge {
+    .crpm-author-badge,
+    .crpm-build-badge {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -3034,6 +3150,15 @@ def get_custom_css() -> str:
         font-size: 0.72rem;
         font-weight: 700;
         letter-spacing: 0.01em;
+        white-space: nowrap;
+    }
+
+    .crpm-build-badge {
+        min-height: 1.8rem;
+        padding: 0.28rem 0.62rem;
+        color: var(--crpm-text-soft);
+        font-size: 0.68rem;
+        font-weight: 700;
         white-space: nowrap;
     }
 

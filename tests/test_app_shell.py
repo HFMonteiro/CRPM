@@ -7,8 +7,26 @@ from types import SimpleNamespace
 import pandas as pd
 
 from crpm.app_runtime import LoadedLog, compute_analysis_signature
-from crpm.app_shell import _render_analysis_controls
+from crpm.app_shell import _default_xes_index, _render_analysis_controls
 from crpm.app_state import get_crpm_state
+
+
+def test_default_xes_index_prefers_full_screening_demo_for_fresh_session() -> None:
+    options = [
+        "examples/idealized_event_log.xes",
+        "examples/screening_conformance_demo.xes",
+    ]
+
+    assert _default_xes_index(options, None) == 1
+
+
+def test_default_xes_index_preserves_existing_selection() -> None:
+    options = [
+        "examples/idealized_event_log.xes",
+        "examples/screening_conformance_demo.xes",
+    ]
+
+    assert _default_xes_index(options, options[0]) == 0
 
 
 class _DummySidebar:
@@ -499,6 +517,8 @@ def test_render_header_brand_includes_author_site_badge(monkeypatch) -> None:
     assert 'data-qa="global-brand-strip"' in rendered
     assert 'aria-label="CRPM institutional links"' in rendered
     assert "crpm-author-badge" in rendered
+    assert "crpm-build-badge" in rendered
+    assert f"Build {app_shell.__version__}" in rendered
     assert "crpm-fmup-badge" in rendered
     assert "hfmonteiro.com" in rendered
     assert app_shell.FMUP_HOME_URL in rendered

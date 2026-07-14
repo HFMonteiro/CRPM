@@ -283,7 +283,10 @@ def _render_comparison_view(pre_view: dict[str, Any], post_view: dict[str, Any])
 def _format_rate(value: Any) -> str:
     if value is None or pd.isna(value):
         return "N/A"
-    return f"{float(value) * 100:.1f}%"
+    numeric_value = float(value)
+    if not 0 <= numeric_value <= 1:
+        return "Review denominator"
+    return f"{numeric_value * 100:.1f}%"
 
 
 def _fit_return_body(kpis: dict[str, Any]) -> str:
@@ -302,7 +305,8 @@ def _completion_body(kpis: dict[str, Any]) -> str:
     denominator_label = str(kpis.get("colonoscopy_completion_denominator") or "eligible previous step")
     rate = kpis.get("colonoscopy_completion_rate")
     if numerator is not None and denominator:
-        prefix = "Check denominator: " if rate is not None and not pd.isna(rate) and float(rate) > 1.0 else ""
+        warning = kpis.get("colonoscopy_completion_warning")
+        prefix = "Check denominator: " if warning or (rate is not None and not pd.isna(rate) and float(rate) > 1.0) else ""
         return f"{prefix}{int(numerator):,} / {int(denominator):,} after {denominator_label}."
     return "Observed pathway completion."
 

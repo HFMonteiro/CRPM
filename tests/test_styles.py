@@ -34,6 +34,8 @@ def test_conformance_note_and_workflow_board_styles_exist() -> None:
     assert "height: auto;" in css
     assert ".crpm-empty-state" in css
     assert ".crpm-inline-empty" in css
+    assert ".js-plotly-plot .hovertext path" in css
+    assert ".js-plotly-plot .hovertext text" in css
     assert ".crpm-conformance-hero" in css
     assert ".crpm-conformance-stage-header" in css
     assert ".crpm-conformance-report-band" in css
@@ -82,11 +84,14 @@ def test_overview_and_bi_card_styles_exist() -> None:
     assert ".crpm-overview-map-frame" in css
     assert "height: clamp(360px, 46vh, 540px);" in css
     assert ".crpm-overview-map-frame--expanded" in css
-    assert "height: clamp(500px, 66vh, 760px);" in css
+    assert ".crpm-overview-map-frame--expanded {\n        height: auto;" in css
+    assert "overflow-x: auto;" in css
+    assert "overflow-y: hidden;" in css
     assert ".crpm-overview-map-frame .crpm-workflow-board {\n        display: flex;" in css
     assert ".crpm-overview-map-frame .crpm-workflow-board svg {\n        width: auto !important;" in css
     assert "height: 100% !important;" in css
     assert "width: 100% !important;" in css
+    assert ".crpm-overview-map-frame--expanded .crpm-workflow-board {\n        height: auto;" in css
     assert ".crpm-bi-card-grid" in css
     assert ".crpm-page-card-grid" in css
     assert ".crpm-reading-order-band" in css
@@ -99,6 +104,7 @@ def test_overview_and_bi_card_styles_exist() -> None:
     assert ".crpm-chip--watch" in css
     assert ".crpm-chip--deviation-heavy" in css
     assert ".crpm-header-badges" in css
+    assert ".crpm-build-badge" in css
     assert ".crpm-fmup-badge" in css
     assert ".crpm-sidebar-provenance" in css
 

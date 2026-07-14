@@ -94,9 +94,9 @@ def render_overview_page(snapshot: AnalysisSnapshot) -> None:
             },
             {
                 "eyebrow": "Pathway",
-                "title": "Dominant path",
+                "title": "Mainline coverage",
                 "value": _display_optional(summary.get("dominant_path_share"), kind="percent"),
-                "body": "Mainline concentration",
+                "body": "Cases sharing the dominant workflow backbone",
                 "tone": "success",
             },
             {
@@ -234,7 +234,7 @@ def _workflow_available(workflow: Mapping[str, Any]) -> bool:
 def _overview_pathway_rows(summary: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [
         {
-            "label": "Dominant path",
+            "label": "Mainline coverage",
             "value": _coerce_percent(summary.get("dominant_path_share")),
             "tone": "success",
         },
@@ -338,8 +338,8 @@ def _overview_signal_cards(snapshot: AnalysisSnapshot, summary: Mapping[str, Any
         },
         {
             "eyebrow": "Workflow signal",
-            "title": "Dominant vs deviation mix",
-            "value": f"{_display_optional(summary.get('dominant_path_share'), kind='percent')} dominant",
+            "title": "Mainline vs deviation mix",
+            "value": f"{_display_optional(summary.get('dominant_path_share'), kind='percent')} mainline",
             "body": f"Deviation share {_display_optional(summary.get('deviation_share'), kind='percent')} · {format_metric_value(summary.get('unique_activities'), kind='count')} activities · {format_metric_value(summary.get('workflow_nodes'), kind='count')} nodes",
             "tone": "neutral",
         },
@@ -490,9 +490,9 @@ def _overview_quality_cards(snapshot: AnalysisSnapshot, summary: Mapping[str, An
         },
         {
             "eyebrow": "Coverage",
-            "title": "Dominant path concentration",
+            "title": "Mainline coverage",
             "value": _display_optional(summary.get("dominant_path_share"), kind="percent"),
-            "body": "Use Variant Analysis and DFG when concentration is high; switch to Conformance Analytics when deviation share rises.",
+            "body": "Share of cases following the dominant workflow backbone. Use Variant Analysis for exact trace concentration.",
             "tone": "success",
         },
         {

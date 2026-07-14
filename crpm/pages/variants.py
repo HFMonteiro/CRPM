@@ -209,7 +209,7 @@ def _variant_signal_cards(coverage: pd.DataFrame, conformance_df: pd.DataFrame) 
     rare_variants = coverage[coverage.get("percentage", pd.Series(dtype=float)).fillna(0) <= 5]
     cards = [
         {
-            "eyebrow": "Dominant path",
+            "eyebrow": "Trace concentration",
             "title": "Top variant",
             "value": format_metric_value(top_row.get("percentage"), kind="percent"),
             "body": str(top_row.get("variant_str", "Top variant")),

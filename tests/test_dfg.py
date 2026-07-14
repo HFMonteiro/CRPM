@@ -17,6 +17,7 @@ from crpm.dfg_utils import (
     filter_dfg_by_coverage,
     get_dfg_statistics,
     rank_dfg_edges,
+    render_dfg_interactive_html,
     render_dfg_to_svg,
     sanitize_svg_markup,
 )
@@ -177,6 +178,7 @@ def test_render_dfg_page_uses_coverage_slider_and_ranked_table(monkeypatch):
         "captions": [],
         "metrics": [],
         "markdown": [],
+        "components": [],
         "svg_renders": 0,
     }
 
@@ -241,6 +243,7 @@ def test_render_dfg_page_uses_coverage_slider_and_ranked_table(monkeypatch):
     monkeypatch.setattr(dfg_page.st, "image", lambda *args, **kwargs: calls.__setitem__("charts", calls["charts"] + 1))
     monkeypatch.setattr(dfg_page.st, "dataframe", lambda df, **kwargs: calls["tables"].append(df))
     monkeypatch.setattr(dfg_page.st, "warning", lambda *args, **kwargs: None)
+    monkeypatch.setattr(dfg_page.st, "iframe", lambda html, **kwargs: calls["components"].append(html))
     monkeypatch.setattr(dfg_page.st, "markdown", lambda text, **kwargs: calls["markdown"].append(text))
     monkeypatch.setattr(dfg_page, "render_quiet_note", lambda message: calls["notes"].append(message))
     monkeypatch.setattr(dfg_page, "render_inline_empty", lambda message: calls["notes"].append(message))
@@ -273,15 +276,15 @@ def test_render_dfg_page_uses_coverage_slider_and_ranked_table(monkeypatch):
     assert any("ranked band of directly-follows edges" in text.lower() for text in calls["captions"])
     assert any("Most frequent edge" in text for text in calls["markdown"])
     assert any("Events" in list(table.columns) for table in calls["tables"])
-    assert any("crpm-dfg-vector" in text for text in calls["markdown"])
-    assert any("crpm-dfg-map-canvas" in text for text in calls["markdown"])
+    assert any("crpm-dfg-zoom-viewport" in text for text in calls["components"])
+    assert any("Mouse wheel to zoom" in text for text in calls["components"])
     assert calls["markdown"].index("#### Directly-follows map") < calls["markdown"].index("#### Ranked edge detail")
     assert calls["charts"] == 0
     assert calls["svg_renders"] == 1
 
 
 def test_render_dfg_page_supports_performance_mode(monkeypatch):
-    calls = {"labels": [], "variant": None, "metrics": [], "tables": [], "markdown": []}
+    calls = {"labels": [], "variant": None, "metrics": [], "tables": [], "markdown": [], "components": []}
 
     class _Column:
         def __enter__(self):
@@ -340,6 +343,7 @@ def test_render_dfg_page_supports_performance_mode(monkeypatch):
     monkeypatch.setattr(dfg_page.st, "image", lambda *args, **kwargs: None)
     monkeypatch.setattr(dfg_page.st, "dataframe", lambda df, **kwargs: calls["tables"].append(df))
     monkeypatch.setattr(dfg_page.st, "warning", lambda *args, **kwargs: None)
+    monkeypatch.setattr(dfg_page.st, "iframe", lambda html, **kwargs: calls["components"].append(html))
     monkeypatch.setattr(dfg_page.st, "markdown", lambda text, **kwargs: calls["markdown"].append(text))
     monkeypatch.setattr(dfg_page, "render_quiet_note", lambda *args, **kwargs: None)
     monkeypatch.setattr(dfg_page, "render_inline_empty", lambda *args, **kwargs: None)
@@ -364,7 +368,7 @@ def test_render_dfg_page_supports_performance_mode(monkeypatch):
     assert any("Median delay" in list(table.columns) for table in calls["tables"])
     assert any("10 s" in table.to_string() for table in calls["tables"])
     assert calls["variant"] == "performance"
-    assert any("crpm-dfg-vector" in text for text in calls["markdown"])
+    assert any("crpm-dfg-zoom-viewport" in text for text in calls["components"])
 
 
 def test_render_dfg_page_falls_back_to_png_when_svg_fails(monkeypatch):
@@ -424,6 +428,7 @@ def test_render_dfg_page_falls_back_to_png_when_svg_fails(monkeypatch):
     monkeypatch.setattr(dfg_page.st, "image", lambda *args, **kwargs: calls["image"].append(args[0]))
     monkeypatch.setattr(dfg_page.st, "dataframe", lambda *args, **kwargs: None)
     monkeypatch.setattr(dfg_page.st, "warning", lambda text, **kwargs: calls["warnings"].append(text))
+    monkeypatch.setattr(dfg_page.st, "iframe", lambda *args, **kwargs: None)
     monkeypatch.setattr(dfg_page.st, "markdown", lambda *args, **kwargs: None)
     monkeypatch.setattr(dfg_page, "render_quiet_note", lambda *args, **kwargs: None)
     monkeypatch.setattr(dfg_page, "render_inline_empty", lambda *args, **kwargs: None)
@@ -456,6 +461,17 @@ def test_render_dfg_to_svg_returns_vector_markup():
     assert "max-width:100%" in svg
     assert "min-width:0" in svg
     assert "height:clamp(320px, 38vh, 480px)" in svg
+
+
+def test_render_dfg_interactive_html_supports_wheel_zoom_pan_and_reset():
+    html = render_dfg_interactive_html('<svg viewBox="0 0 100 40"><text>demo</text></svg>')
+
+    assert 'data-testid="crpm-dfg-zoom-viewport"' in html
+    assert "Mouse wheel to zoom" in html
+    assert "addEventListener('wheel'" in html
+    assert "addEventListener('pointerdown'" in html
+    assert 'data-action="reset"' in html
+    assert "viewBox" in html
 
 
 def test_render_dfg_to_svg_uses_pipe_output_and_responsive_wrapper(monkeypatch):

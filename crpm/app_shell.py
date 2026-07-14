@@ -11,6 +11,7 @@ from pathlib import Path
 import streamlit as st
 import streamlit.components.v1 as components
 
+from crpm import __version__
 from crpm.app_runtime import (
     AVAILABLE_ALGORITHMS,
     compute_analysis_signature,
@@ -51,6 +52,17 @@ WORKSPACE_PAGES = {
     "Performance": ("Operational Flow", "Process Performance"),
     "Models": ("Model Comparison",),
 }
+
+
+def _default_xes_index(options: list[str], selected_path: str | None) -> int:
+    """Prefer the full screening demo for a fresh session without overriding a choice."""
+    if selected_path in options:
+        return options.index(selected_path)
+    preferred_name = "screening_conformance_demo.xes"
+    for index, option in enumerate(options):
+        if Path(option).name == preferred_name:
+            return index
+    return 0
 
 
 def _svg_data_uri(svg_markup: str) -> str:
@@ -223,8 +235,13 @@ def _render_sidebar_session_info(snapshot: AnalysisSnapshot) -> None:
                 context_bits.append(f"Follow-up: {snapshot.active_followup_label}")
             st.sidebar.caption(" · ".join(context_bits))
         if source_meta:
-            validation = source_meta.get("validation_status", "validated")
-            st.sidebar.caption(f"Source validation: {validation}")
+            validation = str(source_meta.get("validation_status", "validated"))
+            validation_label = {
+                "validated:xes": "Validated XES",
+                "validated:csv": "Validated CSV",
+                "validated": "Validated",
+            }.get(validation.lower(), validation.replace("_", " ").replace(":", " ").strip().title())
+            st.sidebar.caption(f"Source: {validation_label}")
         st.sidebar.caption(
             f"✓ {snapshot.model_count} model(s) discovered · {snapshot.case_count:,} cases · {snapshot.event_count:,} events"
         )
@@ -325,6 +342,7 @@ def _render_header_brand() -> None:
             <a class="crpm-author-badge" href="{AUTHOR_WEBSITE}" target="_blank" rel="noopener noreferrer" aria-label="hfmonteiro.com">
                 <span>www.hfmonteiro.com</span>
             </a>
+            <span class="crpm-build-badge" aria-label="CRPM build version">Build {__version__}</span>
             <a class="crpm-fmup-badge" href="{FMUP_HOME_URL}" target="_blank" rel="noopener noreferrer" aria-label="Faculdade de Medicina da Universidade do Porto">
                 <img src="{FMUP_BADGE_SRC}" alt="FMUP symbol" />
             </a>
@@ -375,7 +393,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
     st.sidebar.markdown("### Analysis setup")
     config = state.config
     results = state.results
-    st.sidebar.caption("Direct workflow mode | First-event gate")
+    st.sidebar.caption("Direct workflow mode · First-event gate")
     run_button_slot = st.sidebar.empty()
     controls_panel = st.sidebar.expander("Data & run", expanded=not results.analysis_complete)
     controls_panel.caption("Choose the event log and first-event gate. Advanced settings stay available on demand.")
@@ -401,7 +419,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
         uploaded_xes = controls_panel.file_uploader("Upload XES log", type=["xes"], key="crpm_xes_upload")
 
         if xes_options:
-            default_index = xes_options.index(config.selected_log_path) if config.selected_log_path in xes_options else 0
+            default_index = _default_xes_index(xes_options, config.selected_log_path)
             config.selected_log_path = controls_panel.selectbox(
                 "Choose XES log",
                 xes_options,

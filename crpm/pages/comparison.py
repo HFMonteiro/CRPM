@@ -20,7 +20,7 @@ from crpm.visualization import create_fitness_precision_scatter, create_model_co
 
 def render_comparison_page(snapshot: AnalysisSnapshot) -> None:
     st.subheader("Model Comparison")
-    st.caption("Compare discovery candidates across fitness, precision, and model complexity with a human-first decision surface.")
+    st.caption("Compare discovery candidates across fitness, precision, and model complexity in one decision view.")
     if snapshot.comparison_df.empty:
         render_empty_state("No comparison results yet. Run the analysis from the sidebar to populate this page.")
         return
@@ -31,11 +31,14 @@ def render_comparison_page(snapshot: AnalysisSnapshot) -> None:
         snapshot,
         title="Model comparison cockpit",
         subtitle=(
-            "Use the heatmap and exact table for small candidate sets; scatter becomes useful once there are enough models."
+            "Use the heatmap and exact table for small candidate sets; the scatter is more useful with four or more models."
             if sparse_comparison
-            else "Use the scatter as the primary decision surface, then confirm exact values in the report table."
+            else "Use the scatter as the primary comparison view, then confirm exact values in the report table."
         ),
-        meta=[snapshot.input_name or "No log loaded", f"{len(comparison_df):,} model candidate(s)"],
+        meta=[
+            snapshot.input_name or "No log loaded",
+            f"{len(comparison_df):,} {'model candidate' if len(comparison_df) == 1 else 'model candidates'}",
+        ],
     )
     display_df = comparison_df.copy()
     if "discovery_time_s" in display_df.columns:
@@ -90,7 +93,7 @@ def render_comparison_page(snapshot: AnalysisSnapshot) -> None:
         render_quiet_note(
             f"Recommended starting point: {best_balanced['model_name']}. "
             + (
-                "With this few models, use the heatmap and exact table rather than over-reading a scatter."
+                "With so few models, use the heatmap and exact table rather than over-reading a scatter."
                 if sparse_comparison
                 else "Use the scatter for trade-offs and the table for exact metrics."
             )
@@ -117,6 +120,11 @@ def render_comparison_page(snapshot: AnalysisSnapshot) -> None:
     comparison_table = display_df.rename(
         columns={
             "model_name": "Model",
+            "algorithm": "Algorithm",
+            "variant": "Variant",
+            "parameter_profile_name": "Parameter profile",
+            "parameter_profile_intended_use": "Intended use",
+            "pm4py_variant": "PM4Py variant",
             "alignment_fitness": "Alignment fitness",
             "token_fitness": "Token fitness",
             "precision": "Precision",
@@ -129,3 +137,50 @@ def render_comparison_page(snapshot: AnalysisSnapshot) -> None:
     with st.expander("Report/detail view", expanded=False):
         st.markdown("#### Comparison table")
         render_html_ranked_table(comparison_table, title="Model comparison", label_column="Model")
+        _render_comparison_variable_guide()
+
+
+def _render_comparison_variable_guide() -> None:
+    """Explain the comparison table without making users infer metric semantics."""
+    st.markdown(
+        """
+        <section class="crpm-variable-guide" aria-labelledby="comparison-variable-guide-title" data-qa="comparison-variable-guide">
+            <div class="crpm-variable-guide__header">
+                <div>
+                    <h5 id="comparison-variable-guide-title">How to read the variables</h5>
+                    <p>Scores range from 0 to 1. Higher is generally better for fitness and precision; read both together. Counts describe model structure, not model quality.</p>
+                </div>
+            </div>
+            <div class="crpm-variable-guide__grid">
+                <article class="crpm-variable-guide__group crpm-variable-guide__group--quality">
+                    <h6>Quality</h6>
+                    <dl>
+                        <div><dt>Alignment fitness</dt><dd>How well the model replays the observed cases using alignments. 1.000 is a perfect fit.</dd></div>
+                        <div><dt>Token fitness</dt><dd>Replay fitness based on token consumption and production. Use it as a complementary fitness check.</dd></div>
+                        <div><dt>Precision</dt><dd>How much of the behaviour allowed by the model is actually seen in the log. Lower values suggest over-generalisation.</dd></div>
+                    </dl>
+                </article>
+                <article class="crpm-variable-guide__group crpm-variable-guide__group--structure">
+                    <h6>Structure</h6>
+                    <dl>
+                        <div><dt>Transitions</dt><dd>Number of transitions in the discovered Petri net, including activity and possible invisible transitions.</dd></div>
+                        <div><dt>Places</dt><dd>Number of places used to represent state, routing and synchronisation in the Petri net.</dd></div>
+                        <div><dt>Arcs</dt><dd>Number of directed connections between places and transitions. More arcs usually mean more structural detail.</dd></div>
+                    </dl>
+                </article>
+                <article class="crpm-variable-guide__group crpm-variable-guide__group--configuration">
+                    <h6>Configuration</h6>
+                    <dl>
+                        <div><dt>Model</dt><dd>Named discovery candidate produced from the current log, algorithm and parameter settings.</dd></div>
+                        <div><dt>Algorithm / Variant</dt><dd>Discovery family and its selected implementation variant.</dd></div>
+                        <div><dt>Parameter profile</dt><dd>Named preset controlling discovery parameters and making runs reproducible.</dd></div>
+                        <div><dt>PM4Py variant</dt><dd>Variant identifier passed to the PM4Py discovery implementation.</dd></div>
+                        <div><dt>Intended use</dt><dd>Short operational guidance for when the selected profile is a sensible starting point.</dd></div>
+                        <div><dt>Discovery time</dt><dd>Elapsed time required to discover the model for the current filtered log.</dd></div>
+                    </dl>
+                </article>
+            </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
