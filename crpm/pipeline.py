@@ -16,7 +16,6 @@ from pm4py.algo.evaluation.precision import algorithm as precision_evaluator
 from pm4py.objects.conversion.log import converter as log_converter
 from pm4py.objects.conversion.process_tree import converter as pt_converter
 from pm4py.objects.log.obj import EventLog
-from pm4py.objects.log.util import dataframe_utils
 from pm4py.objects.petri_net.utils import petri_utils
 
 from crpm.log_filters import filter_date_range
@@ -105,7 +104,10 @@ def _prepare_event_dataframe(
         by=["case:concept:name", "time:timestamp", "_crpm_original_order"],
         kind="mergesort",
     ).drop(columns=["_crpm_original_order"])
-    return dataframe_utils.convert_timestamp_columns_in_df(working)
+    # The mapped timestamp is already parsed explicitly above.  Running PM4Py's
+    # heuristic converter over the full frame can reinterpret numeric-looking
+    # case identifiers (for example "0001") as calendar years.
+    return working
 
 
 def _timestamp_timezone_kind(value: Any) -> str:
