@@ -381,13 +381,16 @@ def render_dfg_interactive_html(svg_markup: str, *, height: int = 540) -> str:
         if (event.key === '-' || event.key === '_') {{ event.preventDefault(); zoomBy(0.84); }}
         if (event.key === '0') {{ event.preventDefault(); reset(); }}
       }});
-      viewport.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', (event) => {{
+      document.addEventListener('click', (event) => {{
+        const button = event.target.closest('[data-action]');
+        if (!button) return;
+        event.preventDefault();
         event.stopPropagation();
         const action = button.dataset.action;
         if (action === 'zoom-in') zoomBy(1.2);
         if (action === 'zoom-out') zoomBy(0.84);
         if (action === 'reset') reset();
-      }}));
+      }});
       apply();
     }})();
   </script>

@@ -162,6 +162,33 @@ def test_csv_to_event_log_sorts_by_case_and_timestamp() -> None:
     assert [event["concept:name"] for event in log[0]] == ["A1", "A2"]
 
 
+def test_load_csv_preserves_leading_zero_identifiers(tmp_path) -> None:
+    csv_path = tmp_path / "events.csv"
+    csv_path.write_text(
+        "case_id,activity,timestamp\n0001,A,2024-01-01T10:00:00Z\n",
+        encoding="utf-8",
+    )
+
+    dataframe = pipeline.load_csv(csv_path)
+
+    assert dataframe.iloc[0]["case_id"] == "0001"
+
+
+def test_csv_to_event_log_normalizes_aware_timestamps_to_utc() -> None:
+    df = pd.DataFrame(
+        [
+            {"case_id": "case-1", "activity": "A", "timestamp": "2024-01-01T10:00:00+01:00"},
+            {"case_id": "case-1", "activity": "B", "timestamp": "2024-01-01T10:30:00+00:00"},
+        ]
+    )
+
+    log = pipeline.csv_to_event_log(df, "case_id", "activity", "timestamp")
+
+    first_timestamp = log[0][0]["time:timestamp"]
+    assert first_timestamp.hour == 9
+    assert first_timestamp.utcoffset().total_seconds() == 0
+
+
 def test_split_log_random_is_reproducible_across_python_hash_seeds() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     script = """

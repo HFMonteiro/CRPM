@@ -8,10 +8,29 @@ from crpm.pages import comparison as comparison_page
 from crpm.pages import common as common_page
 from crpm.pages.common import render_plotly_chart
 from crpm.pages import discovery as discovery_page
+from crpm.pages import dfg as dfg_page
 from crpm.pages import overview as overview_page
 from crpm.pages import performance as performance_page
 from crpm.pages import operational_flow as operational_flow_page
 from crpm.pages import variants as variants_page
+
+
+def test_dynamic_page_headings_use_stable_accessible_anchors(monkeypatch) -> None:
+    snapshot = SimpleNamespace(analysis_complete=False, filtered_log=None)
+    cases = [
+        (dfg_page, dfg_page.render_dfg_page, "DFG Visualizations", "dfg-visualizations"),
+        (variants_page, variants_page.render_variant_page, "Variant Analysis", "variant-analysis"),
+        (performance_page, performance_page.render_performance_page, "Process Performance", "process-performance"),
+    ]
+
+    for module, renderer, title, anchor in cases:
+        calls = []
+        monkeypatch.setattr(module, "st", SimpleNamespace(subheader=lambda *args, **kwargs: calls.append((args, kwargs))))
+        monkeypatch.setattr(module, "render_empty_state", lambda *_args, **_kwargs: None)
+
+        renderer(snapshot)
+
+        assert calls == [((title,), {"anchor": anchor})]
 
 
 class _DummyContext:
@@ -1999,7 +2018,7 @@ def test_render_variant_page_renders_guidance_and_charts(monkeypatch) -> None:
     coverage = variant_stats.copy()
     conformance_df = pd.DataFrame()
 
-    monkeypatch.setattr(variants_page.st, "subheader", lambda text: None)
+    monkeypatch.setattr(variants_page.st, "subheader", lambda *args, **kwargs: None)
     monkeypatch.setattr(variants_page.st, "warning", lambda *args, **kwargs: None)
     monkeypatch.setattr(variants_page.st, "metric", lambda *args, **kwargs: None)
     monkeypatch.setattr(
@@ -2092,7 +2111,7 @@ def test_render_performance_page_reuses_timing_buckets(monkeypatch) -> None:
         ]
     ]
 
-    monkeypatch.setattr(performance_page.st, "subheader", lambda text: None)
+    monkeypatch.setattr(performance_page.st, "subheader", lambda *args, **kwargs: None)
     monkeypatch.setattr(performance_page.st, "markdown", lambda *args, **kwargs: None)
     monkeypatch.setattr(performance_page.st, "columns", _columns)
     monkeypatch.setattr(performance_page.st, "dataframe", lambda *args, **kwargs: None)

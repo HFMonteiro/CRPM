@@ -24,7 +24,7 @@ from crpm.visualization import create_variant_coverage_chart, create_variant_fre
 
 
 def render_variant_page(snapshot: AnalysisSnapshot) -> None:
-    st.subheader("Variant Analysis")
+    st.subheader("Variant Analysis", anchor="variant-analysis")
 
     if not snapshot.analysis_complete or snapshot.filtered_log is None:
         render_empty_state("No variant results yet. Run the analysis from the sidebar to populate this page.")

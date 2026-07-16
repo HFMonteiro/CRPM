@@ -33,7 +33,7 @@ from crpm.visualization import create_activity_duration_chart, create_bottleneck
 
 
 def render_performance_page(snapshot: AnalysisSnapshot) -> None:
-    st.subheader("Process Performance")
+    st.subheader("Process Performance", anchor="process-performance")
 
     if not snapshot.analysis_complete or snapshot.filtered_log is None:
         render_empty_state("No performance results yet. Run the analysis from the sidebar to populate this page.")
