@@ -46,7 +46,7 @@ def test_screening_conformance_demo_is_rich_enough_for_ui_storytelling() -> None
     variants = Counter(_variant(trace) for trace in log)
     activities = {event["concept:name"] for trace in log for event in trace}
 
-    assert len(log) == 30_000
+    assert len(log) == 10_000
     assert len(variants) >= 18
     assert 30 <= (variants.most_common(1)[0][1] / len(log) * 100) <= 40
     assert {
@@ -73,7 +73,7 @@ def test_screening_conformance_demo_contains_conformant_and_deviating_paths() ->
     )
 
     assert dominant_variant in variants
-    assert variants[dominant_variant] >= 9_300
+    assert variants[dominant_variant] >= 3_100
     assert (
         "Invitation_mail",
         "Reminder_mail",
@@ -98,14 +98,14 @@ def test_screening_conformance_demo_has_clear_pre_post_shift_and_dfg_spread() ->
     post = [trace for trace in log if trace.attributes["phase"] == "POST"]
     transitions = _transitions(log)
 
-    assert len(pre) == len(post) == 15_000
+    assert len(pre) == len(post) == 5_000
     assert max(trace[0]["time:timestamp"] for trace in pre) < BOUNDARY
     assert min(trace[0]["time:timestamp"] for trace in post) > BOUNDARY
     assert max(trace[-1]["time:timestamp"] for trace in log) - min(trace[0]["time:timestamp"] for trace in log) >= timedelta(days=365 * 3)
     assert median(_duration_days(trace) for trace in post) >= median(_duration_days(trace) for trace in pre) * 2
-    assert transitions[("FIT_mail", "FIT_return")] == 30_000
-    assert transitions[("Lab_result", "Colonoscopy_center")] >= 750
-    assert transitions[("Reminder_mail", "Reminder_mail")] >= 2_500
+    assert transitions[("FIT_mail", "FIT_return")] == 10_000
+    assert transitions[("Lab_result", "Colonoscopy_center")] >= 250
+    assert transitions[("Reminder_mail", "Reminder_mail")] >= 800
 
 
 def test_screening_conformance_demo_csv_is_rich_enough_for_onboarding() -> None:
@@ -119,11 +119,11 @@ def test_screening_conformance_demo_csv_is_rich_enough_for_onboarding() -> None:
         .agg(lambda series: (series.max() - series.min()).total_seconds() / 86400)
     )
 
-    assert len(log) == 30_000
-    assert dataframe["case_id"].nunique() == 30_000
+    assert len(log) == 10_000
+    assert dataframe["case_id"].nunique() == 10_000
     assert set(dataframe["phase"]) == {"PRE", "POST"}
-    assert dataframe[dataframe["phase"] == "PRE"]["case_id"].nunique() == 15_000
-    assert dataframe[dataframe["phase"] == "POST"]["case_id"].nunique() == 15_000
+    assert dataframe[dataframe["phase"] == "PRE"]["case_id"].nunique() == 5_000
+    assert dataframe[dataframe["phase"] == "POST"]["case_id"].nunique() == 5_000
     assert dataframe["timestamp"].pipe(pd.to_datetime).max() - dataframe["timestamp"].pipe(pd.to_datetime).min() >= timedelta(days=365 * 3)
     assert len(variants) >= 18
     assert {"variant_hint", "manual_review_flag", "no_show_flag", "followup_breach_days"}.issubset(dataframe.columns)

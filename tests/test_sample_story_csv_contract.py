@@ -47,7 +47,7 @@ def test_sample_csv_contains_lab_rejection_resubmission_story() -> None:
 def test_sample_csv_keeps_pre_post_and_variant_richness() -> None:
     frame = _sample_frame()
 
-    assert frame["case_id"].nunique() == 30_000
+    assert frame["case_id"].nunique() == 10_000
     assert {"PRE", "POST"}.issubset(set(frame["phase"]))
     assert frame["variant_hint"].nunique() >= 18
     assert frame["timestamp"].max() - frame["timestamp"].min() >= timedelta(days=365 * 3)

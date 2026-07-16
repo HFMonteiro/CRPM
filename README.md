@@ -82,8 +82,8 @@ For a more detailed reader-oriented walkthrough, see `docs/project_structure.md`
 The public sample bundle lives in `examples/`:
 
 - `running-example.xes` - small didactic baseline log
-- `screening_conformance_demo.xes` - main synthetic CRC screening demo log with 30,000 cases
-- `screening_conformance_demo.csv` - event-level CSV companion with the same 30,000-case cohort
+- `screening_conformance_demo.xes` - main synthetic CRC screening demo log with 10,000 cases
+- `screening_conformance_demo.csv` - event-level CSV companion with the same 10,000-case cohort
 - `idealized_event_log.xes` and `idealized_petri_net.pnml` - idealized reference artefacts for conformance-oriented checks; the log contains 1,200 synthetic cases
 
 The bundled `screening_conformance_demo.*` files are **synthetic** and intentionally shaped to expose a recognisable dominant pathway, 18 common and rare variants, deviations, PRE/POST drift, and timing bottlenecks across more than three years. Six variants each account for less than 3% of cases, preserving a useful long tail without overwhelming the main process map.
@@ -91,7 +91,7 @@ The bundled `screening_conformance_demo.*` files are **synthetic** and intention
 You can generate a fresh synthetic screening log for experiments without replacing the bundled sample:
 
 ```bash
-crpm-generate-screening-demo --cases 30000 --seed 42 --csv outputs/synthetic_screening.csv --xes outputs/synthetic_screening.xes
+crpm-generate-screening-demo --cases 10000 --seed 42 --csv outputs/synthetic_screening.csv --xes outputs/synthetic_screening.xes
 ```
 
 ## Data Quality and Timestamp Policy

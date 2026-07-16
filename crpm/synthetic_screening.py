@@ -15,8 +15,8 @@ from pm4py.objects.log.exporter.xes import exporter as xes_exporter
 from pm4py.objects.log.util import dataframe_utils
 
 
-DEFAULT_SAMPLE_CASES = 30_000
-CASES_PER_DAY = 28
+DEFAULT_SAMPLE_CASES = 10_000
+CASES_PER_DAY = 10
 SAMPLE_START = datetime(2022, 1, 1, tzinfo=timezone.utc)
 POST_START = datetime(2023, 7, 2, tzinfo=timezone.utc)
 
