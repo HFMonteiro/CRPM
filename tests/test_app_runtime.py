@@ -11,9 +11,12 @@ from crpm.app_runtime import (
     _delay_bucket,
     build_conformance_workspace_payload,
     build_model_comparison_dataframe,
+    compute_log_stats,
     compute_filter_key,
     get_log_profile,
     list_safe_local_xes_files,
+    preview_csv_dataframe,
+    resolve_csv_log,
     resolve_xes_log,
     run_discovery_comparison_pipeline,
     compute_full_conformance,
@@ -709,6 +712,75 @@ def test_resolve_xes_log_skips_full_xml_validation_for_unchanged_cached_file(tmp
 
     assert first.log is second.log
     assert validation_calls == [xes_file]
+
+
+def test_resolve_xes_upload_skips_revalidation_after_cache_hit(monkeypatch) -> None:
+    state = get_crpm_state({})
+    raw = b"<log></log>"
+    log = EventLog()
+    validation_calls = []
+    load_calls = []
+
+    monkeypatch.setattr(app_runtime, "_validate_xes_bytes", lambda payload: validation_calls.append(payload))
+    monkeypatch.setattr(app_runtime, "load_log", lambda path: load_calls.append(path) or log)
+
+    first = resolve_xes_log(state, selected_path=None, uploaded_bytes=raw, uploaded_name="demo.xes")
+    second = resolve_xes_log(state, selected_path=None, uploaded_bytes=raw, uploaded_name="demo.xes")
+
+    assert first.log is second.log is log
+    assert validation_calls == [raw]
+    assert len(load_calls) == 1
+
+
+def test_csv_preview_is_bounded_and_full_resolution_preserves_text_identifiers() -> None:
+    state = get_crpm_state({})
+    rows = ["case_id,activity,timestamp"]
+    rows.extend(f"{index:04d},A,2024-01-01T00:00:00Z" for index in range(1, 206))
+    raw = ("\n".join(rows) + "\n").encode("utf-8")
+
+    preview = preview_csv_dataframe(state, raw)
+    first, returned_preview = resolve_csv_log(
+        state,
+        uploaded_bytes=raw,
+        uploaded_name="demo.csv",
+        case_col="case_id",
+        activity_col="activity",
+        timestamp_col="timestamp",
+    )
+    second, _ = resolve_csv_log(
+        state,
+        uploaded_bytes=raw,
+        uploaded_name="demo.csv",
+        case_col="case_id",
+        activity_col="activity",
+        timestamp_col="timestamp",
+    )
+
+    assert len(preview.index) == app_runtime.CSV_PREVIEW_ROWS
+    assert returned_preview is preview
+    assert preview.iloc[0]["case_id"] == "0001"
+    assert len(first.log) == 205
+    assert first.log[0].attributes["concept:name"] == "0001"
+    assert second.log is first.log
+    assert all(len(frame.index) <= app_runtime.CSV_PREVIEW_ROWS for frame in state.caches["dataframe_cache"].values())
+
+
+def test_csv_preview_reports_empty_input_as_validation_error() -> None:
+    state = get_crpm_state({})
+
+    with pytest.raises(ValueError, match="CSV validation failed"):
+        preview_csv_dataframe(state, b"")
+
+
+def test_compute_log_stats_normalizes_mixed_timezone_kinds() -> None:
+    trace = Trace()
+    trace.append({"concept:name": "A", "time:timestamp": pd.Timestamp("2024-01-01T10:00:00")})
+    trace.append({"concept:name": "B", "time:timestamp": pd.Timestamp("2024-01-01T12:00:00+01:00")})
+
+    stats = compute_log_stats(EventLog([trace]))
+
+    assert stats["start"] == pd.Timestamp("2024-01-01T10:00:00")
+    assert stats["end"] == pd.Timestamp("2024-01-01T11:00:00")
 
 
 def test_get_log_profile_reuses_stats_and_first_events(monkeypatch) -> None:

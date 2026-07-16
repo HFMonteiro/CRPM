@@ -27,8 +27,8 @@ from crpm.log_filters import filter_date_range
 
 
 def load_csv(path: Path | str) -> pd.DataFrame:
-    """Load a CSV file."""
-    return pd.read_csv(path)
+    """Load a CSV file without inferring away source identifiers."""
+    return pd.read_csv(path, dtype=str, keep_default_na=False, na_filter=False)
 
 
 def csv_to_event_log(
@@ -76,15 +76,24 @@ def _prepare_event_dataframe(
     if timestamp_values.isna().any() or timestamp_values.astype(str).str.strip().eq("").any():
         raise ValueError("CSV validation failed: timestamps cannot be null or blank.")
 
-    timezone_kinds = {_timestamp_timezone_kind(value) for value in timestamp_values.tolist()}
+    timezone_kinds = {_timestamp_timezone_kind(value) for value in timestamp_values}
     timezone_kinds.discard("unknown")
     if len(timezone_kinds) > 1:
         raise ValueError("CSV validation failed: timestamps mix timezone-aware and timezone-naive values.")
 
     try:
-        parsed_timestamps = pd.to_datetime(timestamp_values, errors="coerce", format="mixed")
+        parsed_timestamps = pd.to_datetime(
+            timestamp_values,
+            errors="coerce",
+            format="mixed",
+            utc=timezone_kinds == {"aware"},
+        )
     except TypeError:
-        parsed_timestamps = pd.to_datetime(timestamp_values, errors="coerce")
+        parsed_timestamps = pd.to_datetime(
+            timestamp_values,
+            errors="coerce",
+            utc=timezone_kinds == {"aware"},
+        )
     if parsed_timestamps.isna().any():
         raise ValueError("CSV validation failed: timestamp column contains invalid values.")
 

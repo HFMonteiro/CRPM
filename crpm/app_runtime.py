@@ -38,6 +38,8 @@ from crpm.run_manifest import build_run_manifest
 from crpm.screening import describe_followup_window, filter_log_by_incident_period
 
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
+CSV_PREVIEW_ROWS = 200
+CSV_READER_VERSION = "text-v2"
 _XML_SCAN_CHUNK_BYTES = 64 * 1024
 _XML_SCAN_OVERLAP_BYTES = 128
 CONFORMANCE_WORKSPACE_CACHE_VERSION = "workflow-v3"
@@ -167,18 +169,20 @@ def first_event_names(log: EventLog) -> list[str]:
 def compute_log_stats(log: EventLog) -> dict[str, Optional[object]]:
     traces = len(log)
     events = 0
-    timestamps = []
-    for trace_index, trace in enumerate(log, start=1):
+    start: datetime | None = None
+    end: datetime | None = None
+    for trace in log:
         events += len(trace)
         for event in trace:
-            ts = event.get("time:timestamp")
-            if isinstance(ts, datetime):
-                timestamps.append(ts)
+            ts = _workflow_timestamp(event.get("time:timestamp"))
+            if ts is not None:
+                start = ts if start is None or ts < start else start
+                end = ts if end is None or ts > end else end
     return {
         "traces": traces,
         "events": events,
-        "start": min(timestamps) if timestamps else None,
-        "end": max(timestamps) if timestamps else None,
+        "start": start,
+        "end": end,
     }
 
 
@@ -362,10 +366,11 @@ def resolve_xes_log(
     uploaded_name: Optional[str],
 ) -> LoadedLog:
     if uploaded_bytes is not None:
-        _validate_xes_bytes(uploaded_bytes)
+        _ensure_upload_size(uploaded_bytes)
         signature = make_uploaded_signature(uploaded_bytes, "xes_upload")
         cached_log = bounded_cache_get(state, "log_cache", signature)
         if cached_log is None:
+            _validate_xes_bytes(uploaded_bytes)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".xes") as tmp:
                 tmp.write(uploaded_bytes)
                 temp_path = Path(tmp.name)
@@ -410,16 +415,44 @@ def resolve_xes_log(
     )
 
 
+def _read_csv_dataframe(
+    uploaded_bytes: bytes,
+    *,
+    nrows: int | None = None,
+    text_columns: tuple[str, ...] | None = None,
+) -> pd.DataFrame:
+    """Read mapped event fields as text so identifiers stay stable."""
+    dtype: type[str] | dict[str, type[str]] = str
+    if text_columns is not None:
+        dtype = {column: str for column in text_columns}
+    try:
+        return pd.read_csv(
+            io.BytesIO(uploaded_bytes),
+            dtype=dtype,
+            keep_default_na=False,
+            na_filter=False,
+            nrows=nrows,
+        )
+    except (pd.errors.EmptyDataError, pd.errors.ParserError, UnicodeDecodeError) as exc:
+        raise ValueError("CSV validation failed: file could not be parsed.") from exc
+
+
+def _validate_csv_dataframe_shape(dataframe: pd.DataFrame) -> None:
+    if dataframe.empty:
+        raise ValueError("CSV validation failed: file contains no event rows.")
+    if len(dataframe.columns) < 3:
+        raise ValueError("CSV validation failed: at least case, activity, and timestamp columns are required.")
+
+
 def preview_csv_dataframe(state: CRPMState, uploaded_bytes: bytes) -> pd.DataFrame:
+    """Return a bounded text-preserving sample for column mapping."""
     _ensure_upload_size(uploaded_bytes)
-    cache_key = make_uploaded_signature(uploaded_bytes, "csv")
+    signature = make_uploaded_signature(uploaded_bytes, "csv")
+    cache_key = f"{signature}::preview::{CSV_PREVIEW_ROWS}::{CSV_READER_VERSION}"
     dataframe = bounded_cache_get(state, "dataframe_cache", cache_key)
     if dataframe is None:
-        dataframe = pd.read_csv(io.BytesIO(uploaded_bytes))
-        if dataframe.empty:
-            raise ValueError("CSV validation failed: file contains no event rows.")
-        if len(dataframe.columns) < 3:
-            raise ValueError("CSV validation failed: at least case, activity, and timestamp columns are required.")
+        dataframe = _read_csv_dataframe(uploaded_bytes, nrows=CSV_PREVIEW_ROWS)
+        _validate_csv_dataframe_shape(dataframe)
         bounded_cache_put(state, "dataframe_cache", cache_key, dataframe)
     return dataframe
 
@@ -436,15 +469,21 @@ def resolve_csv_log(
     if uploaded_bytes is None:
         raise ValueError("Upload a CSV file to continue.")
 
-    dataframe = preview_csv_dataframe(state, uploaded_bytes)
+    preview_dataframe = preview_csv_dataframe(state, uploaded_bytes)
 
     if not case_col or not activity_col or not timestamp_col:
         raise ValueError("Choose the case, activity, and timestamp columns before running the analysis.")
+    selected_columns = (case_col, activity_col, timestamp_col)
+    if any(column not in preview_dataframe.columns for column in selected_columns):
+        raise ValueError("CSV validation failed: required event columns are missing.")
 
-    log_key = f"{make_uploaded_signature(uploaded_bytes, 'csv')}::{case_col}:{activity_col}:{timestamp_col}"
+    signature = make_uploaded_signature(uploaded_bytes, "csv")
+    log_key = f"{signature}::{CSV_READER_VERSION}::{case_col}:{activity_col}:{timestamp_col}"
     cached_log = bounded_cache_get(state, "log_cache", log_key)
     if cached_log is None:
-        cached_log = csv_to_event_log(dataframe.copy(), case_col, activity_col, timestamp_col)
+        dataframe = _read_csv_dataframe(uploaded_bytes, text_columns=selected_columns)
+        _validate_csv_dataframe_shape(dataframe)
+        cached_log = csv_to_event_log(dataframe, case_col, activity_col, timestamp_col)
         bounded_cache_put(state, "log_cache", log_key, cached_log)
 
     loaded_log = LoadedLog(
@@ -457,7 +496,7 @@ def resolve_csv_log(
         source_size_bytes=len(uploaded_bytes),
         validation_status="validated:csv",
     )
-    return loaded_log, dataframe
+    return loaded_log, preview_dataframe
 
 
 def run_discovery_comparison_pipeline(

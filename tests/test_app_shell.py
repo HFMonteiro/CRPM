@@ -356,6 +356,8 @@ def test_page_change_scroll_reset_is_only_emitted_on_page_change(monkeypatch) ->
 
     assert len(calls) == 1
     assert "scrollTo" in str(calls[0]["html"])
+    assert "[data-testid='stMain']" in str(calls[0]["html"])
+    assert "[120, 360, 900]" in str(calls[0]["html"])
     assert calls[0]["height"] == 0
     assert calls[0]["width"] == 0
     assert session_state["_crpm_last_rendered_page"] == "DFG Visualizations"

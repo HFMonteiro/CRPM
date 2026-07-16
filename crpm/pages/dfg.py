@@ -33,7 +33,7 @@ from crpm.pages.common import (
 
 
 def render_dfg_page(snapshot: AnalysisSnapshot) -> None:
-    st.subheader("DFG Visualizations")
+    st.subheader("DFG Visualizations", anchor="dfg-visualizations")
 
     if not snapshot.analysis_complete or snapshot.filtered_log is None:
         render_empty_state("No DFG results yet. Run the analysis from the sidebar to populate this page.")

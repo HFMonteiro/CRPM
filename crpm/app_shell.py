@@ -185,6 +185,7 @@ def _reset_page_scroll_on_change(page: str) -> None:
             try {
               const doc = window.parent.document;
               [
+                doc.querySelector("[data-testid='stMain']"),
                 doc.querySelector("[data-testid='stAppViewContainer']"),
                 doc.querySelector(".main"),
                 doc.querySelector("section.main"),
@@ -198,6 +199,7 @@ def _reset_page_scroll_on_change(page: str) -> None:
           try {
             window.parent.requestAnimationFrame(() => window.parent.requestAnimationFrame(reset));
           } catch (_) {}
+          [120, 360, 900].forEach((delay) => window.setTimeout(reset, delay));
         })();
         </script>
         """,
@@ -431,11 +433,12 @@ def _render_analysis_controls(state: CRPMState) -> None:
             controls_panel.caption("Place XES logs in the selected folder or upload one directly.")
             config.selected_log_path = None
 
+        uploaded_xes_bytes = uploaded_xes.getvalue() if uploaded_xes is not None else None
         try:
             loaded_log = resolve_xes_log(
                 state,
                 selected_path=config.selected_log_path,
-                uploaded_bytes=uploaded_xes.getvalue() if uploaded_xes is not None else None,
+                uploaded_bytes=uploaded_xes_bytes,
                 uploaded_name=uploaded_xes.name if uploaded_xes is not None else None,
             )
         except Exception as exc:
@@ -447,7 +450,8 @@ def _render_analysis_controls(state: CRPMState) -> None:
             controls_panel.caption("Upload a CSV file to continue.")
         else:
             try:
-                preview_df = preview_csv_dataframe(state, uploaded_csv.getvalue())
+                uploaded_csv_bytes = uploaded_csv.getvalue()
+                preview_df = preview_csv_dataframe(state, uploaded_csv_bytes)
                 columns = list(preview_df.columns)
                 if columns:
                     config.csv_case_col = controls_panel.selectbox(
@@ -470,7 +474,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
                     )
                     loaded_log, _ = resolve_csv_log(
                         state,
-                        uploaded_bytes=uploaded_csv.getvalue(),
+                        uploaded_bytes=uploaded_csv_bytes,
                         uploaded_name=uploaded_csv.name,
                         case_col=config.csv_case_col,
                         activity_col=config.csv_activity_col,

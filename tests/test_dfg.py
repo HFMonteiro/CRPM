@@ -471,6 +471,9 @@ def test_render_dfg_interactive_html_supports_wheel_zoom_pan_and_reset():
     assert "addEventListener('wheel'" in html
     assert "addEventListener('pointerdown'" in html
     assert 'data-action="reset"' in html
+    assert "document.addEventListener('click'" in html
+    assert "event.target.closest('[data-action]')" in html
+    assert "viewport.querySelectorAll('[data-action]')" not in html
     assert "viewBox" in html
 
 
