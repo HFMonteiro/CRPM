@@ -162,6 +162,19 @@ def test_csv_to_event_log_sorts_by_case_and_timestamp() -> None:
     assert [event["concept:name"] for event in log[0]] == ["A1", "A2"]
 
 
+def test_csv_to_event_log_preserves_date_like_case_identifiers() -> None:
+    df = pd.DataFrame(
+        [
+            {"case_id": "0001", "activity": "A", "timestamp": "2024-01-01T10:00:00Z"},
+            {"case_id": "2024", "activity": "B", "timestamp": "2024-01-01T11:00:00Z"},
+        ]
+    )
+
+    log = pipeline.csv_to_event_log(df, "case_id", "activity", "timestamp")
+
+    assert [trace.attributes["concept:name"] for trace in log] == ["0001", "2024"]
+
+
 def test_load_csv_preserves_leading_zero_identifiers(tmp_path) -> None:
     csv_path = tmp_path / "events.csv"
     csv_path.write_text(
