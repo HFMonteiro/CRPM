@@ -24,11 +24,21 @@ from crpm.visualization import (
     create_workflow_conformance_sankey,
     _workflow_primary_path_nodes,
     render_performance_bpmn_svg,
+    render_pan_zoom_svg_html,
     render_workflow_bpmn_style_svg,
     render_workflow_explorer_html,
     render_workflow_conformance_svg,
     workflow_edge_uid,
 )
+
+
+def test_pan_zoom_svg_wrapper_exposes_desktop_controls() -> None:
+    html = render_pan_zoom_svg_html('<svg viewBox="0 0 100 50"></svg>')
+
+    assert "addEventListener('wheel'" in html
+    assert "pointerdown" in html
+    assert 'data-action="reset"' in html
+    assert "Reset filters" not in html
 
 
 def test_bottleneck_chart_returns_figure():

@@ -47,10 +47,14 @@ LEGAL_NOTICE = (
 )
 CONFORMANCE_PAGE_FRAGMENT = st.fragment(PAGE_REGISTRY["Conformance Analytics"])
 WORKSPACE_PAGES = {
-    "Explore": ("Overview", "Discovery", "DFG Visualizations", "Variant Analysis"),
+    "Explore": ("Overview", "Discovery"),
     "Conformance": ("Conformance Analytics",),
-    "Performance": ("Operational Flow", "Process Performance"),
+    "Performance": ("Process Performance",),
     "Models": ("Model Comparison",),
+}
+ADVANCED_PAGES = {
+    "Explore": ("DFG Visualizations", "Variant Analysis"),
+    "Performance": ("Operational Flow",),
 }
 
 
@@ -118,10 +122,11 @@ def render_app() -> None:
 
 
 def _render_workspace_navigation() -> str:
-    """Render a compact workspace selector with contextual sub-navigation."""
+    """Render primary navigation with detailed analytical surfaces kept secondary."""
     current_page = str(st.session_state.get("crpm_preview_page", PREVIEW_PAGES[0]))
+    all_workspace_pages = {workspace: (*pages, *ADVANCED_PAGES.get(workspace, ())) for workspace, pages in WORKSPACE_PAGES.items()}
     current_workspace = next(
-        (workspace for workspace, pages in WORKSPACE_PAGES.items() if current_page in pages),
+        (workspace for workspace, pages in all_workspace_pages.items() if current_page in pages),
         next(iter(WORKSPACE_PAGES)),
     )
     if st.session_state.get("crpm_workspace") not in WORKSPACE_PAGES:
@@ -156,6 +161,22 @@ def _render_workspace_navigation() -> str:
             horizontal=True,
             label_visibility="collapsed",
         )
+
+    advanced_pages = ADVANCED_PAGES.get(workspace, ())
+    if advanced_pages:
+        with st.sidebar.expander("Advanced surfaces", expanded=current_page in advanced_pages) as advanced_panel:
+            advanced_panel.caption("Open a detailed surface when the primary workspace raises a question.")
+            for index, advanced_page in enumerate(advanced_pages):
+                if advanced_panel.button(
+                    advanced_page,
+                    key=f"crpm_advanced_surface_{workspace.lower()}_{index}",
+                    use_container_width=True,
+                ):
+                    st.session_state["crpm_preview_page"] = advanced_page
+                    st.rerun()
+            if current_page in advanced_pages:
+                page = current_page
+
     st.session_state["crpm_preview_page"] = page
     return str(page)
 
@@ -254,7 +275,7 @@ def _render_sidebar_session_info(snapshot: AnalysisSnapshot) -> None:
 
 
 def _render_header(snapshot: AnalysisSnapshot, *, page: str) -> None:
-    """Render the main content header with compact run context."""
+    """Render actionable run-state messages; pages own their compact cockpit header."""
     if page == "Conformance Analytics":
         if getattr(snapshot, "config_change_message", None):
             render_quiet_note(
@@ -267,7 +288,6 @@ def _render_header(snapshot: AnalysisSnapshot, *, page: str) -> None:
             st.error(snapshot.filter_error_message)
         return
 
-    _render_run_context_bar(snapshot, page=page)
     if getattr(snapshot, "config_change_message", None):
         render_quiet_note(
             "Settings changed since the last successful run. "
@@ -337,29 +357,26 @@ def _shell_intro_copy(page: str) -> str:
 
 
 def _render_header_brand() -> None:
-    """Render persistent author and institutional links in the app header."""
+    """Render one compact desktop header with provenance, build and legal context."""
     st.markdown(
         f"""
-        <div class="crpm-header-badges" data-qa="global-brand-strip" aria-label="CRPM institutional links">
-            <a class="crpm-author-badge" href="{AUTHOR_WEBSITE}" target="_blank" rel="noopener noreferrer" aria-label="hfmonteiro.com">
-                <span>www.hfmonteiro.com</span>
-            </a>
-            <span class="crpm-build-badge" aria-label="CRPM build version">Build {__version__}</span>
-            <a class="crpm-fmup-badge" href="{FMUP_HOME_URL}" target="_blank" rel="noopener noreferrer" aria-label="Faculdade de Medicina da Universidade do Porto">
-                <img src="{FMUP_BADGE_SRC}" alt="FMUP symbol" />
-            </a>
-            <a class="crpm-up-badge" href="{UP_HOME_URL}" target="_blank" rel="noopener noreferrer" aria-label="Universidade do Porto">
-                <img src="{UP_BADGE_SRC}" alt="U.Porto symbol" />
-            </a>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f"""
-        <div class="crpm-legal-bar">
-            <strong>Legal notice:</strong>
-            <span>{_html.escape(LEGAL_NOTICE)}</span>
+        <div class="crpm-header-strip" data-qa="global-brand-strip" aria-label="CRPM institutional links">
+            <div class="crpm-header-badges">
+                <a class="crpm-author-badge" href="{AUTHOR_WEBSITE}" target="_blank" rel="noopener noreferrer" aria-label="hfmonteiro.com">
+                    <span>www.hfmonteiro.com</span>
+                </a>
+                <span class="crpm-build-badge" aria-label="CRPM build version">Build {__version__}</span>
+                <a class="crpm-fmup-badge" href="{FMUP_HOME_URL}" target="_blank" rel="noopener noreferrer" aria-label="Faculdade de Medicina da Universidade do Porto">
+                    <img src="{FMUP_BADGE_SRC}" alt="FMUP symbol" />
+                </a>
+                <a class="crpm-up-badge" href="{UP_HOME_URL}" target="_blank" rel="noopener noreferrer" aria-label="Universidade do Porto">
+                    <img src="{UP_BADGE_SRC}" alt="U.Porto symbol" />
+                </a>
+            </div>
+            <div class="crpm-legal-inline">
+                <strong>Research and operational monitoring</strong>
+                <span>{_html.escape(LEGAL_NOTICE.replace("For research and operational monitoring support only. ", ""))}</span>
+            </div>
         </div>
         """,
         unsafe_allow_html=True,

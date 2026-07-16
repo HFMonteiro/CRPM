@@ -7,7 +7,13 @@ from types import SimpleNamespace
 import pandas as pd
 
 from crpm.app_runtime import LoadedLog, compute_analysis_signature
-from crpm.app_shell import _default_xes_index, _render_analysis_controls
+from crpm.app_shell import (
+    ADVANCED_PAGES,
+    WORKSPACE_PAGES,
+    _default_xes_index,
+    _render_analysis_controls,
+    _render_workspace_navigation,
+)
 from crpm.app_state import get_crpm_state
 
 
@@ -121,6 +127,11 @@ class _DummyContext:
             return self.sidebar.caption(*args, **kwargs)
         return None
 
+    def button(self, *args, **kwargs):
+        if self.sidebar is not None:
+            return self.sidebar.button(*args, **kwargs)
+        return False
+
     def markdown(self, *args, **kwargs):
         if self.sidebar is not None:
             return self.sidebar.markdown(*args, **kwargs)
@@ -156,6 +167,8 @@ def _dummy_streamlit(sidebar: _DummySidebar, session_state: dict) -> SimpleNames
         sidebar=sidebar,
         session_state=session_state,
         caption=lambda *args, **kwargs: None,
+        markdown=lambda *args, **kwargs: None,
+        radio=lambda label, options, **kwargs: options[0],
         text_input=sidebar.text_input,
         checkbox=sidebar.checkbox,
         selectbox=sidebar.selectbox,
@@ -163,6 +176,20 @@ def _dummy_streamlit(sidebar: _DummySidebar, session_state: dict) -> SimpleNames
         multiselect=sidebar.multiselect,
         number_input=sidebar.number_input,
     )
+
+
+def test_workspace_navigation_keeps_advanced_surfaces_secondary(monkeypatch) -> None:
+    import crpm.app_shell as app_shell
+
+    sidebar = _DummySidebar()
+    session_state = {"crpm_preview_page": "DFG Visualizations"}
+    monkeypatch.setattr(app_shell, "st", _dummy_streamlit(sidebar, session_state))
+
+    page = _render_workspace_navigation()
+
+    assert set(WORKSPACE_PAGES["Explore"]).isdisjoint(ADVANCED_PAGES["Explore"])
+    assert page == "DFG Visualizations"
+    assert ("expander", "Advanced surfaces") in sidebar.visible_order
 
 
 def _loaded_log() -> LoadedLog:
@@ -396,7 +423,7 @@ def test_render_header_prompts_rerun_with_note_and_toast(monkeypatch) -> None:
     assert calls["toast"]
 
 
-def test_render_header_renders_compact_run_context_for_non_conformance_pages(monkeypatch) -> None:
+def test_render_header_does_not_duplicate_page_cockpit_context(monkeypatch) -> None:
     import crpm.app_shell as app_shell
 
     snapshot = SimpleNamespace(
@@ -426,18 +453,10 @@ def test_render_header_renders_compact_run_context_for_non_conformance_pages(mon
 
     app_shell._render_header(snapshot, page="Discovery")
 
-    rendered = " ".join(calls["markdown"])
-    assert 'data-qa="run-context-bar"' in rendered
-    assert "crpm-run-context__chip" in rendered
-    assert "Current run" in rendered
-    assert "Screening Program Process Mining Workbench" not in rendered
-    assert "running-example.xes" in rendered
-    assert "Cases" in rendered
-    assert "Events" in rendered
-    assert "Models" in rendered
+    assert calls["markdown"] == []
 
 
-def test_dfg_header_uses_same_compact_run_context_to_keep_map_first(monkeypatch) -> None:
+def test_dfg_header_does_not_duplicate_page_cockpit_context(monkeypatch) -> None:
     import crpm.app_shell as app_shell
 
     snapshot = SimpleNamespace(
@@ -467,9 +486,7 @@ def test_dfg_header_uses_same_compact_run_context_to_keep_map_first(monkeypatch)
 
     app_shell._render_header(snapshot, page="DFG Visualizations")
 
-    rendered = " ".join(calls["markdown"])
-    assert 'data-qa="run-context-bar"' in rendered
-    assert "Read the directly-follows map first" in rendered
+    assert calls["markdown"] == []
 
 
 def test_render_header_skips_shell_hero_on_conformance_page(monkeypatch) -> None:

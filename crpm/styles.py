@@ -285,6 +285,11 @@ def get_custom_css() -> str:
         background: #f0faf5;
     }
 
+    .crpm-dashboard-badge--watch {
+        border-color: rgba(166, 108, 17, 0.32);
+        background: #fff8e8;
+    }
+
     .crpm-dashboard-section-title {
         margin: 0.04rem 0 0.2rem 0;
         font-size: 0.82rem;
@@ -1043,6 +1048,26 @@ def get_custom_css() -> str:
     [data-testid="stFileUploader"]:hover {
         background: rgba(244, 239, 248, 0.98) !important;
         border-color: rgba(142, 122, 168, 0.24) !important;
+    }
+
+    section.main [data-testid="stExpander"] > details > summary,
+    [data-testid="stMainBlockContainer"] [data-testid="stExpander"] > details > summary {
+        background: rgba(252, 251, 253, 0.96) !important;
+        color: var(--crpm-text) !important;
+        border: 1px solid rgba(71, 88, 79, 0.12) !important;
+        border-radius: 8px !important;
+    }
+
+    section.main [data-testid="stExpander"] > details > summary:hover,
+    [data-testid="stMainBlockContainer"] [data-testid="stExpander"] > details > summary:hover {
+        background: rgba(244, 239, 248, 0.98) !important;
+    }
+
+    section.main [data-testid="stExpander"] > details > summary p,
+    section.main [data-testid="stExpander"] > details > summary span,
+    [data-testid="stMainBlockContainer"] [data-testid="stExpander"] > details > summary p,
+    [data-testid="stMainBlockContainer"] [data-testid="stExpander"] > details > summary span {
+        color: var(--crpm-text) !important;
     }
 
     [data-testid="stSidebar"] .streamlit-expanderHeader,
@@ -3352,6 +3377,65 @@ def get_custom_css() -> str:
     .crpm-legal-bar strong {
         color: #ffffff !important;
         font-weight: 700;
+    }
+
+    .crpm-header-strip {
+        position: fixed;
+        top: 0.42rem;
+        left: calc(var(--crpm-sidebar-width) + 0.78rem);
+        z-index: 1000001;
+        display: flex;
+        align-items: center;
+        gap: 0.56rem;
+        width: calc(100vw - var(--crpm-sidebar-width) - 1.56rem);
+        max-width: calc(100vw - var(--crpm-sidebar-width) - 1.56rem);
+        min-height: 2.55rem;
+        pointer-events: none;
+    }
+
+    .crpm-header-strip .crpm-header-badges {
+        position: static;
+        flex: 0 0 auto;
+        max-width: none;
+        pointer-events: auto;
+    }
+
+    .crpm-legal-inline {
+        display: flex;
+        align-items: baseline;
+        gap: 0.38rem;
+        min-width: 0;
+        padding: 0.34rem 0.58rem;
+        border: 1px solid rgba(30, 45, 54, 0.16);
+        border-radius: 8px;
+        background: rgba(30, 45, 54, 0.92);
+        color: rgba(250, 247, 252, 0.94) !important;
+        box-shadow: 0 4px 10px rgba(34, 29, 43, 0.08);
+        font-size: 0.65rem;
+        line-height: 1.15;
+        pointer-events: auto;
+    }
+
+    .crpm-legal-inline strong,
+    .crpm-legal-inline span {
+        color: rgba(250, 247, 252, 0.94) !important;
+    }
+
+    .crpm-legal-inline strong {
+        flex: 0 0 auto;
+        color: #ffffff !important;
+        font-weight: 800;
+    }
+
+    .crpm-legal-inline span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .main .block-container {
+        padding-top: 3.2rem !important;
     }
 
     a:focus-visible,

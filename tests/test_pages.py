@@ -373,7 +373,7 @@ def test_render_overview_page_prioritises_process_map(monkeypatch) -> None:
 
     assert any("crpm-overview-workbench" in text for text in calls["markdown"])
     assert any("crpm-overview-kpi-strip" in text for text in calls["markdown"])
-    assert not any("crpm-dashboard-topbar" in text for text in calls["markdown"])
+    assert any("crpm-dashboard-topbar" in text for text in calls["markdown"])
     assert not any("crpm-overview-command-center" in text for text in calls["markdown"])
     assert any("crpm-overview-map-frame" in text for text in calls["markdown"])
     assert not any("crpm-dashboard-bar-list" in text for text in calls["markdown"])

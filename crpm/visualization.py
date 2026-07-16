@@ -6197,6 +6197,65 @@ def _safe_float(value: Any) -> Optional[float]:
         return None
 
 
+def render_pan_zoom_svg_html(svg_markup: str, *, accessible_label: str = "Interactive process map") -> str:
+    """Wrap a generated SVG with desktop wheel zoom, drag pan, hover, and reset controls."""
+    safe_label = escape(accessible_label)
+    return f"""
+    <!doctype html>
+    <html><head><meta charset="utf-8"><style>
+      html, body {{ margin:0; padding:0; background:#fff; overflow:hidden; font-family:Segoe UI,Arial,sans-serif; }}
+      .crpm-map-shell {{ position:relative; height:100vh; min-height:420px; border:1px solid #d8e0e7; background:#fff; }}
+      .crpm-map-canvas {{ width:100%; height:100%; cursor:grab; touch-action:none; overflow:hidden; }}
+      .crpm-map-canvas.is-dragging {{ cursor:grabbing; }}
+      .crpm-map-canvas svg {{ width:100% !important; height:100% !important; max-width:none !important; display:block; }}
+      .crpm-map-tools {{ position:absolute; top:10px; right:10px; z-index:4; display:flex; gap:4px; padding:4px; border:1px solid #cfd8df; background:rgba(255,255,255,.96); box-shadow:0 3px 12px rgba(31,48,58,.12); }}
+      .crpm-map-tools button {{ width:30px; height:30px; border:0; border-radius:4px; background:#f4f7f6; color:#263b32; font:700 17px/1 Segoe UI,Arial,sans-serif; cursor:pointer; }}
+      .crpm-map-tools button:hover, .crpm-map-tools button:focus-visible {{ background:#e3eee8; outline:2px solid #4f7664; outline-offset:1px; }}
+      .crpm-map-tools button[data-action="out"], .crpm-map-tools button[data-action="reset"] {{ font-size:0; }}
+      .crpm-map-tools button[data-action="out"]::before {{ content:"−"; font-size:17px; }}
+      .crpm-map-tools button[data-action="reset"]::before {{ content:"R"; font-size:14px; }}
+      .crpm-map-help {{ position:absolute; left:12px; bottom:9px; z-index:3; color:#53645b; background:rgba(255,255,255,.9); padding:3px 6px; font-size:11px; }}
+    </style></head><body>
+      <section class="crpm-map-shell" aria-label="{safe_label}">
+        <div class="crpm-map-tools" role="toolbar" aria-label="Map view controls">
+          <button type="button" data-action="in" title="Zoom in" aria-label="Zoom in">+</button>
+          <button type="button" data-action="out" title="Zoom out" aria-label="Zoom out">−</button>
+          <button type="button" data-action="reset" title="Reset view" aria-label="Reset view">R</button>
+        </div>
+        <div class="crpm-map-canvas">{svg_markup}</div>
+        <div class="crpm-map-help">Wheel to zoom · drag to pan · hover for context</div>
+      </section>
+      <script>
+      (() => {{
+        const canvas = document.querySelector('.crpm-map-canvas');
+        const svg = canvas && canvas.querySelector('svg');
+        if (!svg || !svg.viewBox || !svg.viewBox.baseVal) return;
+        const original = {{x:svg.viewBox.baseVal.x, y:svg.viewBox.baseVal.y, w:svg.viewBox.baseVal.width, h:svg.viewBox.baseVal.height}};
+        let view = {{...original}}, drag = null;
+        const apply = () => svg.setAttribute('viewBox', `${{view.x}} ${{view.y}} ${{view.w}} ${{view.h}}`);
+        const zoom = (factor, clientX, clientY) => {{
+          const rect = canvas.getBoundingClientRect();
+          const px = clientX == null ? .5 : Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+          const py = clientY == null ? .5 : Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+          const nextW = Math.max(original.w * .22, Math.min(original.w * 3, view.w * factor));
+          const nextH = Math.max(original.h * .22, Math.min(original.h * 3, view.h * factor));
+          view.x += (view.w - nextW) * px; view.y += (view.h - nextH) * py; view.w = nextW; view.h = nextH; apply();
+        }};
+        canvas.addEventListener('wheel', event => {{ event.preventDefault(); zoom(event.deltaY < 0 ? .86 : 1.16, event.clientX, event.clientY); }}, {{passive:false}});
+        canvas.addEventListener('pointerdown', event => {{ drag={{x:event.clientX,y:event.clientY,vx:view.x,vy:view.y}}; canvas.setPointerCapture(event.pointerId); canvas.classList.add('is-dragging'); }});
+        canvas.addEventListener('pointermove', event => {{ if(!drag) return; const rect=canvas.getBoundingClientRect(); view.x=drag.vx-(event.clientX-drag.x)*view.w/rect.width; view.y=drag.vy-(event.clientY-drag.y)*view.h/rect.height; apply(); }});
+        const stop = () => {{ drag=null; canvas.classList.remove('is-dragging'); }};
+        canvas.addEventListener('pointerup', stop); canvas.addEventListener('pointercancel', stop);
+        document.querySelector('.crpm-map-tools').addEventListener('click', event => {{
+          const action=event.target.dataset.action; if(action==='in') zoom(.8); if(action==='out') zoom(1.25); if(action==='reset') {{view={{...original}}; apply();}}
+        }});
+        apply();
+      }})();
+      </script>
+    </body></html>
+    """
+
+
 __all__ = [
     "create_bottleneck_chart",
     "create_activity_duration_chart",
@@ -6216,6 +6275,7 @@ __all__ = [
     "filter_workflow_payload",
     "create_workflow_interactive_payload",
     "render_workflow_explorer_html",
+    "render_pan_zoom_svg_html",
     "create_workflow_cytoscape_payload",
     "create_workflow_conformance_sankey",
     "workflow_edge_uid",

@@ -16,6 +16,7 @@ from crpm.pages.common import (
     render_dashboard_bar_list,
     render_html_card_grid,
     render_inline_empty,
+    render_page_cockpit_topbar,
 )
 from crpm.run_manifest import manifest_to_json
 from crpm.visualization import render_workflow_conformance_svg
@@ -67,6 +68,12 @@ OVERVIEW_VIEWS = ("Process map", "Cohort", "Evidence")
 
 def render_overview_page(snapshot: AnalysisSnapshot) -> None:
     summary = _analysis_summary(snapshot)
+    render_page_cockpit_topbar(
+        snapshot,
+        title="Process overview",
+        subtitle="Start with cohort scope and the main workflow signal, then open a detailed analytical surface.",
+        meta=[snapshot.input_name or "No log loaded", f"{snapshot.case_count:,} cases"],
+    )
     st.markdown(
         (
             "<div class='crpm-overview-workbench'>"
