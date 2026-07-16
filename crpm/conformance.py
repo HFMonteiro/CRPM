@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, date, timezone
 from pathlib import Path
-from typing import Any, Dict, Tuple, Optional
+from typing import Any, Dict, Tuple
 
 from pm4py.algo.conformance.alignments.petri_net import algorithm as alignments
 from pm4py.algo.conformance.tokenreplay import algorithm as token_replay
@@ -12,7 +11,9 @@ from pm4py.algo.discovery.heuristics import algorithm as heuristics_miner
 from pm4py.algo.discovery.heuristics.algorithm import Variants
 from pm4py.algo.evaluation.replay_fitness import algorithm as fitness_eval
 from pm4py.objects.log.importer.xes import importer as xes_importer
-from pm4py.objects.log.obj import EventLog, Trace
+from pm4py.objects.log.obj import EventLog
+
+from crpm.log_filters import filter_date_range
 
 # ---------------------------------------------------------------------------
 # Log utilities
@@ -102,57 +103,6 @@ def filter_start_event(log: EventLog, event_name: str | None) -> EventLog:
                 first_name = value
                 break
         if first_name == event_name:
-            filtered.append(trace)
-    return filtered
-
-
-def _coerce_timestamp(value: Any) -> datetime | None:
-    if not isinstance(value, datetime):
-        return None
-    if value.tzinfo is None:
-        return value
-    return value.astimezone(timezone.utc).replace(tzinfo=None)
-
-
-def filter_date_range(
-    log: EventLog,
-    start: Optional[date],
-    end: Optional[date],
-    *,
-    mode: str = "case",
-) -> EventLog:
-    """Filter traces by inclusive case-anchor date range or clip events explicitly."""
-    if not start and not end:
-        return log
-
-    start_dt = datetime.combine(start, datetime.min.time()) if start else datetime.min
-    end_dt = datetime.combine(end, datetime.max.time()) if end else datetime.max
-
-    if mode == "event":
-        filtered = EventLog()
-        for trace in log:
-            new_trace = Trace(attributes=dict(trace.attributes))
-            for event in trace:
-                timestamp = _coerce_timestamp(event.get("time:timestamp"))
-                if timestamp is not None and start_dt <= timestamp <= end_dt:
-                    new_trace.append(event)
-            if new_trace:
-                filtered.append(new_trace)
-        return filtered
-
-    if mode != "case":
-        raise ValueError(f"Unknown date filter mode: {mode}")
-
-    filtered = EventLog()
-    for trace in log:
-        anchor_ts = None
-        for event in trace:
-            timestamp = _coerce_timestamp(event.get("time:timestamp"))
-            if timestamp is not None and (anchor_ts is None or timestamp < anchor_ts):
-                anchor_ts = timestamp
-        if anchor_ts is None:
-            continue
-        if start_dt <= anchor_ts <= end_dt:
             filtered.append(trace)
     return filtered
 

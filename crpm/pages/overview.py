@@ -14,10 +14,8 @@ from crpm.pages.common import (
     format_metric_value,
     redact_dashboard_value,
     render_dashboard_bar_list,
-    render_dashboard_topbar,
     render_html_card_grid,
     render_inline_empty,
-    render_metric_card_grid,
 )
 from crpm.run_manifest import manifest_to_json
 from crpm.visualization import render_workflow_conformance_svg
@@ -64,136 +62,142 @@ PAGE_GUIDE = [
         "Use dense timing drilldowns when the executive workflow views need exact depth.",
     ),
 ]
+OVERVIEW_VIEWS = ("Process map", "Cohort", "Evidence")
 
 
 def render_overview_page(snapshot: AnalysisSnapshot) -> None:
     summary = _analysis_summary(snapshot)
-    _render_overview_topbar(snapshot, summary)
-
-    render_metric_card_grid(
+    st.markdown(
+        (
+            "<div class='crpm-overview-workbench'>"
+            "<div><span>Explore</span><strong>Process overview</strong></div>"
+            "<p>Start with the process map, then open cohort or evidence views when the pathway raises a question.</p>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+    render_html_card_grid(
         [
             {
                 "eyebrow": "Cohort",
                 "title": "Cases",
                 "value": format_metric_value(summary.get("cases"), kind="count"),
-                "body": "Current filtered run.",
+                "body": "Filtered run",
                 "tone": "neutral",
             },
             {
                 "eyebrow": "Cohort",
                 "title": "Events",
                 "value": format_metric_value(summary.get("events"), kind="count"),
-                "body": "Observed activity records.",
+                "body": "Activity records",
                 "tone": "accent",
             },
             {
                 "eyebrow": "Pathway",
-                "title": "Dominant path",
+                "title": "Mainline coverage",
                 "value": _display_optional(summary.get("dominant_path_share"), kind="percent"),
-                "body": "Mainline concentration.",
+                "body": "Cases sharing the dominant workflow backbone",
                 "tone": "success",
             },
             {
                 "eyebrow": "Timing",
                 "title": "Median throughput",
                 "value": _display_optional(summary.get("median_throughput_days"), kind="days"),
-                "body": "Current cohort median.",
+                "body": "Cohort median",
                 "tone": "neutral",
             },
-        ]
+        ],
+        grid_class="crpm-conformance-kpi-strip crpm-overview-kpi-strip",
     )
 
-    st.markdown(
-        "<div class='crpm-overview-command-center' aria-hidden='true'></div>",
-        unsafe_allow_html=True,
-    )
-    left_col, map_col, right_col = st.columns([0.78, 2.0, 1.02], gap="small")
+    active_view = _overview_view_selector(snapshot)
 
-    with left_col:
-        st.markdown(
-            "<div class='crpm-dashboard-section-title'>Cohort filter rail</div>",
-            unsafe_allow_html=True,
-        )
-        render_dashboard_bar_list("Pathway mix", _overview_pathway_rows(summary))
-        if _cohort_lens_rows(summary):
-            render_dashboard_bar_list("Cohort lenses", _cohort_lens_rows(summary))
-        if snapshot.denominator_registry:
-            render_dashboard_bar_list(
-                "Denominators",
-                _overview_denominator_rows(snapshot.denominator_registry),
-                value_label="",
-                max_value=_denominator_max(snapshot.denominator_registry),
-            )
-        render_html_card_grid(
-            _overview_signal_cards(snapshot, summary),
-            grid_class="crpm-dashboard-card-stack",
-        )
-
-    with map_col:
-        _render_overview_pathway_preview(snapshot)
-        st.markdown(
-            (
-                "<div class='crpm-reading-order-band'>"
-                "<span class='crpm-reading-order-band__eyebrow'>Guide</span>"
-                "<span class='crpm-reading-order-band__title'>Reading order</span>"
-                "<span class='crpm-reading-order-band__body'>Open the sequence below to see the recommended page flow for this run.</span>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
-        )
-        with st.expander("Reading order", expanded=False):
+    if active_view == "Cohort":
+        pathway_col, cohort_col = st.columns(2, gap="small")
+        with pathway_col:
             st.markdown(
-                _render_page_guide_html(snapshot.analysis_complete),
+                "<div class='crpm-dashboard-section-title'>Pathway and cohort</div>",
                 unsafe_allow_html=True,
             )
-
-    with right_col:
-        st.markdown(
-            "<div class='crpm-dashboard-section-title'>Evidence rail</div>",
-            unsafe_allow_html=True,
-        )
-        render_dashboard_bar_list("Model evidence", _overview_model_rows(summary))
-        render_html_card_grid(
-            _overview_status_cards(snapshot, summary),
-            grid_class="crpm-dashboard-card-stack",
-        )
-        if snapshot.analysis_complete:
-            if snapshot.log_quality:
-                render_dashboard_bar_list("Event log quality", quality_bar_rows(dict(snapshot.log_quality)))
+            render_dashboard_bar_list("Pathway mix", _overview_pathway_rows(summary))
+            if _cohort_lens_rows(summary):
+                render_dashboard_bar_list("Cohort lenses", _cohort_lens_rows(summary))
+        with cohort_col:
+            st.markdown(
+                "<div class='crpm-dashboard-section-title'>Denominators and signals</div>",
+                unsafe_allow_html=True,
+            )
+            if snapshot.denominator_registry:
+                render_dashboard_bar_list(
+                    "Denominators",
+                    _overview_denominator_rows(snapshot.denominator_registry),
+                    value_label="",
+                    max_value=_denominator_max(snapshot.denominator_registry),
+                )
             render_html_card_grid(
-                _overview_quality_cards(snapshot, summary),
+                _overview_signal_cards(snapshot, summary),
                 grid_class="crpm-dashboard-card-stack",
             )
-            _render_manifest_download(snapshot)
+        return
+
+    if active_view == "Evidence":
+        model_col, status_col = st.columns(2, gap="small")
+        with model_col:
+            st.markdown(
+                "<div class='crpm-dashboard-section-title'>Model and log evidence</div>",
+                unsafe_allow_html=True,
+            )
+            render_dashboard_bar_list("Model evidence", _overview_model_rows(summary))
+            if snapshot.analysis_complete and snapshot.log_quality:
+                render_dashboard_bar_list("Event log quality", quality_bar_rows(dict(snapshot.log_quality)))
+        with status_col:
+            st.markdown(
+                "<div class='crpm-dashboard-section-title'>Run status</div>",
+                unsafe_allow_html=True,
+            )
+            render_html_card_grid(
+                _overview_status_cards(snapshot, summary),
+                grid_class="crpm-dashboard-card-stack",
+            )
+            if snapshot.analysis_complete:
+                render_html_card_grid(
+                    _overview_quality_cards(snapshot, summary),
+                    grid_class="crpm-dashboard-card-stack",
+                )
+                _render_manifest_download(snapshot)
+        return
+
+    _render_overview_pathway_preview(snapshot)
+    with st.expander("Workspace guide", expanded=False):
+        st.markdown(
+            _render_page_guide_html(snapshot.analysis_complete),
+            unsafe_allow_html=True,
+        )
 
 
-def _render_overview_topbar(snapshot: AnalysisSnapshot, summary: Mapping[str, Any]) -> None:
-    title = "Overview command center"
-    subtitle = (
-        "First-event workflow gate remains the production discovery mode for this filtered run."
-        if snapshot.analysis_complete
-        else "Load an event log and run analysis to populate the cockpit."
-    )
-    render_dashboard_topbar(
-        title=title,
-        subtitle=subtitle,
-        badges=[
-            {"label": "Mode", "value": "Direct workflow mode", "tone": "accent"},
-            {
-                "label": "Follow-up",
-                "value": snapshot.active_followup_label or "Full available follow-up",
-                "tone": "success",
-            },
-            {
-                "label": "Models",
-                "value": f"{snapshot.model_count:,}",
-                "tone": "neutral",
-            },
-        ],
-        meta=[
-            snapshot.input_name or "No log loaded",
-            summary.get("period_label") or "Period unavailable",
-        ],
+def _overview_view_selector(snapshot: AnalysisSnapshot) -> str:
+    key = f"overview_view_{snapshot.filter_key or 'current'}"
+    segmented_control = getattr(st, "segmented_control", None)
+    if callable(segmented_control):
+        selected = segmented_control(
+            "Overview view",
+            OVERVIEW_VIEWS,
+            default=OVERVIEW_VIEWS[0],
+            key=key,
+            selection_mode="single",
+            label_visibility="collapsed",
+        )
+        if selected in OVERVIEW_VIEWS:
+            return str(selected)
+    return str(
+        st.radio(
+            "Overview view",
+            OVERVIEW_VIEWS,
+            index=0,
+            key=key,
+            horizontal=True,
+            label_visibility="collapsed",
+        )
     )
 
 
@@ -204,9 +208,9 @@ def _render_overview_pathway_preview(snapshot: AnalysisSnapshot) -> None:
     )
     workflow = _workflow_from_snapshot(snapshot)
     if _workflow_available(workflow):
-        board_markup = render_workflow_conformance_svg(workflow, layout_mode="vertical", detail_level="executive")
+        board_markup = render_workflow_conformance_svg(workflow, layout_mode="horizontal", detail_level="analyst")
         st.markdown(
-            f"<div class='crpm-overview-map-frame'>{board_markup}</div>",
+            f"<div class='crpm-overview-map-frame crpm-overview-map-frame--expanded'>{board_markup}</div>",
             unsafe_allow_html=True,
         )
         return
@@ -230,7 +234,7 @@ def _workflow_available(workflow: Mapping[str, Any]) -> bool:
 def _overview_pathway_rows(summary: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [
         {
-            "label": "Dominant path",
+            "label": "Mainline coverage",
             "value": _coerce_percent(summary.get("dominant_path_share")),
             "tone": "success",
         },
@@ -334,8 +338,8 @@ def _overview_signal_cards(snapshot: AnalysisSnapshot, summary: Mapping[str, Any
         },
         {
             "eyebrow": "Workflow signal",
-            "title": "Dominant vs deviation mix",
-            "value": f"{_display_optional(summary.get('dominant_path_share'), kind='percent')} dominant",
+            "title": "Mainline vs deviation mix",
+            "value": f"{_display_optional(summary.get('dominant_path_share'), kind='percent')} mainline",
             "body": f"Deviation share {_display_optional(summary.get('deviation_share'), kind='percent')} · {format_metric_value(summary.get('unique_activities'), kind='count')} activities · {format_metric_value(summary.get('workflow_nodes'), kind='count')} nodes",
             "tone": "neutral",
         },
@@ -486,9 +490,9 @@ def _overview_quality_cards(snapshot: AnalysisSnapshot, summary: Mapping[str, An
         },
         {
             "eyebrow": "Coverage",
-            "title": "Dominant path concentration",
+            "title": "Mainline coverage",
             "value": _display_optional(summary.get("dominant_path_share"), kind="percent"),
-            "body": "Use Variant Analysis and DFG when concentration is high; switch to Conformance Analytics when deviation share rises.",
+            "body": "Share of cases following the dominant workflow backbone. Use Variant Analysis for exact trace concentration.",
             "tone": "success",
         },
         {
@@ -528,11 +532,21 @@ def _denominator_max(registry: Mapping[str, Any]) -> float:
 def _render_manifest_download(snapshot: AnalysisSnapshot) -> None:
     if not snapshot.run_manifest:
         return
+    st.markdown(
+        """
+        <div class="crpm-manifest-download-note">
+            <strong>Reproducibility record</strong>
+            <span>JSON summary of the input, filters, algorithms and quality checks. Local paths are redacted.</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     st.download_button(
-        "Download run manifest",
+        "Download run record (.json)",
         data=manifest_to_json(snapshot.run_manifest),
         file_name="crpm_run_manifest.json",
         mime="application/json",
+        help="Use this record to audit or reproduce the current analysis run.",
         use_container_width=True,
     )
 

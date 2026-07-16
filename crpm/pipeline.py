@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, date
 from pathlib import Path
-from typing import Optional, Tuple, Any, Dict
+from typing import Tuple, Any, Dict
 
 import pandas as pd
 from pm4py.algo.conformance.alignments.petri_net import algorithm as alignments
@@ -13,12 +13,13 @@ from pm4py.algo.discovery.heuristics import algorithm as heuristics_miner
 from pm4py.algo.discovery.heuristics.algorithm import Variants as HeuristicsVariants
 from pm4py.algo.discovery.inductive import algorithm as inductive_miner
 from pm4py.algo.evaluation.precision import algorithm as precision_evaluator
-from pm4py.algo.filtering.log.timestamp import timestamp_filter
 from pm4py.objects.conversion.log import converter as log_converter
 from pm4py.objects.conversion.process_tree import converter as pt_converter
 from pm4py.objects.log.obj import EventLog
 from pm4py.objects.log.util import dataframe_utils
 from pm4py.objects.petri_net.utils import petri_utils
+
+from crpm.log_filters import filter_date_range
 
 # ---------------------------------------------------------------------------
 # CSV utilities
@@ -118,41 +119,6 @@ def _timestamp_timezone_kind(value: Any) -> str:
 # ---------------------------------------------------------------------------
 # Log filtering and splitting
 # ---------------------------------------------------------------------------
-
-
-def filter_date_range(
-    log: EventLog,
-    start: Optional[date],
-    end: Optional[date],
-    *,
-    mode: str = "case",
-) -> EventLog:
-    """Filter traces by inclusive case-anchor date range or clip events explicitly."""
-    if not start and not end:
-        return log
-
-    start_dt = datetime.combine(start, datetime.min.time()) if start else datetime.min
-    end_dt = datetime.combine(end, datetime.max.time()) if end else datetime.max
-
-    if mode == "event":
-        return timestamp_filter.apply_events(log, start_dt, end_dt)
-
-    if mode != "case":
-        raise ValueError(f"Unknown date filter mode: {mode}")
-
-    filtered = EventLog()
-    for trace in log:
-        anchor_ts = None
-        for event in trace:
-            timestamp = event.get("time:timestamp")
-            if isinstance(timestamp, datetime):
-                anchor_ts = timestamp
-                break
-        if anchor_ts is None:
-            continue
-        if start_dt <= anchor_ts <= end_dt:
-            filtered.append(trace)
-    return filtered
 
 
 def split_by_date(log: EventLog, cutoff: date) -> Tuple[EventLog, EventLog]:

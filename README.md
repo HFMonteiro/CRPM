@@ -12,7 +12,7 @@ Developed in the context of PhD research at the **Faculty of Medicine, Universit
 ## Branch Status
 
 - `main` is the public stable branch and now includes the v3 process-intelligence workbench capabilities.
-- `_CRPM_v3` remains the active test-bed branch for future dashboard, reproducibility, governance, batch, manifest, data-quality, and UI refinements.
+- `_CRPM_v3` remains the active test-bed branch for dashboard, BPMN-style workflow, reproducibility, governance, batch, manifest, data-quality, and UI refinements.
 - Future promotion from `_CRPM_v3` to `main` should happen only after review, local validation, remote CI, and an explicit merge decision.
 
 ## Screenshots
@@ -46,24 +46,52 @@ streamlit run app.py
 - `Discovery` and `Model Comparison` for Petri net discovery and quality tradeoffs
 - `Operational Flow`, `DFG Visualizations`, and `Process Performance` for pathway movement, bottlenecks, and timing
 - `Variant Analysis` for dominant and rare trace structure
-- `Conformance Analytics` for token-based diagnostics, SVG workflow boards, and interactive workflow exploration
+- `Conformance Analytics` for token-based diagnostics, SVG workflow boards, interactive workflow exploration, and BPMN-style workflow viewing
 - local XES and CSV ingestion through the Streamlit shell
+
+## Project Structure
+
+The repository is intentionally small and local-first. The most useful map for readers is by responsibility, not by every file:
+
+```text
+CRPM/
+|-- app.py                    # Streamlit entrypoint
+|-- crpm/
+|   |-- app_shell.py           # global Streamlit shell, sidebar, page routing
+|   |-- app_runtime.py         # log loading, filtering, analysis orchestration
+|   |-- app_state.py           # typed session state and page snapshots
+|   |-- pages/                 # Overview, Discovery, DFG, Conformance, Performance...
+|   |-- conformance.py         # PM4Py conformance and model diagnostics
+|   |-- discovery.py           # discovery algorithms and model summaries
+|   |-- process_map.py         # shared process-map payload contract
+|   |-- dfg_utils.py           # DFG extraction and Graphviz/SVG rendering
+|   |-- visualization.py       # Plotly, SVG, and analytical visual builders
+|   |-- screening.py           # colorectal-screening domain helpers
+|   |-- batch_cli.py           # headless config-driven analysis
+|   `-- run_manifest.py        # privacy-safe run metadata and audit output
+|-- examples/                  # synthetic/public demo logs and reference model
+|-- docs/                      # governance, research contract, screenshots
+|-- tests/                     # unit, contract, CLI, rendering, and governance tests
+`-- pyproject.toml             # package metadata, dependencies, CLI entrypoints
+```
+
+For a more detailed reader-oriented walkthrough, see `docs/project_structure.md`.
 
 ## Sample Data
 
 The public sample bundle lives in `examples/`:
 
 - `running-example.xes` - small didactic baseline log
-- `screening_conformance_demo.xes` - main synthetic CRC screening demo log
-- `screening_conformance_demo.csv` - event-level CSV companion for onboarding and validation
-- `idealized_event_log.xes` and `idealized_petri_net.pnml` - idealized reference artefacts for conformance-oriented checks
+- `screening_conformance_demo.xes` - main synthetic CRC screening demo log with 10,000 cases
+- `screening_conformance_demo.csv` - event-level CSV companion with the same 10,000-case cohort
+- `idealized_event_log.xes` and `idealized_petri_net.pnml` - idealized reference artefacts for conformance-oriented checks; the log contains 1,200 synthetic cases
 
-The bundled `screening_conformance_demo.*` files are **synthetic** and intentionally shaped to expose dominant and rare pathways, deviations, PRE/POST drift, and timing bottlenecks.
+The bundled `screening_conformance_demo.*` files are **synthetic** and intentionally shaped to expose a recognisable dominant pathway, 18 common and rare variants, deviations, PRE/POST drift, and timing bottlenecks across more than three years. Six variants each account for less than 3% of cases, preserving a useful long tail without overwhelming the main process map.
 
 You can generate a fresh synthetic screening log for experiments without replacing the bundled sample:
 
 ```bash
-crpm-generate-screening-demo --cases 120 --seed 42 --csv outputs/synthetic_screening.csv --xes outputs/synthetic_screening.xes
+crpm-generate-screening-demo --cases 10000 --seed 42 --csv outputs/synthetic_screening.csv --xes outputs/synthetic_screening.xes
 ```
 
 ## Data Quality and Timestamp Policy
@@ -144,8 +172,8 @@ On Windows, install Graphviz from the official installer and add `dot` to `PATH`
 ```bash
 pip install -e ".[dev]"
 pytest -q
-ruff check crpm tests
-black --check crpm tests
+ruff check crpm tests app.py
+black --check crpm tests app.py
 crpm-release-check --quick
 ```
 

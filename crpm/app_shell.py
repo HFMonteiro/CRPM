@@ -11,11 +11,11 @@ from pathlib import Path
 import streamlit as st
 import streamlit.components.v1 as components
 
+from crpm import __version__
 from crpm.app_runtime import (
     AVAILABLE_ALGORITHMS,
     compute_analysis_signature,
-    compute_log_stats,
-    first_event_names,
+    get_log_profile,
     list_safe_local_xes_files,
     preview_csv_dataframe,
     resolve_csv_log,
@@ -45,6 +45,24 @@ AUTHOR_WEBSITE = "https://hfmonteiro.com"
 LEGAL_NOTICE = (
     "For research and operational monitoring support only. Not a substitute for clinical judgment or institutional decision-making."
 )
+CONFORMANCE_PAGE_FRAGMENT = st.fragment(PAGE_REGISTRY["Conformance Analytics"])
+WORKSPACE_PAGES = {
+    "Explore": ("Overview", "Discovery", "DFG Visualizations", "Variant Analysis"),
+    "Conformance": ("Conformance Analytics",),
+    "Performance": ("Operational Flow", "Process Performance"),
+    "Models": ("Model Comparison",),
+}
+
+
+def _default_xes_index(options: list[str], selected_path: str | None) -> int:
+    """Prefer the full screening demo for a fresh session without overriding a choice."""
+    if selected_path in options:
+        return options.index(selected_path)
+    preferred_name = "screening_conformance_demo.xes"
+    for index, option in enumerate(options):
+        if Path(option).name == preferred_name:
+            return index
+    return 0
 
 
 def _svg_data_uri(svg_markup: str) -> str:
@@ -87,19 +105,59 @@ def render_app() -> None:
 
     apply_custom_styling()
     _render_header_brand()
-    page = st.sidebar.radio(
-        "Page",
-        PREVIEW_PAGES,
-        key="crpm_preview_page",
-    )
+    page = _render_workspace_navigation()
     _reset_page_scroll_on_change(page)
     _render_analysis_controls(state)
     snapshot = build_analysis_snapshot(st.session_state)
     _render_sidebar_session_info(snapshot)
+    _render_footer()
 
     _render_header(snapshot, page=page)
-    PAGE_REGISTRY[page](snapshot)
-    _render_footer()
+    page_renderer = CONFORMANCE_PAGE_FRAGMENT if page == "Conformance Analytics" else PAGE_REGISTRY[page]
+    page_renderer(snapshot)
+
+
+def _render_workspace_navigation() -> str:
+    """Render a compact workspace selector with contextual sub-navigation."""
+    current_page = str(st.session_state.get("crpm_preview_page", PREVIEW_PAGES[0]))
+    current_workspace = next(
+        (workspace for workspace, pages in WORKSPACE_PAGES.items() if current_page in pages),
+        next(iter(WORKSPACE_PAGES)),
+    )
+    if st.session_state.get("crpm_workspace") not in WORKSPACE_PAGES:
+        st.session_state["crpm_workspace"] = current_workspace
+
+    st.sidebar.markdown(
+        "<div class='crpm-sidebar-section-label'>Workspace</div>",
+        unsafe_allow_html=True,
+    )
+    workspace = st.sidebar.radio(
+        "Workspace",
+        tuple(WORKSPACE_PAGES),
+        key="crpm_workspace",
+        label_visibility="collapsed",
+    )
+    pages = WORKSPACE_PAGES[workspace]
+    page_key = f"crpm_workspace_view_{workspace.lower()}"
+    if st.session_state.get(page_key) not in pages:
+        st.session_state[page_key] = current_page if current_page in pages else pages[0]
+
+    st.markdown(
+        ("<div class='crpm-workspace-nav-marker' " f"data-workspace='{_html.escape(workspace)}'></div>"),
+        unsafe_allow_html=True,
+    )
+    if len(pages) == 1:
+        page = pages[0]
+    else:
+        page = st.radio(
+            "View",
+            pages,
+            key=page_key,
+            horizontal=True,
+            label_visibility="collapsed",
+        )
+    st.session_state["crpm_preview_page"] = page
+    return str(page)
 
 
 def _reset_page_scroll_on_change(page: str) -> None:
@@ -137,8 +195,9 @@ def _reset_page_scroll_on_change(page: str) -> None:
             } catch (_) {}
           };
           reset();
-          try { window.parent.requestAnimationFrame(reset); } catch (_) {}
-          [50, 150, 350, 700, 1200].forEach((delay) => setTimeout(reset, delay));
+          try {
+            window.parent.requestAnimationFrame(() => window.parent.requestAnimationFrame(reset));
+          } catch (_) {}
         })();
         </script>
         """,
@@ -176,8 +235,13 @@ def _render_sidebar_session_info(snapshot: AnalysisSnapshot) -> None:
                 context_bits.append(f"Follow-up: {snapshot.active_followup_label}")
             st.sidebar.caption(" · ".join(context_bits))
         if source_meta:
-            validation = source_meta.get("validation_status", "validated")
-            st.sidebar.caption(f"Source validation: {validation}")
+            validation = str(source_meta.get("validation_status", "validated"))
+            validation_label = {
+                "validated:xes": "Validated XES",
+                "validated:csv": "Validated CSV",
+                "validated": "Validated",
+            }.get(validation.lower(), validation.replace("_", " ").replace(":", " ").strip().title())
+            st.sidebar.caption(f"Source: {validation_label}")
         st.sidebar.caption(
             f"✓ {snapshot.model_count} model(s) discovered · {snapshot.case_count:,} cases · {snapshot.event_count:,} events"
         )
@@ -188,7 +252,7 @@ def _render_sidebar_session_info(snapshot: AnalysisSnapshot) -> None:
 
 
 def _render_header(snapshot: AnalysisSnapshot, *, page: str) -> None:
-    """Render the main content header with hero and summary metrics."""
+    """Render the main content header with compact run context."""
     if page == "Conformance Analytics":
         if getattr(snapshot, "config_change_message", None):
             render_quiet_note(
@@ -201,30 +265,7 @@ def _render_header(snapshot: AnalysisSnapshot, *, page: str) -> None:
             st.error(snapshot.filter_error_message)
         return
 
-    context_bits = []
-    if getattr(snapshot, "input_name", None):
-        context_bits.append(snapshot.input_name)
-    if getattr(snapshot, "active_followup_label", None):
-        context_bits.append(snapshot.active_followup_label)
-    if getattr(snapshot, "analysis_complete", False):
-        context_bits.append(f"{snapshot.model_count:,} model(s)")
-    context_line = " · ".join(context_bits) if context_bits else "Load a log and run the analysis to populate the workbench."
-    intro_copy = _shell_intro_copy(page)
-    st.markdown(
-        f"""
-        <div class="crpm-shell-hero crpm-shell-hero--compact">
-            <div class="crpm-shell-hero__eyebrow">Current run context</div>
-            <div class="crpm-shell-hero__body">{_html.escape(intro_copy)}</div>
-            <div class="crpm-shell-hero__meta">{_html.escape(context_line)}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    if page != "DFG Visualizations":
-        meta_cols = st.columns(2)
-        meta_cols[0].metric("Cases", f"{snapshot.case_count:,}")
-        meta_cols[1].metric("Events", f"{snapshot.event_count:,}")
+    _render_run_context_bar(snapshot, page=page)
     if getattr(snapshot, "config_change_message", None):
         render_quiet_note(
             "Settings changed since the last successful run. "
@@ -234,6 +275,46 @@ def _render_header(snapshot: AnalysisSnapshot, *, page: str) -> None:
             st.toast("Settings changed. Run analysis to refresh results.", icon="ℹ️")
     if getattr(snapshot, "filter_error_message", None):
         st.error(snapshot.filter_error_message)
+
+
+def _render_run_context_bar(snapshot: AnalysisSnapshot, *, page: str) -> None:
+    """Render a low-height run context strip so page cockpits stay above the fold."""
+    intro_copy = _shell_intro_copy(page)
+    chips = []
+    if getattr(snapshot, "input_name", None):
+        chips.append(("Input", snapshot.input_name))
+    if getattr(snapshot, "active_followup_label", None):
+        chips.append(("Follow-up", snapshot.active_followup_label))
+    if getattr(snapshot, "analysis_complete", False):
+        chips.extend(
+            [
+                ("Cases", f"{int(getattr(snapshot, 'case_count', 0) or 0):,}"),
+                ("Events", f"{int(getattr(snapshot, 'event_count', 0) or 0):,}"),
+                ("Models", f"{int(getattr(snapshot, 'model_count', 0) or 0):,}"),
+            ]
+        )
+    if not chips:
+        chips.append(("Status", "Run analysis to populate the workbench"))
+
+    chip_markup = "".join(
+        "<span class='crpm-run-context__chip'>"
+        f"<span>{_html.escape(str(label))}</span>"
+        f"<strong>{_html.escape(str(value))}</strong>"
+        "</span>"
+        for label, value in chips
+    )
+    st.markdown(
+        f"""
+        <div class="crpm-run-context" data-qa="run-context-bar">
+            <div class="crpm-run-context__copy">
+                <span class="crpm-run-context__label">Current run</span>
+                <span class="crpm-run-context__body">{_html.escape(intro_copy)}</span>
+            </div>
+            <div class="crpm-run-context__chips">{chip_markup}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _shell_intro_copy(page: str) -> str:
@@ -254,13 +335,14 @@ def _shell_intro_copy(page: str) -> str:
 
 
 def _render_header_brand() -> None:
-    """Render a persistent UP badge in the sticky header area."""
+    """Render persistent author and institutional links in the app header."""
     st.markdown(
         f"""
-            <div class="crpm-header-badges">
+        <div class="crpm-header-badges" data-qa="global-brand-strip" aria-label="CRPM institutional links">
             <a class="crpm-author-badge" href="{AUTHOR_WEBSITE}" target="_blank" rel="noopener noreferrer" aria-label="hfmonteiro.com">
                 <span>www.hfmonteiro.com</span>
             </a>
+            <span class="crpm-build-badge" aria-label="CRPM build version">Build {__version__}</span>
             <a class="crpm-fmup-badge" href="{FMUP_HOME_URL}" target="_blank" rel="noopener noreferrer" aria-label="Faculdade de Medicina da Universidade do Porto">
                 <img src="{FMUP_BADGE_SRC}" alt="FMUP symbol" />
             </a>
@@ -283,19 +365,12 @@ def _render_header_brand() -> None:
 
 
 def _render_footer() -> None:
-    """Render the institutional footer at the bottom of the page."""
-    st.markdown(
+    """Render compact provenance in the sidebar to avoid interrupting analysis pages."""
+    st.sidebar.markdown(
         f"""
-        <div class="crpm-footer">
-            <div class="crpm-footer__row">
-                <a class="crpm-footer__logo-link" href="{FMUP_HOME_URL}" target="_blank" rel="noopener noreferrer" aria-label="Faculdade de Medicina da Universidade do Porto">
-                    <img class="crpm-footer__logo" src="{FMUP_BADGE_SRC}" alt="FMUP symbol" />
-                </a>
-                <div class="crpm-footer__text">
-                    Developed in the context of PhD work by Hugo Monteiro &middot;
-                    <a href="{AUTHOR_WEBSITE}" target="_blank" rel="noopener noreferrer">hfmonteiro.com</a>
-                </div>
-            </div>
+        <div class="crpm-sidebar-provenance" data-crpm-footer="sidebar" aria-label="CRPM provenance">
+            <span>PhD work · Hugo Monteiro</span>
+            <a href="{AUTHOR_WEBSITE}" target="_blank" rel="noopener noreferrer">hfmonteiro.com</a>
         </div>
         """,
         unsafe_allow_html=True,
@@ -315,18 +390,15 @@ def _render_input_validation_error(source_type: str, exc: Exception) -> None:
 
 
 def _render_analysis_controls(state: CRPMState) -> None:
-    st.sidebar.markdown("### Analysis Setup")
+    st.sidebar.markdown("### Analysis setup")
     config = state.config
     results = state.results
-    st.sidebar.caption("Run badge: Direct workflow mode · First-event gate")
+    st.sidebar.caption("Direct workflow mode · First-event gate")
     run_button_slot = st.sidebar.empty()
-    with st.sidebar.expander("How to use this sidebar", expanded=False):
-        st.caption(
-            "Load a log, confirm the first-event gate, then run analysis. "
-            "Advanced date, algorithm, split, and follow-up controls stay below."
-        )
+    controls_panel = st.sidebar.expander("Data & run", expanded=not results.analysis_complete)
+    controls_panel.caption("Choose the event log and first-event gate. Advanced settings stay available on demand.")
 
-    source_type = st.sidebar.radio(
+    source_type = controls_panel.radio(
         "Input source",
         ["XES", "CSV"],
         index=0 if config.source_type == "XES" else 1,
@@ -337,19 +409,18 @@ def _render_analysis_controls(state: CRPMState) -> None:
     loaded_log = None
 
     if source_type == "XES":
-        with st.sidebar.expander("Local XES folder", expanded=False):
-            config.xes_logs_directory = st.text_input(
-                "Folder containing .xes files",
-                value=config.xes_logs_directory,
-                key="crpm_xes_logs_directory",
-                help="Local paths are used only for loading; run metadata shown in the UI is redacted.",
-            )
+        config.xes_logs_directory = controls_panel.text_input(
+            "Local XES folder",
+            value=config.xes_logs_directory,
+            key="crpm_xes_logs_directory",
+            help="Local paths are used only for loading; run metadata shown in the UI is redacted.",
+        )
         xes_options = list_safe_local_xes_files(config.xes_logs_directory)
-        uploaded_xes = st.sidebar.file_uploader("Upload XES log", type=["xes"], key="crpm_xes_upload")
+        uploaded_xes = controls_panel.file_uploader("Upload XES log", type=["xes"], key="crpm_xes_upload")
 
         if xes_options:
-            default_index = xes_options.index(config.selected_log_path) if config.selected_log_path in xes_options else 0
-            config.selected_log_path = st.sidebar.selectbox(
+            default_index = _default_xes_index(xes_options, config.selected_log_path)
+            config.selected_log_path = controls_panel.selectbox(
                 "Choose XES log",
                 xes_options,
                 index=default_index,
@@ -357,7 +428,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
                 format_func=lambda value: Path(value).name,
             )
         elif uploaded_xes is None:
-            st.sidebar.caption("Place XES logs in the selected folder or upload one directly.")
+            controls_panel.caption("Place XES logs in the selected folder or upload one directly.")
             config.selected_log_path = None
 
         try:
@@ -371,27 +442,27 @@ def _render_analysis_controls(state: CRPMState) -> None:
             if config.selected_log_path or uploaded_xes is not None:
                 _render_input_validation_error("XES", exc)
     else:
-        uploaded_csv = st.sidebar.file_uploader("Upload CSV log", type=["csv"], key="crpm_csv_upload")
+        uploaded_csv = controls_panel.file_uploader("Upload CSV log", type=["csv"], key="crpm_csv_upload")
         if uploaded_csv is None:
-            st.sidebar.caption("Upload a CSV file to continue.")
+            controls_panel.caption("Upload a CSV file to continue.")
         else:
             try:
                 preview_df = preview_csv_dataframe(state, uploaded_csv.getvalue())
                 columns = list(preview_df.columns)
                 if columns:
-                    config.csv_case_col = st.sidebar.selectbox(
+                    config.csv_case_col = controls_panel.selectbox(
                         "Case ID column",
                         columns,
                         index=columns.index(config.csv_case_col) if config.csv_case_col in columns else 0,
                         key="crpm_csv_case_col",
                     )
-                    config.csv_activity_col = st.sidebar.selectbox(
+                    config.csv_activity_col = controls_panel.selectbox(
                         "Activity column",
                         columns,
                         index=columns.index(config.csv_activity_col) if config.csv_activity_col in columns else min(1, len(columns) - 1),
                         key="crpm_csv_activity_col",
                     )
-                    config.csv_timestamp_col = st.sidebar.selectbox(
+                    config.csv_timestamp_col = controls_panel.selectbox(
                         "Timestamp column",
                         columns,
                         index=columns.index(config.csv_timestamp_col) if config.csv_timestamp_col in columns else min(2, len(columns) - 1),
@@ -409,6 +480,13 @@ def _render_analysis_controls(state: CRPMState) -> None:
                 _render_input_validation_error("CSV", exc)
 
     if loaded_log is None:
+        run_button_slot.button(
+            "Run analysis",
+            type="primary",
+            use_container_width=True,
+            key="crpm_run_analysis_unavailable",
+            disabled=True,
+        )
         return
 
     if not results.analysis_complete:
@@ -417,19 +495,27 @@ def _render_analysis_controls(state: CRPMState) -> None:
         results.source_metadata = loaded_log.metadata()
         results.workflow_cohort_policy = config.workflow_cohort_policy
 
-    log_stats = compute_log_stats(loaded_log.log)
-    start_options = ["All"] + first_event_names(loaded_log.log)
+    log_profile = get_log_profile(state, loaded_log)
+    log_stats = log_profile["stats"]
+    start_options = ["All"] + list(log_profile["first_events"])
     if config.workflow_cohort_policy == WORKFLOW_COHORT_FIRST_EVENT_DIRECT and config.start_filter == "All" and len(start_options) > 1:
         config.start_filter = start_options[1]
-    config.start_filter = st.sidebar.selectbox(
+    config.start_filter = controls_panel.selectbox(
         "First-event workflow gate",
         start_options,
         index=start_options.index(config.start_filter) if config.start_filter in start_options else 0,
         key="crpm_start_filter",
         help="Production discovery/conformance/DFG mode keeps cases whose first event matches this gate. Use All only outside the paper-aligned production workflow.",
     )
-    with st.sidebar.expander("Advanced setup", expanded=False):
-        config.apply_date_filter = st.checkbox(
+    show_advanced_setup = controls_panel.checkbox(
+        "Advanced setup",
+        value=False,
+        key="crpm_show_advanced_setup",
+        help="Show date, discovery, follow-up, and validation settings in this sidebar panel.",
+    )
+    if show_advanced_setup:
+        controls_panel.markdown("---")
+        config.apply_date_filter = controls_panel.checkbox(
             "Apply date filter",
             value=config.apply_date_filter,
             key="crpm_apply_date_filter",
@@ -437,7 +523,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
         )
 
         if config.apply_date_filter:
-            config.date_filter_mode = st.selectbox(
+            config.date_filter_mode = controls_panel.selectbox(
                 "Date filter mode",
                 options=["case", "event"],
                 index=0 if config.date_filter_mode != "event" else 1,
@@ -447,12 +533,12 @@ def _render_analysis_controls(state: CRPMState) -> None:
             )
             default_start = log_stats["start"].date() if log_stats.get("start") else date.today()
             default_end = log_stats["end"].date() if log_stats.get("end") else default_start
-            config.start_date = st.date_input(
+            config.start_date = controls_panel.date_input(
                 "Start date",
                 value=config.start_date or default_start,
                 key="crpm_filter_start_date",
             )
-            config.end_date = st.date_input(
+            config.end_date = controls_panel.date_input(
                 "End date",
                 value=config.end_date or default_end,
                 key="crpm_filter_end_date",
@@ -462,16 +548,31 @@ def _render_analysis_controls(state: CRPMState) -> None:
             config.start_date = None
             config.end_date = None
 
-        selected_algorithms = st.multiselect(
-            "Discovery algorithms",
-            options=list(AVAILABLE_ALGORITHMS.keys()),
-            default=config.selected_algorithms,
-            key="crpm_selected_algorithms",
-            help="Select the process discovery algorithms to compare. Fewer algorithms reduce runtime on large logs.",
-        )
-        config.selected_algorithms = selected_algorithms or ["Heuristics (Classic)"]
+        controls_panel.caption("Discovery algorithms")
+        algorithm_labels = {
+            "Heuristics (Classic)": "Heuristics classic",
+            "Heuristics (PLUS)": "Heuristics plus",
+            "Inductive (IM)": "Inductive IM",
+            "Inductive (IMf)": "Inductive IMf",
+            "Inductive (IMd)": "Inductive IMd",
+            "Alpha (Classic)": "Alpha classic",
+            "Alpha+": "Alpha+",
+        }
+        active_algorithms = set(config.selected_algorithms) or {"Heuristics (Classic)"}
+        selected_algorithms = []
+        for index, algorithm_name in enumerate(AVAILABLE_ALGORITHMS):
+            is_last_active = len(active_algorithms) == 1 and algorithm_name in active_algorithms
+            if controls_panel.checkbox(
+                algorithm_labels.get(algorithm_name, algorithm_name),
+                value=algorithm_name in active_algorithms,
+                key=f"crpm_discovery_algorithm_{index}",
+                disabled=is_last_active,
+                help="At least one discovery algorithm must remain selected." if is_last_active else None,
+            ):
+                selected_algorithms.append(algorithm_name)
+        config.selected_algorithms = selected_algorithms
 
-        config.apply_followup_window = st.checkbox(
+        config.apply_followup_window = controls_panel.checkbox(
             "Apply follow-up horizon",
             value=config.apply_followup_window,
             key="crpm_apply_followup_window",
@@ -479,7 +580,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
         )
         if config.apply_followup_window:
             config.followup_days = int(
-                st.number_input(
+                controls_panel.number_input(
                     "Follow-up horizon (days)",
                     min_value=30,
                     max_value=730,
@@ -489,7 +590,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
                 )
             )
 
-        config.enable_train_test = st.checkbox(
+        config.enable_train_test = controls_panel.checkbox(
             "Enable train/test split (80/20)",
             value=config.enable_train_test,
             key="crpm_enable_train_test",
@@ -497,7 +598,7 @@ def _render_analysis_controls(state: CRPMState) -> None:
         )
         if config.enable_train_test:
             config.random_seed = int(
-                st.number_input(
+                controls_panel.number_input(
                     "Random seed",
                     min_value=1,
                     max_value=9999,
@@ -506,11 +607,10 @@ def _render_analysis_controls(state: CRPMState) -> None:
                 )
             )
 
-    st.sidebar.markdown("### Log Statistics")
-    st.sidebar.caption(f"Traces: {log_stats['traces']:,}")
-    st.sidebar.caption(f"Events: {log_stats['events']:,}")
+    controls_panel.markdown("#### Log summary")
+    controls_panel.caption(f"{log_stats['traces']:,} traces / {log_stats['events']:,} events")
     if log_stats["start"] and log_stats["end"]:
-        st.sidebar.caption(f"Period: {log_stats['start']:%Y-%m-%d} -> {log_stats['end']:%Y-%m-%d}")
+        controls_panel.caption(f"{log_stats['start']:%Y-%m-%d} to {log_stats['end']:%Y-%m-%d}")
 
     followup_days = config.followup_days if config.apply_followup_window else None
 

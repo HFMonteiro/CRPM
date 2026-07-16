@@ -20,6 +20,7 @@ from pm4py.statistics.start_activities.log import get as start_activities_get
 from pm4py.statistics.end_activities.log import get as end_activities_get
 
 from crpm.process_map import build_process_map_kpis, build_selection_context
+from crpm.runtime_compat import ensure_graphviz_on_path
 
 _SVG_SCRIPT_RE = re.compile(r"<\s*script\b[^>]*>.*?<\s*/\s*script\s*>", re.IGNORECASE | re.DOTALL)
 _SVG_EVENT_ATTR_RE = re.compile(r"\s+on[a-zA-Z]+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)")
@@ -196,6 +197,7 @@ def render_dfg_to_png(dfg: Dict, start_activities: Dict, end_activities: Dict, v
         vis_variant = dfg_visualizer.Variants.FREQUENCY
 
     # Create visualization
+    ensure_graphviz_on_path()
     gviz = dfg_visualizer.apply(
         dfg,
         log=None,
@@ -239,6 +241,7 @@ def render_dfg_to_svg(dfg: Dict, start_activities: Dict, end_activities: Dict, v
     else:
         vis_variant = dfg_visualizer.Variants.FREQUENCY
 
+    ensure_graphviz_on_path()
     gviz = dfg_visualizer.apply(
         dfg,
         log=None,
@@ -265,10 +268,131 @@ def render_dfg_to_svg(dfg: Dict, start_activities: Dict, end_activities: Dict, v
     svg_text = sanitize_svg_markup(svg_bytes.decode("utf-8", errors="replace"))
     svg_text = svg_text.replace(
         "<svg ",
-        '<svg preserveAspectRatio="xMidYMid meet" style="width:100%; max-width:100%; min-width:0; height:clamp(240px, 30vh, 340px); display:block;" ',
+        '<svg preserveAspectRatio="xMidYMid meet" style="width:100%; max-width:100%; min-width:0; height:clamp(320px, 38vh, 480px); display:block;" ',
         1,
     )
     return svg_text
+
+
+def render_dfg_interactive_html(svg_markup: str, *, height: int = 540) -> str:
+    """Wrap a sanitized DFG SVG with wheel zoom, keyboard controls and drag pan."""
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    :root {{ color-scheme: light; font-family: Arial, Helvetica, sans-serif; }}
+    * {{ box-sizing: border-box; }}
+    html, body {{ margin: 0; min-height: {height}px; background: transparent; }}
+    body {{ overflow: hidden; color: #24343f; }}
+    .dfg-shell {{ display: grid; grid-template-rows: 34px 1fr 22px; height: {height}px; padding: 4px 6px 0; }}
+    .dfg-toolbar {{ display: flex; align-items: center; gap: 6px; }}
+    .dfg-toolbar button {{ min-width: 30px; height: 26px; border: 1px solid #cbd5dd; border-radius: 7px; background: #fff; color: #24343f; font-size: 14px; font-weight: 700; cursor: pointer; }}
+    .dfg-toolbar button:hover, .dfg-toolbar button:focus-visible {{ border-color: #2c7a69; background: #eef7f3; outline: none; }}
+    .dfg-toolbar button[data-action="reset"] {{ min-width: 58px; font-size: 11px; font-weight: 600; }}
+    .dfg-zoom-status {{ margin-left: 4px; font-size: 11px; color: #687680; font-variant-numeric: tabular-nums; }}
+    .dfg-viewport {{ min-height: 0; overflow: hidden; border: 1px solid rgba(71, 88, 79, .16); border-radius: 14px; background: rgba(252, 251, 253, .98); cursor: grab; touch-action: none; }}
+    .dfg-viewport:focus-visible {{ outline: 2px solid #2c7a69; outline-offset: -2px; }}
+    .dfg-viewport.is-dragging {{ cursor: grabbing; }}
+    .dfg-viewport svg {{ display: block !important; width: 100% !important; height: 100% !important; min-height: 0 !important; max-width: none !important; }}
+    .dfg-hint {{ padding: 3px 2px 0; color: #687680; font-size: 10px; line-height: 1.2; }}
+  </style>
+</head>
+<body>
+  <main class="dfg-shell" data-testid="crpm-dfg-zoom-shell">
+    <div class="dfg-toolbar" aria-label="DFG map controls">
+      <button type="button" data-action="zoom-out" aria-label="Zoom out" title="Zoom out">−</button>
+      <button type="button" data-action="zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
+      <button type="button" data-action="reset" aria-label="Reset map view" title="Reset map view">Reset</button>
+      <span class="dfg-zoom-status" data-testid="crpm-dfg-zoom-status" aria-live="polite">Zoom 100%</span>
+    </div>
+    <div class="dfg-viewport" data-testid="crpm-dfg-zoom-viewport" tabindex="0" aria-label="Directly-follows map. Use the mouse wheel to zoom and drag to pan.">
+      {svg_markup}
+    </div>
+    <div class="dfg-hint">Mouse wheel to zoom · drag to pan · + / − / 0 keys</div>
+  </main>
+  <script>
+    (() => {{
+      const viewport = document.querySelector('[data-testid="crpm-dfg-zoom-viewport"]');
+      const svg = viewport && viewport.querySelector('svg');
+      const status = document.querySelector('[data-testid="crpm-dfg-zoom-status"]');
+      if (!viewport || !svg) return;
+
+      const initialParts = (svg.getAttribute('viewBox') || '0 0 100 100').trim().split(/\\s+/).map(Number);
+      if (initialParts.length !== 4 || initialParts.some((value) => !Number.isFinite(value))) return;
+      const initial = {{ x: initialParts[0], y: initialParts[1], w: initialParts[2], h: initialParts[3] }};
+      let view = {{ ...initial }};
+      let dragging = null;
+
+      const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+      const clampAxis = (value, size, origin, limit) => clamp(value, origin, origin + limit - size);
+      const apply = () => {{
+        svg.setAttribute('viewBox', `${{view.x}} ${{view.y}} ${{view.w}} ${{view.h}}`);
+        const zoom = Math.round((initial.w / view.w) * 100);
+        if (status) status.textContent = `Zoom ${{zoom}}%`;
+      }};
+      const zoomAt = (factor, clientX, clientY) => {{
+        const rect = svg.getBoundingClientRect();
+        const anchorX = view.x + ((clientX - rect.left) / Math.max(rect.width, 1)) * view.w;
+        const anchorY = view.y + ((clientY - rect.top) / Math.max(rect.height, 1)) * view.h;
+        const nextW = clamp(view.w / factor, initial.w / 4, initial.w);
+        const nextH = clamp(view.h / factor, initial.h / 4, initial.h);
+        view.x = anchorX - (anchorX - view.x) * (nextW / view.w);
+        view.y = anchorY - (anchorY - view.y) * (nextH / view.h);
+        view.w = nextW;
+        view.h = nextH;
+        view.x = clampAxis(view.x, view.w, initial.x, initial.w);
+        view.y = clampAxis(view.y, view.h, initial.y, initial.h);
+        apply();
+      }};
+      const zoomBy = (factor) => {{
+        const rect = viewport.getBoundingClientRect();
+        zoomAt(factor, rect.left + rect.width / 2, rect.top + rect.height / 2);
+      }};
+      const reset = () => {{ view = {{ ...initial }}; apply(); }};
+
+      viewport.addEventListener('wheel', (event) => {{
+        event.preventDefault();
+        zoomAt(event.deltaY < 0 ? 1.2 : 0.84, event.clientX, event.clientY);
+      }}, {{ passive: false }});
+      viewport.addEventListener('pointerdown', (event) => {{
+        dragging = {{ x: event.clientX, y: event.clientY, view: {{ ...view }} }};
+        viewport.classList.add('is-dragging');
+        viewport.setPointerCapture(event.pointerId);
+      }});
+      viewport.addEventListener('pointermove', (event) => {{
+        if (!dragging) return;
+        const rect = svg.getBoundingClientRect();
+        const dx = (event.clientX - dragging.x) / Math.max(rect.width, 1) * dragging.view.w;
+        const dy = (event.clientY - dragging.y) / Math.max(rect.height, 1) * dragging.view.h;
+        view.x = clampAxis(dragging.view.x - dx, view.w, initial.x, initial.w);
+        view.y = clampAxis(dragging.view.y - dy, view.h, initial.y, initial.h);
+        apply();
+      }});
+      const stopDragging = (event) => {{
+        dragging = null;
+        viewport.classList.remove('is-dragging');
+        if (event && viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
+      }};
+      viewport.addEventListener('pointerup', stopDragging);
+      viewport.addEventListener('pointercancel', stopDragging);
+      viewport.addEventListener('keydown', (event) => {{
+        if (event.key === '+' || event.key === '=') {{ event.preventDefault(); zoomBy(1.2); }}
+        if (event.key === '-' || event.key === '_') {{ event.preventDefault(); zoomBy(0.84); }}
+        if (event.key === '0') {{ event.preventDefault(); reset(); }}
+      }});
+      viewport.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', (event) => {{
+        event.stopPropagation();
+        const action = button.dataset.action;
+        if (action === 'zoom-in') zoomBy(1.2);
+        if (action === 'zoom-out') zoomBy(0.84);
+        if (action === 'reset') reset();
+      }}));
+      apply();
+    }})();
+  </script>
+</body>
+</html>"""
 
 
 def sanitize_svg_markup(svg_text: str) -> str:

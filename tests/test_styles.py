@@ -34,6 +34,8 @@ def test_conformance_note_and_workflow_board_styles_exist() -> None:
     assert "height: auto;" in css
     assert ".crpm-empty-state" in css
     assert ".crpm-inline-empty" in css
+    assert ".js-plotly-plot .hovertext path" in css
+    assert ".js-plotly-plot .hovertext text" in css
     assert ".crpm-conformance-hero" in css
     assert ".crpm-conformance-stage-header" in css
     assert ".crpm-conformance-report-band" in css
@@ -57,6 +59,13 @@ def test_conformance_compact_shell_styles_exist() -> None:
     css = get_custom_css()
     assert ".crpm-conformance-kpi-strip" in css
     assert ".crpm-conformance-kpi-strip--rail" in css
+    assert '[data-testid="stColumn"]:has(.crpm-inspector-deck-marker)' in css
+    assert "max-height: calc(100vh - 5rem);" in css
+    assert "overflow-y: auto;" in css
+    assert ".crpm-inspector-deck__heading" in css
+    assert ".crpm-inspector-orbit__thumb" in css
+    assert "prefers-reduced-motion: reduce" in css
+    assert "min-height: 2rem;" in css
     assert "max-height: 360px;" in css
     assert ".crpm-workflow-board--horizontal" in css
 
@@ -73,27 +82,51 @@ def test_overview_and_bi_card_styles_exist() -> None:
     assert ".crpm-dashboard-section-title" in css
     assert ".crpm-overview-command-center" in css
     assert ".crpm-overview-map-frame" in css
-    assert "height: clamp(280px, 38vh, 420px);" in css
+    assert "height: clamp(360px, 46vh, 540px);" in css
+    assert ".crpm-overview-map-frame--expanded" in css
+    assert ".crpm-overview-map-frame--expanded {\n        height: auto;" in css
+    assert "overflow-x: auto;" in css
+    assert "overflow-y: hidden;" in css
+    assert ".crpm-overview-map-frame .crpm-workflow-board {\n        display: flex;" in css
+    assert ".crpm-overview-map-frame .crpm-workflow-board svg {\n        width: auto !important;" in css
+    assert "height: 100% !important;" in css
+    assert "width: 100% !important;" in css
+    assert ".crpm-overview-map-frame--expanded .crpm-workflow-board {\n        height: auto;" in css
     assert ".crpm-bi-card-grid" in css
     assert ".crpm-page-card-grid" in css
     assert ".crpm-reading-order-band" in css
     assert ".crpm-shell-hero--compact" in css
     assert ".crpm-shell-hero__meta" in css
+    assert ".crpm-run-context" in css
+    assert "grid-template-columns: minmax(0, 1fr) auto;" in css
+    assert ".crpm-run-context__chip strong" in css
+    assert ".crpm-retained-state-chip" in css
     assert ".crpm-chip--watch" in css
     assert ".crpm-chip--deviation-heavy" in css
     assert ".crpm-header-badges" in css
+    assert ".crpm-build-badge" in css
     assert ".crpm-fmup-badge" in css
+    assert ".crpm-sidebar-provenance" in css
 
 
 def test_dfg_map_canvas_has_desktop_height_guard() -> None:
     css = get_custom_css()
     assert ".crpm-dfg-map-canvas" in css
-    assert "overflow: hidden;" in css
-    assert "align-items: flex-start;" in css
+    assert "overflow-x: auto;" in css
+    assert "overflow-y: hidden;" in css
+    assert "align-items: center;" in css
     assert "justify-content: center;" in css
-    assert "min-height: 272px;" in css
+    assert "min-height: clamp(320px, 36vh, 460px);" in css
     assert "max-width: 100%;" in css
-    assert "height: clamp(240px, 30vh, 340px);" in css
+    assert "height: clamp(320px, 38vh, 480px);" in css
+
+
+def test_footer_uses_compact_signature_without_body_logo() -> None:
+    css = get_custom_css()
+    assert ".crpm-footer--compact" in css
+    assert "min-height: 1.6rem;" in css
+    assert ".crpm-footer__text" in css
+    assert "font-size: 0.78rem;" in css
 
 
 def test_dashboard_header_avoids_cockpit_clipping() -> None:
@@ -101,8 +134,10 @@ def test_dashboard_header_avoids_cockpit_clipping() -> None:
     assert '[data-testid="stHeader"]' in css
     assert "position: relative !important;" not in css
     assert "scroll-padding-top: 4.25rem;" in css
-    assert ".crpm-header-badges {\n        position: static;" in css
-    assert "z-index: auto;" in css
+    assert ".crpm-header-badges {\n        position: fixed;" in css
+    assert "left: calc(var(--crpm-sidebar-width) + 0.78rem);" in css
+    assert "max-width: calc(100vw - var(--crpm-sidebar-width) - 9.5rem);" in css
+    assert "z-index: 1000001;" in css
     assert ".crpm-dashboard-map-toolbar" in css
     assert "scroll-margin-top: 4.25rem;" in css
     assert "@media (max-width: 1180px)" in css
@@ -110,8 +145,8 @@ def test_dashboard_header_avoids_cockpit_clipping() -> None:
 
 def test_sidebar_width_is_tokenized_for_process_map_space() -> None:
     css = get_custom_css()
-    assert "--crpm-sidebar-width: 14rem;" in css
-    assert "min(1580px, 100%)" in css
+    assert "--crpm-sidebar-width: 12.75rem;" in css
+    assert "min(1720px, 100%)" in css
     assert "min-width: var(--crpm-sidebar-width) !important;" in css
     assert "width: var(--crpm-sidebar-width) !important;" in css
 
@@ -132,14 +167,21 @@ def test_conformance_model_cards_stay_inside_narrow_rails() -> None:
 
 def test_ranked_tables_do_not_force_right_rail_overflow() -> None:
     css = get_custom_css()
+    assert ".crpm-ranked-table caption" in css
     assert ".crpm-ranked-table {\n        border: 1px solid rgba(71, 88, 79, 0.1);" in css
     assert "max-width: 100%;" in css
     assert ".crpm-ranked-table__scroller {\n        width: 100%;" in css
-    assert "overflow-x: hidden;" in css
+    assert "overflow-x: auto;" in css
     assert "table-layout: fixed;" in css
     assert "overflow-wrap: anywhere;" in css
     assert "white-space: normal;" in css
     assert ".crpm-ranked-table .crpm-table__cell--label {" in css
+    assert ".crpm-ranked-table--wide th" in css
+    assert "min-width: 6.5rem;" in css
+    assert "min-width: 11rem;" in css
+    assert "overflow-wrap: break-word;" in css
+    assert ".crpm-ranked-table .crpm-table__cell--num {" in css
+    assert "min-width: 4.2rem;" in css
     assert ".crpm-ranked-table .crpm-table__metric-track {\n        min-width: 0;" in css
     assert ".crpm-ranked-table .crpm-chip {\n        width: 100%;" in css
     assert "text-overflow: ellipsis;" in css

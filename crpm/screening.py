@@ -30,6 +30,15 @@ STEP_LABELS = {
     "colonoscopy": "Colonoscopy",
 }
 
+STEP_CANONICAL_ACTIVITY_PREFERENCE = {
+    "invitation": ("Invitation_mail",),
+    "fit_mail": ("FIT_mail",),
+    "fit_return": ("FIT_return",),
+    "lab_result": ("Lab_result", "Lab_return"),
+    "pcc_observation": ("PCC_observation",),
+    "colonoscopy": ("Colonoscopy_center",),
+}
+
 STEP_KEYWORDS = {
     "invitation": ("invitation", "invite"),
     "fit_mail": ("fit_mail", "fit mail", "send fit", "mail kit", "kit_sent"),
@@ -116,8 +125,18 @@ def infer_step_mapping(activity_names: Iterable[str]) -> Dict[str, Optional[str]
     inferred: Dict[str, Optional[str]] = {step: None for step in STEP_ORDER}
 
     for step in STEP_ORDER:
-        candidates = sorted(name for name, candidate_step in activity_lookup.items() if candidate_step == step)
-        inferred[step] = candidates[0] if candidates else None
+        candidates = [name for name, candidate_step in activity_lookup.items() if candidate_step == step]
+        if not candidates:
+            continue
+
+        preferences = {name.casefold(): index for index, name in enumerate(STEP_CANONICAL_ACTIVITY_PREFERENCE.get(step, ()))}
+        inferred[step] = min(
+            candidates,
+            key=lambda name: (
+                preferences.get(name.casefold(), len(preferences) + 1),
+                name.casefold(),
+            ),
+        )
 
     return inferred
 
@@ -242,6 +261,15 @@ def count_cases_with_activity(log: Optional[EventLog], activity_name: Optional[s
     return sum(1 for trace in log if any(event.get("concept:name") == activity_name for event in trace))
 
 
+def count_cases_with_all_activities(log: Optional[EventLog], activity_names: list[Optional[str]]) -> int:
+    """Count traces that contain every provided activity at least once."""
+    required = [activity for activity in activity_names if activity]
+    if log is None or len(required) != len(activity_names):
+        return 0
+    required_set = set(required)
+    return sum(1 for trace in log if required_set.issubset({event.get("concept:name") for event in trace}))
+
+
 def compute_screening_kpis(log: Optional[EventLog], step_map: Dict[str, Optional[str]]) -> Dict[str, Any]:
     """Compute manager-facing counts and rates for the mapped screening pathway."""
     total_cases = len(log) if log is not None else 0
@@ -253,13 +281,25 @@ def compute_screening_kpis(log: Optional[EventLog], step_map: Dict[str, Optional
     for step in STEP_ORDER:
         metrics[f"{step}_cases"] = count_cases_with_activity(log, step_map.get(step))
 
-    denominator_key = "lab_result_cases" if step_map.get("lab_result") else "pcc_observation_cases"
-    denominator_label = STEP_LABELS["lab_result"] if step_map.get("lab_result") else STEP_LABELS["pcc_observation"]
+    denominator_step = (
+        "pcc_observation" if step_map.get("pcc_observation") else "lab_result" if step_map.get("lab_result") else "fit_return"
+    )
+    denominator_key = f"{denominator_step}_cases"
+    denominator_label = STEP_LABELS[denominator_step]
+    denominator_activity = step_map.get(denominator_step)
     denominator = metrics.get(denominator_key, 0)
-    colonoscopy_cases = metrics.get("colonoscopy_cases", 0)
+    colonoscopy_cases = count_cases_with_all_activities(log, [denominator_activity, step_map.get("colonoscopy")])
 
+    completion_rate = colonoscopy_cases / denominator if denominator else None
+    completion_rate_valid = completion_rate is None or 0 <= completion_rate <= 1
     metrics["colonoscopy_completion_denominator"] = denominator_label
-    metrics["colonoscopy_completion_rate"] = colonoscopy_cases / denominator if denominator else None
+    metrics["colonoscopy_completion_denominator_count"] = denominator
+    metrics["colonoscopy_completion_numerator_count"] = colonoscopy_cases
+    metrics["colonoscopy_completion_rate"] = completion_rate if completion_rate_valid else None
+    metrics["colonoscopy_completion_rate_valid"] = completion_rate_valid
+    metrics["colonoscopy_completion_warning"] = (
+        None if completion_rate_valid else "The completion numerator exceeds its eligible denominator. Review the mapped pathway steps."
+    )
     metrics["fit_return_rate"] = metrics["fit_return_cases"] / metrics["invitation_cases"] if metrics["invitation_cases"] else None
     return metrics
 

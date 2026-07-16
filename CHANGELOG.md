@@ -14,6 +14,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Release-check CLI (`crpm-release-check`) for version, preflight, test, format, build, and artifact checks.
 - Synthetic screening data generator CLI (`crpm-generate-screening-demo`) for privacy-safe demos and tests.
 - Governance metadata for privacy modes and domain templates, plus `docs/governance.md`.
+- Reader-oriented project structure guide in `docs/project_structure.md`.
 - Shared process-map payload structure for DFG and workflow renderers.
 - Model-quality and PM4Py parameter profile reporting.
 - Process-intelligence summaries for cohort lenses, time-series monitoring, resource posture, loop/rework metrics, and conformance root-cause counts.
@@ -22,12 +23,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Preserved `first_event_direct` as the production workflow default and documented it as the research contract.
 - Improved Conformance Analytics with parent/child filters, visible reset actions, pinned metrics, and a graph-first cockpit layout.
 - Improved DFG layout so the process map reads earlier and avoids the previous low/wide first viewport.
+- Aligned README and governance branch notes with the current `main` and `_CRPM_v3` roles.
 - Tightened input validation, safe error display, path redaction, and privacy-safe metadata handling.
 - Bounded PM4Py compatibility to `pm4py>=2.7.22,<2.8` until newer compatibility windows are tested.
 
 ### Fixed
 - Page navigation now resets the main viewport on page changes so users do not land mid-page after switching analytical surfaces.
 - Time-series monitoring normalizes timezone-aware timestamps before period grouping to avoid noisy runtime warnings.
+- Date filtering now uses the same earliest-event, timezone-safe semantics across the public conformance and pipeline APIs and rejects invalid ranges explicitly.
+- PDF report generation now handles models with missing fitness or precision metrics without crashing during recommendation selection.
+- Page caches remain bounded when backed by a standard dictionary, and the Streamlit entrypoint is covered by formatting and lint gates.
 
 ## [0.3.0] — 2026-03-16
 

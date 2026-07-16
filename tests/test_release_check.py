@@ -1,3 +1,4 @@
+import zipfile
 from types import SimpleNamespace
 
 from crpm import release_check
@@ -17,6 +18,24 @@ def test_release_check_quick_composes_version_and_preflight(monkeypatch, tmp_pat
     assert all(result.ok for result in results)
 
 
+def test_release_check_lints_and_formats_streamlit_entrypoint(monkeypatch, tmp_path) -> None:
+    calls: list[list[str]] = []
+    passed = release_check.CheckResult("contract", True)
+    monkeypatch.setattr(release_check, "_check_versions", lambda root: passed)
+    monkeypatch.setattr(release_check, "_check_preflight", lambda root: passed)
+
+    def fake_run_command(name: str, command: list[str], cwd):
+        calls.append(command)
+        return release_check.CheckResult(name, True)
+
+    monkeypatch.setattr(release_check, "_run_command", fake_run_command)
+
+    release_check.run_release_check(repo_root=tmp_path, skip_build=True, skip_audit=True)
+
+    assert calls[1][-1] == "app.py"
+    assert calls[2][-1] == "app.py"
+
+
 def test_build_package_falls_back_when_build_module_is_missing(monkeypatch, tmp_path) -> None:
     calls: list[list[str]] = []
 
@@ -34,3 +53,25 @@ def test_build_package_falls_back_when_build_module_is_missing(monkeypatch, tmp_
     assert result.ok
     assert "pip" in calls[1]
     assert "wheel" in calls[1]
+
+
+def test_inspect_wheel_requires_logo_and_typing_marker(tmp_path) -> None:
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    wheel_path = dist / "crpm-0.3.0-py3-none-any.whl"
+
+    with zipfile.ZipFile(wheel_path, "w") as wheel:
+        wheel.writestr("crpm/assets/crpm_logo.png", b"png")
+
+    missing_marker = release_check._inspect_wheel(tmp_path)
+
+    assert not missing_marker.ok
+    assert "typing marker" in missing_marker.detail
+
+    with zipfile.ZipFile(wheel_path, "w") as wheel:
+        wheel.writestr("crpm/assets/crpm_logo.png", b"png")
+        wheel.writestr("crpm/py.typed", "")
+
+    complete = release_check._inspect_wheel(tmp_path)
+
+    assert complete.ok

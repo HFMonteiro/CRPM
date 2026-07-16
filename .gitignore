@@ -37,3 +37,8 @@ nul
 
 # Local operator notes
 AGENTS.md
+
+# Local browser and design QA output
+.tmp/
+audit/
+test-tmp-*/

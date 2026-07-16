@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -46,6 +47,12 @@ def test_sample_csv_contains_lab_rejection_resubmission_story() -> None:
 def test_sample_csv_keeps_pre_post_and_variant_richness() -> None:
     frame = _sample_frame()
 
-    assert frame["case_id"].nunique() >= 900
+    assert frame["case_id"].nunique() == 10_000
     assert {"PRE", "POST"}.issubset(set(frame["phase"]))
-    assert frame["variant_hint"].nunique() >= 10
+    assert frame["variant_hint"].nunique() >= 18
+    assert frame["timestamp"].max() - frame["timestamp"].min() >= timedelta(days=365 * 3)
+
+    case_profiles = frame.groupby("case_id", sort=False)["variant_hint"].first()
+    profile_shares = case_profiles.value_counts(normalize=True).mul(100)
+    assert (profile_shares < 3).sum() >= 6
+    assert profile_shares.min() < 1

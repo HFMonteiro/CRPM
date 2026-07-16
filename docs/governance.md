@@ -36,5 +36,6 @@ Generated artifacts should stay local and ignored: `outputs/`, `output/`, `build
 Branch promotion policy:
 
 - Develop experimental dashboard and process-intelligence work on `_CRPM_v3`.
-- Keep `main` stable until a deliberate promotion review is complete.
+- Treat `main` as the stable public baseline; it now contains the v3 process-intelligence workbench capabilities.
+- Use `_CRPM_v3` for future dashboard, BPMN-style workflow, reproducibility, governance, batch, manifest, data-quality, and UI refinements.
 - Do not merge or push to `main` as part of routine v3 cleanup.

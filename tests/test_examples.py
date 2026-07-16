@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from statistics import median
 
 import pandas as pd
@@ -12,11 +12,21 @@ from pm4py.objects.log.importer.xes import importer as xes_importer
 
 from crpm.pipeline import csv_to_event_log
 
-BOUNDARY = datetime(2024, 7, 1, tzinfo=timezone.utc)
+BOUNDARY = datetime(2023, 7, 1, tzinfo=timezone.utc)
 
 
 def _load_screening_demo():
     return xes_importer.apply("examples/screening_conformance_demo.xes")
+
+
+def test_idealized_reference_log_uses_1200_case_sample() -> None:
+    log = xes_importer.apply("examples/idealized_event_log.xes")
+    variants = Counter(_variant(trace) for trace in log)
+
+    assert len(log) == 1200
+    assert sum(len(trace) for trace in log) == 4126
+    assert len({trace.attributes["concept:name"] for trace in log}) == 1200
+    assert sorted(variants.values()) == [34, 405, 761]
 
 
 def _variant(trace) -> tuple[str, ...]:
@@ -36,8 +46,8 @@ def test_screening_conformance_demo_is_rich_enough_for_ui_storytelling() -> None
     variants = Counter(_variant(trace) for trace in log)
     activities = {event["concept:name"] for trace in log for event in trace}
 
-    assert len(log) == 900
-    assert len(variants) >= 10
+    assert len(log) == 10_000
+    assert len(variants) >= 18
     assert 30 <= (variants.most_common(1)[0][1] / len(log) * 100) <= 40
     assert {
         "Admin_review",
@@ -63,7 +73,7 @@ def test_screening_conformance_demo_contains_conformant_and_deviating_paths() ->
     )
 
     assert dominant_variant in variants
-    assert variants[dominant_variant] >= 300
+    assert variants[dominant_variant] >= 3_100
     assert (
         "Invitation_mail",
         "Reminder_mail",
@@ -88,13 +98,14 @@ def test_screening_conformance_demo_has_clear_pre_post_shift_and_dfg_spread() ->
     post = [trace for trace in log if trace.attributes["phase"] == "POST"]
     transitions = _transitions(log)
 
-    assert len(pre) == len(post) == 450
-    assert max(trace[-1]["time:timestamp"] for trace in pre) < BOUNDARY
+    assert len(pre) == len(post) == 5_000
+    assert max(trace[0]["time:timestamp"] for trace in pre) < BOUNDARY
     assert min(trace[0]["time:timestamp"] for trace in post) > BOUNDARY
+    assert max(trace[-1]["time:timestamp"] for trace in log) - min(trace[0]["time:timestamp"] for trace in log) >= timedelta(days=365 * 3)
     assert median(_duration_days(trace) for trace in post) >= median(_duration_days(trace) for trace in pre) * 2
-    assert transitions[("FIT_mail", "FIT_return")] == 900
-    assert transitions[("Lab_result", "Colonoscopy_center")] == 35
-    assert transitions[("Reminder_mail", "Reminder_mail")] == 75
+    assert transitions[("FIT_mail", "FIT_return")] == 10_000
+    assert transitions[("Lab_result", "Colonoscopy_center")] >= 250
+    assert transitions[("Reminder_mail", "Reminder_mail")] >= 800
 
 
 def test_screening_conformance_demo_csv_is_rich_enough_for_onboarding() -> None:
@@ -108,12 +119,13 @@ def test_screening_conformance_demo_csv_is_rich_enough_for_onboarding() -> None:
         .agg(lambda series: (series.max() - series.min()).total_seconds() / 86400)
     )
 
-    assert len(log) == 900
-    assert dataframe["case_id"].nunique() == 900
+    assert len(log) == 10_000
+    assert dataframe["case_id"].nunique() == 10_000
     assert set(dataframe["phase"]) == {"PRE", "POST"}
-    assert dataframe[dataframe["phase"] == "PRE"]["case_id"].nunique() == 450
-    assert dataframe[dataframe["phase"] == "POST"]["case_id"].nunique() == 450
-    assert len(variants) >= 10
+    assert dataframe[dataframe["phase"] == "PRE"]["case_id"].nunique() == 5_000
+    assert dataframe[dataframe["phase"] == "POST"]["case_id"].nunique() == 5_000
+    assert dataframe["timestamp"].pipe(pd.to_datetime).max() - dataframe["timestamp"].pipe(pd.to_datetime).min() >= timedelta(days=365 * 3)
+    assert len(variants) >= 18
     assert {"variant_hint", "manual_review_flag", "no_show_flag", "followup_breach_days"}.issubset(dataframe.columns)
     assert {"Admin_review", "Colonoscopy_no_show", "Lab_rejection", "Reminder_mail"}.issubset(set(dataframe["activity"]))
     assert median(case_durations[case_phase == "POST"]) > median(case_durations[case_phase == "PRE"]) * 1.8

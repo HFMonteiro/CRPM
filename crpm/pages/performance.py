@@ -29,7 +29,7 @@ from crpm.pages.common import (
     store_cache_entry,
 )
 from crpm.screening import humanize_activity_label
-from crpm.visualization import create_activity_duration_chart, create_bottleneck_chart
+from crpm.visualization import create_activity_duration_chart, create_bottleneck_chart, render_performance_bpmn_svg
 
 
 def render_performance_page(snapshot: AnalysisSnapshot) -> None:
@@ -108,10 +108,24 @@ def render_performance_page(snapshot: AnalysisSnapshot) -> None:
         ]
     )
 
+    # --- Performance BPMN map ---
+    st.markdown("#### Performance BPMN map")
+    st.caption(
+        "The map keeps the reference flow prominent and shows only the five highest-volume variation links; use the tables below for the full transition set."
+    )
+    st.markdown(
+        render_performance_bpmn_svg(
+            transition_stats,
+            activity_stats=activity_stats,
+            case_durations=case_durations,
+        ),
+        unsafe_allow_html=True,
+    )
+
     # --- Bottlenecks ---
     if not bottlenecks.empty:
         st.markdown("#### Top bottlenecks")
-        chart_col, detail_col = st.columns([1.45, 1.0], gap="large")
+        chart_col, detail_col = st.columns([1.35, 1.0], gap="medium")
         with chart_col:
             render_plotly_chart(create_bottleneck_chart(bottlenecks), key="perf_bottleneck_chart")
         with detail_col:
@@ -148,6 +162,7 @@ def render_performance_page(snapshot: AnalysisSnapshot) -> None:
                 bottleneck_table,
                 title="Bottleneck detail",
                 label_column="Transition",
+                max_label_chars=72,
             )
     else:
         render_inline_empty("No bottleneck transitions were detected in the current filtered selection.")
@@ -155,7 +170,7 @@ def render_performance_page(snapshot: AnalysisSnapshot) -> None:
     # --- Activity statistics ---
     if not activity_stats.empty:
         st.markdown("#### Activity statistics")
-        chart_col, detail_col = st.columns([1.45, 1.0], gap="large")
+        chart_col, detail_col = st.columns([1.35, 1.0], gap="medium")
         with chart_col:
             render_plotly_chart(create_activity_duration_chart(activity_stats), key="perf_activity_chart")
         with detail_col:
@@ -192,6 +207,7 @@ def render_performance_page(snapshot: AnalysisSnapshot) -> None:
                 activity_table,
                 title="Activity detail",
                 label_column="Activity",
+                max_label_chars=72,
             )
     else:
         render_inline_empty("No activity duration summary was available for the current filtered selection.")

@@ -242,7 +242,10 @@ def render_html_ranked_table(
         render_inline_empty(f"No {title.lower()} are available for this selection.")
         return
 
-    headers = "".join(f"<th>{html.escape(str(column))}</th>" for column in df.columns)
+    is_wide = len(df.columns) >= 6
+    wrapper_class = "crpm-ranked-table crpm-ranked-table--wide" if is_wide else "crpm-ranked-table"
+    table_style = f" style='min-width:{max(52.0, len(df.columns) * 7.25):.2f}rem;table-layout:auto;'" if is_wide else ""
+    headers = "".join(f"<th scope='col'>{html.escape(str(column))}</th>" for column in df.columns)
     numeric_keywords = (
         "rank",
         "cases",
@@ -284,10 +287,9 @@ def render_html_ranked_table(
         rows.append("<tr>" + "".join(cells) + "</tr>")
     st.markdown(
         (
-            "<div class='crpm-ranked-table'>"
-            f"<div class='crpm-ranked-table__title'>{html.escape(title)}</div>"
+            f"<div class='{wrapper_class}'>"
             "<div class='crpm-ranked-table__scroller'>"
-            f"<table><thead><tr>{headers}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+            f"<table{table_style}><caption>{html.escape(title)}</caption><thead><tr>{headers}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
             "</div></div>"
         ),
         unsafe_allow_html=True,
@@ -337,17 +339,27 @@ def latest_cache_entry(cache: Mapping[str, Any]) -> tuple[str, Any] | tuple[None
 
 
 def store_cache_entry(cache: MutableMapping[str, Any], key: str, value: Any, *, limit: int = 8) -> None:
-    """Store a page-level cache entry while bounding growth when possible."""
+    """Store a page-level cache entry while bounding growth."""
+    if limit < 0:
+        raise ValueError("Cache limit cannot be negative.")
+    if key in cache:
+        del cache[key]
     cache[key] = value
-    if hasattr(cache, "move_to_end"):
-        cache.move_to_end(key)
-    while len(cache) > limit and hasattr(cache, "popitem"):
-        cache.popitem(last=False)
+    while len(cache) > limit:
+        oldest_key = next(iter(cache))
+        del cache[oldest_key]
 
 
 def render_plotly_chart(fig: go.Figure, *, key: str) -> None:
     try:
-        st.plotly_chart(fig, use_container_width=True, key=key)
+        if isinstance(fig, go.Figure):
+            fig.update_layout(autosize=True)
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+            key=key,
+            config={"responsive": True, "displayModeBar": False},
+        )
     except Exception:
         logger.exception("Failed to render Plotly chart with key %s", key)
         st.warning("This chart could not be displayed. Please rerun the analysis or use the table below.")

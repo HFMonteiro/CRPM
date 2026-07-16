@@ -19,10 +19,18 @@ def test_ci_runs_on_push_and_pull_request_with_security_gates() -> None:
     assert '_CRPM_v3"' in workflow
     assert "permissions:" in workflow
     assert "contents: read" in workflow
-    assert "ruff check crpm tests" in workflow
-    assert "black --check crpm tests" in workflow
+    assert "ruff check crpm tests app.py" in workflow
+    assert "black --check crpm tests app.py" in workflow
     assert "python -m build" in workflow
     assert "build==1.5.0" in workflow
     assert "pip-audit" in workflow
     assert "pip-audit==2.10.0" in workflow
+    assert "crpm/py.typed" in workflow
     assert "__pycache__/" in workflow
+
+
+def test_package_declares_pep561_typing_marker() -> None:
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert (REPO_ROOT / "crpm" / "py.typed").is_file()
+    assert 'crpm = ["assets/*", "py.typed"]' in pyproject

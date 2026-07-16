@@ -31,6 +31,16 @@ class _DummyContext:
         return None
 
 
+def test_store_cache_entry_bounds_plain_dict_and_refreshes_recency() -> None:
+    cache = {"a": 1, "b": 2}
+
+    common_page.store_cache_entry(cache, "a", 3, limit=2)
+    common_page.store_cache_entry(cache, "c", 4, limit=2)
+
+    assert cache == {"a": 3, "c": 4}
+    assert list(cache) == ["a", "c"]
+
+
 def _snapshot(*, discovery_results=None, comparison_df=None) -> AnalysisSnapshot:
     return AnalysisSnapshot(
         analysis_complete=True,
@@ -190,7 +200,7 @@ def test_dashboard_helpers_escape_and_redact_sensitive_values(monkeypatch) -> No
     assert "<script>" not in bar_markup
 
 
-def test_render_overview_page_uses_dashboard_command_center(monkeypatch) -> None:
+def test_render_overview_page_prioritises_process_map(monkeypatch) -> None:
     calls = {"markdown": [], "workflow": [], "download": []}
     snapshot = AnalysisSnapshot(
         analysis_complete=True,
@@ -324,6 +334,11 @@ def test_render_overview_page_uses_dashboard_command_center(monkeypatch) -> None
         lambda text, **kwargs: calls["markdown"].append(text),
     )
     monkeypatch.setattr(overview_page.st, "columns", _columns)
+    monkeypatch.setattr(
+        overview_page.st,
+        "segmented_control",
+        lambda *args, **kwargs: "Process map",
+    )
     monkeypatch.setattr(overview_page.st, "expander", lambda *args, **kwargs: _DummyContext())
     monkeypatch.setattr(overview_page.st, "download_button", lambda *args, **kwargs: calls["download"].append((args, kwargs)))
     monkeypatch.setattr(
@@ -337,27 +352,37 @@ def test_render_overview_page_uses_dashboard_command_center(monkeypatch) -> None
     )
     overview_page.render_overview_page(snapshot)
 
-    assert any("crpm-dashboard-topbar" in text for text in calls["markdown"])
-    assert any("Direct workflow mode" in text for text in calls["markdown"])
-    assert any("crpm-overview-command-center" in text for text in calls["markdown"])
+    assert any("crpm-overview-workbench" in text for text in calls["markdown"])
+    assert any("crpm-overview-kpi-strip" in text for text in calls["markdown"])
+    assert not any("crpm-dashboard-topbar" in text for text in calls["markdown"])
+    assert not any("crpm-overview-command-center" in text for text in calls["markdown"])
     assert any("crpm-overview-map-frame" in text for text in calls["markdown"])
-    assert any("crpm-dashboard-bar-list" in text for text in calls["markdown"])
-    assert any("Denominators" in text for text in calls["markdown"])
-    assert any("Event log quality" in text for text in calls["markdown"])
-    assert any("Source validation" in text for text in calls["markdown"])
-    assert any("Loop/rework posture" in text for text in calls["markdown"])
-    assert any("Cohort lenses" in text for text in calls["markdown"])
-    assert any("Latest period" in text for text in calls["markdown"])
-    assert any("Resource perspective" in text for text in calls["markdown"])
-    assert any("Root-cause summary" in text for text in calls["markdown"])
+    assert not any("crpm-dashboard-bar-list" in text for text in calls["markdown"])
     assert not any(r"C:\Analyst\Private" in text for text in calls["markdown"])
     assert not any("crpm-overview-hero" in text for text in calls["markdown"])
-    assert any("crpm-reading-order-band" in text for text in calls["markdown"])
+    assert not any("crpm-reading-order-band" in text for text in calls["markdown"])
     assert any("crpm-page-card-grid" in text for text in calls["markdown"])
     assert calls["workflow"]
-    assert calls["workflow"][0]["kwargs"]["layout_mode"] == "vertical"
-    assert calls["workflow"][0]["kwargs"]["detail_level"] == "executive"
-    assert calls["download"]
+    assert calls["workflow"][0]["kwargs"]["layout_mode"] == "horizontal"
+    assert calls["workflow"][0]["kwargs"]["detail_level"] == "analyst"
+    assert not calls["download"]
+
+
+def test_overview_view_selector_uses_full_page_surfaces(monkeypatch) -> None:
+    snapshot = SimpleNamespace(filter_key="run")
+    calls = []
+
+    monkeypatch.setattr(
+        overview_page.st,
+        "segmented_control",
+        lambda label, options, **kwargs: calls.append((label, options, kwargs)) or "Evidence",
+    )
+
+    selected = overview_page._overview_view_selector(snapshot)
+
+    assert selected == "Evidence"
+    assert calls[0][1] == overview_page.OVERVIEW_VIEWS
+    assert calls[0][2]["selection_mode"] == "single"
 
 
 def test_render_comparison_page_renders_ranked_table_and_charts(monkeypatch) -> None:
@@ -400,6 +425,20 @@ def test_render_comparison_page_renders_ranked_table_and_charts(monkeypatch) -> 
                 "precision": 0.8,
                 "discovery_time_s": 0.3,
             },
+            {
+                "model_name": "Alpha",
+                "alignment_fitness": 0.84,
+                "token_fitness": 0.82,
+                "precision": 0.78,
+                "discovery_time_s": 0.4,
+            },
+            {
+                "model_name": "ILP",
+                "alignment_fitness": 0.8,
+                "token_fitness": 0.79,
+                "precision": 0.74,
+                "discovery_time_s": 0.6,
+            },
         ]
     )
     comparison_page.render_comparison_page(_snapshot(comparison_df=comparison_df))
@@ -408,6 +447,44 @@ def test_render_comparison_page_renders_ranked_table_and_charts(monkeypatch) -> 
     assert not calls["table"][0].empty
     assert calls["table"][1]["label_column"] == "Model"
     assert len(calls["charts"]) == 2
+
+
+def test_render_comparison_page_uses_heatmap_only_for_sparse_candidates(monkeypatch) -> None:
+    calls = {"charts": []}
+    monkeypatch.setattr(comparison_page.st, "subheader", lambda *args, **kwargs: None)
+    monkeypatch.setattr(comparison_page.st, "caption", lambda *args, **kwargs: None)
+    monkeypatch.setattr(comparison_page.st, "markdown", lambda *args, **kwargs: None)
+    monkeypatch.setattr(comparison_page, "render_html_ranked_table", lambda *args, **kwargs: None)
+    monkeypatch.setattr(comparison_page, "render_plotly_chart", lambda fig, key: calls["charts"].append(key))
+    monkeypatch.setattr(comparison_page, "create_fitness_precision_scatter", lambda df: object())
+    monkeypatch.setattr(comparison_page, "create_model_comparison_heatmap", lambda df, metrics: object())
+
+    comparison_df = pd.DataFrame(
+        [
+            {"model_name": "Inductive", "alignment_fitness": 0.92, "token_fitness": 0.9, "precision": 0.85},
+            {"model_name": "Heuristics", "alignment_fitness": 0.88, "token_fitness": 0.86, "precision": 0.8},
+        ]
+    )
+    comparison_page.render_comparison_page(_snapshot(comparison_df=comparison_df))
+
+    assert calls["charts"] == ["shell_comparison_heatmap"]
+
+
+def test_comparison_variable_guide_explains_table_metrics(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(comparison_page.st, "markdown", lambda text, **kwargs: calls.append(text))
+
+    comparison_page._render_comparison_variable_guide()
+
+    assert len(calls) == 1
+    guide = calls[0]
+    assert 'data-qa="comparison-variable-guide"' in guide
+    assert "Alignment fitness" in guide
+    assert "Token fitness" in guide
+    assert "Precision" in guide
+    assert "Transitions" in guide
+    assert "PM4Py variant" in guide
+    assert "Discovery time" in guide
 
 
 def test_render_operational_flow_page_renders_charts(monkeypatch) -> None:
@@ -491,6 +568,38 @@ def test_render_operational_flow_page_renders_charts(monkeypatch) -> None:
     assert calls["subheader"] == "Operational Flow"
     assert len(calls["charts"]) == 1
     assert any("weekly case volumes" in text.lower() for text in calls["captions"])
+    assert any("cases per sequential week" in text.lower() for text in calls["captions"])
+
+
+def test_operational_flow_rate_bodies_include_denominators() -> None:
+    kpis = {
+        "fit_return_cases": 75,
+        "invitation_cases": 100,
+        "fit_return_rate": 0.75,
+        "colonoscopy_completion_numerator_count": 28,
+        "colonoscopy_completion_denominator_count": 28,
+        "colonoscopy_completion_denominator": "PCC observation",
+        "colonoscopy_completion_rate": 1.0,
+    }
+
+    assert operational_flow_page._fit_return_body(kpis) == "75 / 100 invited cases."
+    assert operational_flow_page._completion_body(kpis) == "28 / 28 after PCC observation."
+
+
+def test_operational_flow_rate_bodies_flag_denominator_mismatch() -> None:
+    kpis = {
+        "fit_return_cases": 12,
+        "invitation_cases": 10,
+        "fit_return_rate": 1.2,
+        "colonoscopy_completion_numerator_count": 15,
+        "colonoscopy_completion_denominator_count": 2,
+        "colonoscopy_completion_denominator": "PCC observation",
+        "colonoscopy_completion_rate": 7.5,
+    }
+
+    assert operational_flow_page._fit_return_body(kpis).startswith("Check denominator:")
+    assert operational_flow_page._completion_body(kpis).startswith("Check denominator:")
+    assert operational_flow_page._format_rate(7.5) == "Review denominator"
 
 
 def test_render_operational_flow_page_uses_data_driven_period_defaults(
@@ -914,7 +1023,7 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
 
     assert calls["subheader"] == "Conformance Analytics"
     assert calls["html"][0]["html"] == "<div>interactive explorer</div>"
-    assert calls["html"][0]["kwargs"]["height"] == calls["explorer_payload"]["frame_height"] + 56
+    assert calls["html"][0]["kwargs"]["height"] == min(920, max(760, calls["explorer_payload"]["frame_height"] + 56))
     assert calls["workflow"]
     assert calls["notes"]
     assert ("Legend", "Deviations", "Trace") in calls["tabs"]
@@ -923,49 +1032,72 @@ def test_render_conformance_page_renders_workspace(monkeypatch) -> None:
     assert "workflow pathway board" not in explanatory_text
     assert "direct workflow mode" in explanatory_text
     assert not any(label == "Mode" for label, _ in calls["segmented"])
-    assert {"Pathway", "Deviation", "Display", "Actions"}.issubset(set(calls["buttons"]))
+    assert {"Focus", "Watchlists", "Context"}.issubset(set(calls["buttons"]))
     assert any(label == "Path view" for label, _ in calls["segmented"])
-    assert not any(label == "Deviation focus" for label, _ in calls["segmented"])
-    assert not any(label == "Density" for label, _ in calls["segmented"])
-    assert not any(label == "Lens" for label, _ in calls["segmented"])
+    assert any(label == "Deviation focus" for label, _ in calls["segmented"])
+    assert any(label == "Density" for label, _ in calls["segmented"])
+    assert any(label == "Lens" for label, _ in calls["segmented"])
     assert any(label == "Pinned metric type" for label, _ in calls["segmented"])
-    assert not any(label == "Color" for label, _ in calls["selectbox"])
+    assert any(label == "Color" for label, _ in calls["selectbox"])
     assert "Clear pin" in calls["buttons"]
     assert "Reset filters" in calls["buttons"]
     assert "Reset view" in calls["buttons"]
-    assert (0.5, 2.86, 0.7) in calls["columns"]
+    assert (0.5, 2.86, 0.7) not in calls["columns"]
+    assert (1.02, 1.1, 0.82, 0.86, 0.78, 0.82, 0.6) in calls["columns"]
     assert (0.74, 0.13, 0.13) in calls["columns"]
     assert any("crpm-selection-card" in text for text in calls["markdown"])
     assert any("crpm-model-card-grid" in text for text in calls["markdown"])
     assert any("crpm-ranked-table" in text for text in calls["markdown"])
     assert not any("crpm-mode-banner" in text for text in calls["markdown"])
-    assert any("Root-cause watchlist" in str(text) for text in calls["markdown"])
-    assert any("Resource perspective" in str(text) for text in calls["markdown"])
-    assert any("crpm-dashboard-topbar" in str(text) for text in calls["markdown"])
+    assert not any("Root-cause watchlist" in str(text) for text in calls["markdown"])
+    assert not any("Resource perspective" in str(text) for text in calls["markdown"])
+    assert not any("crpm-dashboard-topbar" in str(text) for text in calls["markdown"])
+    assert any("crpm-conformance-summary-strip" in str(text) for text in calls["markdown"])
+    assert any("crpm-conformance-workbench-marker" in str(text) for text in calls["markdown"])
     assert not any("crpm-conformance-hero" in str(text) for text in calls["markdown"])
     assert not any("crpm-conformance-report-band" in str(text) for text in calls["markdown"])
-    assert any("crpm-conformance-side-rail--inspector" in str(text) for text in calls["markdown"])
-    assert any("crpm-conformance-panel--rail" in str(text) for text in calls["markdown"])
-    assert any("crpm-filter-parent-label" in str(text) for text in calls["markdown"])
-    assert any("crpm-filter-composer" in str(text) for text in calls["markdown"])
-    assert any("crpm-active-filter-summary" in str(text) for text in calls["markdown"])
+    assert any("crpm-inspector-deck-marker" in str(text) for text in calls["markdown"])
+    assert any("crpm-inspector-deck__heading" in str(text) and "Focus" in str(text) for text in calls["markdown"])
+    assert not any("crpm-filter-parent-label" in str(text) for text in calls["markdown"])
+    assert not any("crpm-filter-composer" in str(text) for text in calls["markdown"])
+    assert not any("crpm-active-filter-summary" in str(text) for text in calls["markdown"])
     assert any("crpm-dashboard-bar-list" in str(text) for text in calls["markdown"])
     assert any(label == "Report/export view" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
-    inspector_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-conformance-side-title--inspector" in str(text))
+    assert any(label == "Detailed drilldown" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
+    assert any(label == "Filters and display" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
+    assert any(label == "Inspector and evidence" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
+    assert not {"1", "2", "3"}.intersection(set(calls["buttons"]))
+    assert any("crpm-inspector-orbit" in str(text) for text in calls["markdown"])
+    inspector_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-inspector-deck-marker" in str(text))
     selection_index = next(idx for idx, text in enumerate(calls["markdown"]) if "Selection focus</div>" in str(text))
-    watchlist_index = next(idx for idx, text in enumerate(calls["markdown"]) if idx > selection_index and "Watchlist</div>" in str(text))
-    assert inspector_index < selection_index < watchlist_index
+    assert inspector_index < selection_index
     assert not any("Pinned exact metrics</div>" in str(text) for text in calls["markdown"])
     assert not any("Lead-time watchlist</div>" in str(text) for text in calls["markdown"])
-    assert any(label == "Context" and not kwargs.get("expanded", True) for label, kwargs in calls["expanders"])
+    assert not any(label in {"Context", "Drilldown"} for label, _ in calls["expanders"])
     assert not any("Evidence rail</div>" in str(text) for text in calls["markdown"])
-    top_transitions_index = next(
-        idx for idx, text in enumerate(calls["markdown"]) if "Top transitions" in str(text) or "Top activities" in str(text)
-    )
-    filter_parent_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-filter-parent-label" in str(text))
-    composer_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-filter-composer" in str(text))
-    active_filter_index = next(idx for idx, text in enumerate(calls["markdown"]) if "crpm-active-filter-summary" in str(text))
-    assert top_transitions_index < filter_parent_index < composer_index < active_filter_index
+    assert any("Top transitions" in str(text) or "Top activities" in str(text) for text in calls["markdown"])
+
+
+def test_inspector_navigation_rotation_wraps_in_both_directions(monkeypatch) -> None:
+    snapshot = SimpleNamespace(filter_key="run", input_name="input")
+    panel_key = conformance_page._widget_key(snapshot, "inspector_panel")
+    session_state = {panel_key: "Focus"}
+
+    monkeypatch.setattr(conformance_page.st, "session_state", session_state)
+
+    conformance_page._rotate_inspector_panel(snapshot, 1)
+    assert session_state[panel_key] == "Watchlists"
+    conformance_page._rotate_inspector_panel(snapshot, 1)
+    assert session_state[panel_key] == "Context"
+    conformance_page._rotate_inspector_panel(snapshot, 1)
+    assert session_state[panel_key] == "Focus"
+    conformance_page._rotate_inspector_panel(snapshot, -1)
+    assert session_state[panel_key] == "Context"
+
+    conformance_page._set_inspector_panel(snapshot, "Watchlists")
+    assert session_state[panel_key] == "Watchlists"
+    conformance_page._set_inspector_panel(snapshot, "unknown")
+    assert session_state[panel_key] == "Focus"
 
 
 def test_conformance_label_helpers_humanize_raw_workflow_labels() -> None:
@@ -1482,7 +1614,7 @@ def test_render_workflow_controls_sanitizes_invalid_metric_coloring(
 
     controls = conformance_page._render_workflow_controls(snapshot)
 
-    assert controls["workflow_mode"] == "interactive"
+    assert controls["workflow_mode"] == "explorer"
     assert controls["metric_coloring"] == "Conformance bucket"
     assert (
         "Color",
@@ -1505,6 +1637,7 @@ def test_render_workflow_controls_rail_uses_progressive_filter_categories(
         conformance_page._widget_key(snapshot, "workflow_metric_coloring"): "Median delay",
         conformance_page._widget_key(snapshot, "workflow_detail_level"): "Research",
         conformance_page._widget_key(snapshot, "workflow_lens"): "% of activities",
+        conformance_page._widget_key(snapshot, "workflow_mode"): "BPMN style",
     }
     segmented_calls: list[tuple[str, tuple[str, ...]]] = []
     button_calls: list[str] = []
@@ -1515,6 +1648,7 @@ def test_render_workflow_controls_rail_uses_progressive_filter_categories(
         segmented_calls.append((label, tuple(options)))
         return {
             "Filter category": "Display",
+            "View": "BPMN style",
             "Density": "Research",
             "Lens": "% of activities",
         }.get(label, kwargs.get("default", options[0]))
@@ -1538,6 +1672,7 @@ def test_render_workflow_controls_rail_uses_progressive_filter_categories(
     assert ("Lens", ("% of activities", "% of paths")) in segmented_calls
     assert not any(label == "Path view" for label, _ in segmented_calls)
     assert not any(label == "Deviation focus" for label, _ in segmented_calls)
+    assert ("View", ("Explorer", "Board", "BPMN style")) in segmented_calls
     assert (
         "Color",
         ("Conformance bucket", "Frequency", "Median delay", "P90 delay"),
@@ -1545,6 +1680,7 @@ def test_render_workflow_controls_rail_uses_progressive_filter_categories(
     ) in selectbox_calls
     assert controls["coverage_view"] == "rare"
     assert controls["deviation_view"] == "Log deviations"
+    assert controls["workflow_mode"] == "bpmn"
     assert controls["metric_coloring"] == "Median delay"
     assert controls["detail_level"] == "research"
     assert controls["conformance_lens"] == "% of activities"
@@ -1625,6 +1761,7 @@ def test_workflow_controls_from_state_surfaces_pending_filter_reset(
         conformance_page._widget_key(snapshot, "workflow_metric_coloring"): "P90 delay",
         conformance_page._widget_key(snapshot, "workflow_detail_level"): "Research",
         conformance_page._widget_key(snapshot, "workflow_lens"): "% of activities",
+        conformance_page._widget_key(snapshot, "workflow_mode"): "BPMN style",
     }
 
     monkeypatch.setattr(conformance_page.st, "session_state", session_state)
@@ -1639,8 +1776,10 @@ def test_workflow_controls_from_state_surfaces_pending_filter_reset(
     assert controls["detail_level"] == "analyst"
     assert controls["conformance_lens"] == "% of paths"
     assert controls["filter_category"] == "Pathway"
+    assert controls["workflow_mode"] == "bpmn"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_reset_pending")] is False
     assert session_state[conformance_page._widget_key(snapshot, "workflow_filter_category")] == "Pathway"
+    assert session_state[conformance_page._widget_key(snapshot, "workflow_mode")] == "BPMN style"
 
 
 def test_reset_workflow_filters_clears_selection_and_restores_defaults(
@@ -1656,6 +1795,7 @@ def test_reset_workflow_filters_clears_selection_and_restores_defaults(
         conformance_page._widget_key(snapshot, "workflow_metric_coloring"): "Median delay",
         conformance_page._widget_key(snapshot, "workflow_detail_level"): "Research",
         conformance_page._widget_key(snapshot, "workflow_lens"): "% of activities",
+        conformance_page._widget_key(snapshot, "workflow_mode"): "BPMN style",
         conformance_page._widget_key(snapshot, "workflow_reset_pending"): True,
     }
 
@@ -1671,6 +1811,7 @@ def test_reset_workflow_filters_clears_selection_and_restores_defaults(
     assert session_state[conformance_page._widget_key(snapshot, "workflow_detail_level")] == "Analyst"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_lens")] == "% of paths"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_filter_category")] == "Pathway"
+    assert session_state[conformance_page._widget_key(snapshot, "workflow_mode")] == "BPMN style"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_reset_pending")] is False
 
 
@@ -1699,6 +1840,58 @@ def test_reset_workflow_view_increments_viewport_nonce_without_mutating_filters_
     assert session_state[conformance_page._widget_key(snapshot, "workflow_metric_coloring")] == "Median delay"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_detail_level")] == "Research"
     assert session_state[conformance_page._widget_key(snapshot, "workflow_viewport_nonce")] == 3
+
+
+def test_retained_workflow_state_bits_empty_for_default_conformance_state() -> None:
+    snapshot = SimpleNamespace(filter_key="filter", input_name="sample.xes")
+    controls = {
+        "workflow_mode": "explorer",
+        "coverage_view": "all",
+        "deviation_view": "All",
+        "metric_coloring": "Conformance bucket",
+        "detail_level": "analyst",
+        "conformance_lens": "% of paths",
+    }
+
+    assert (
+        conformance_page._retained_workflow_state_bits(
+            snapshot,
+            controls,
+            selection_kind="none",
+            selection_id=None,
+        )
+        == []
+    )
+
+
+def test_retained_workflow_state_chip_summarizes_persisted_pin_and_filters(monkeypatch) -> None:
+    snapshot = SimpleNamespace(filter_key="filter", input_name="sample.xes")
+    controls = {
+        "workflow_mode": "bpmn",
+        "coverage_view": "rare",
+        "deviation_view": "Log deviations",
+        "metric_coloring": "Median delay",
+        "detail_level": "research",
+        "conformance_lens": "% of activities",
+    }
+    calls: list[str] = []
+
+    monkeypatch.setattr(conformance_page.st, "markdown", lambda text, **kwargs: calls.append(text))
+
+    conformance_page._render_retained_workflow_state_chip(
+        snapshot,
+        controls,
+        selection_kind="node",
+        selection_id="FIT_mail",
+    )
+
+    rendered = " ".join(calls)
+    assert 'data-qa="retained-workflow-state"' in rendered
+    assert "State retained" in rendered
+    assert "pin: FIT mail" in rendered
+    assert "view: BPMN style" in rendered
+    assert "path: Rare" in rendered
+    assert "+3" in rendered
 
 
 def test_workflow_mode_banner_text_differs_by_mode(monkeypatch) -> None:
@@ -1961,6 +2154,80 @@ def test_render_performance_page_reuses_timing_buckets(monkeypatch) -> None:
     assert calls["case_buckets"] is not None
     assert calls["charts"]
     assert any("no bottleneck transitions were detected" in text.lower() for text in calls["empties"])
+
+
+def test_render_performance_page_renders_performance_bpmn_map(monkeypatch) -> None:
+    calls = {"maps": []}
+    transitions = pd.DataFrame(
+        {
+            "activity": ["Invitation"],
+            "next_activity": ["FIT_mail"],
+            "transition": ["Invitation -> FIT_mail"],
+            "frequency": [20],
+            "min_duration_s": [86400],
+            "avg_duration_s": [2 * 86400],
+            "median_duration_s": [2 * 86400],
+            "max_duration_s": [4 * 86400],
+            "p90_duration_s": [3 * 86400],
+            "std_duration_s": [86400],
+        }
+    )
+    activities = pd.DataFrame(
+        {
+            "activity": ["Invitation", "FIT_mail"],
+            "frequency": [20, 20],
+            "median_duration_s": [86400, 86400],
+            "p90_duration_s": [2 * 86400, 2 * 86400],
+        }
+    )
+    cases = pd.DataFrame({"case_id": ["case-1"], "duration_days": [4.0]})
+    snapshot = AnalysisSnapshot(
+        analysis_complete=True,
+        input_name="sample.xes",
+        filter_key="filter",
+        filtered_log=[[{"concept:name": "Invitation"}]],
+        discovery_results={},
+        comparison_df=pd.DataFrame(),
+        split_info={},
+        analysis_summary={},
+        active_followup_label="Full available follow-up",
+        config_change_message=None,
+        filter_error_message=None,
+        performance_cache={
+            "filter::performance": {
+                "activity_stats": activities,
+                "transition_stats": transitions,
+                "bottlenecks": transitions.assign(bottleneck_score=0.8),
+                "case_durations": cases,
+                "timings": {},
+            }
+        },
+        variant_cache={},
+        dfg_cache={},
+        conformance_results={},
+        conformance_workspace={},
+        selected_algorithms=("Heuristics (Classic)",),
+        stage_timings={},
+    )
+
+    monkeypatch.setattr(performance_page.st, "subheader", lambda *args, **kwargs: None)
+    monkeypatch.setattr(performance_page.st, "markdown", lambda *args, **kwargs: None)
+    monkeypatch.setattr(performance_page.st, "caption", lambda *args, **kwargs: None)
+    monkeypatch.setattr(performance_page.st, "columns", _columns)
+    monkeypatch.setattr(performance_page, "render_plotly_chart", lambda *args, **kwargs: None)
+    monkeypatch.setattr(performance_page, "render_quiet_note", lambda *args, **kwargs: None)
+    monkeypatch.setattr(performance_page, "render_inline_empty", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        performance_page,
+        "render_performance_bpmn_svg",
+        lambda *args, **kwargs: calls["maps"].append((args, kwargs)) or '<svg data-qa="performance-bpmn-board"></svg>',
+    )
+
+    performance_page.render_performance_page(snapshot)
+
+    assert len(calls["maps"]) == 1
+    assert calls["maps"][0][0][0].equals(transitions)
+    assert calls["maps"][0][1]["activity_stats"].equals(activities)
 
 
 def test_render_performance_page_uses_bi_case_duration_summary(monkeypatch) -> None:

@@ -7,13 +7,32 @@ from types import SimpleNamespace
 import pandas as pd
 
 from crpm.app_runtime import LoadedLog, compute_analysis_signature
-from crpm.app_shell import _render_analysis_controls
+from crpm.app_shell import _default_xes_index, _render_analysis_controls
 from crpm.app_state import get_crpm_state
 
 
+def test_default_xes_index_prefers_full_screening_demo_for_fresh_session() -> None:
+    options = [
+        "examples/idealized_event_log.xes",
+        "examples/screening_conformance_demo.xes",
+    ]
+
+    assert _default_xes_index(options, None) == 1
+
+
+def test_default_xes_index_preserves_existing_selection() -> None:
+    options = [
+        "examples/idealized_event_log.xes",
+        "examples/screening_conformance_demo.xes",
+    ]
+
+    assert _default_xes_index(options, options[0]) == 0
+
+
 class _DummySidebar:
-    def __init__(self, *, button_result: bool = False) -> None:
+    def __init__(self, *, button_result: bool = False, checkbox_values: dict[str, bool] | None = None) -> None:
         self.button_result = button_result
+        self.checkbox_values = checkbox_values or {}
         self.info_messages = []
         self.visible_order = []
 
@@ -51,7 +70,8 @@ class _DummySidebar:
         return options[index]
 
     def checkbox(self, label, value=False, key=None, **kwargs):
-        return value
+        self.visible_order.append(("checkbox", label))
+        return self.checkbox_values.get(key, value)
 
     def date_input(self, label, value=None, key=None, **kwargs):
         return value
@@ -68,7 +88,7 @@ class _DummySidebar:
 
     def expander(self, *args, **kwargs):
         self.visible_order.append(("expander", args[0] if args else ""))
-        return _DummyContext()
+        return _DummyContext(self)
 
     def empty(self):
         index = len(self.visible_order)
@@ -87,6 +107,9 @@ class _DummySidebarSlot:
 
 
 class _DummyContext:
+    def __init__(self, sidebar: _DummySidebar | None = None) -> None:
+        self.sidebar = sidebar
+
     def __enter__(self):
         return self
 
@@ -94,7 +117,38 @@ class _DummyContext:
         return False
 
     def caption(self, *args, **kwargs):
+        if self.sidebar is not None:
+            return self.sidebar.caption(*args, **kwargs)
         return None
+
+    def markdown(self, *args, **kwargs):
+        if self.sidebar is not None:
+            return self.sidebar.markdown(*args, **kwargs)
+        return None
+
+    def radio(self, *args, **kwargs):
+        return self.sidebar.radio(*args, **kwargs)
+
+    def text_input(self, *args, **kwargs):
+        return self.sidebar.text_input(*args, **kwargs)
+
+    def file_uploader(self, *args, **kwargs):
+        return self.sidebar.file_uploader(*args, **kwargs)
+
+    def selectbox(self, *args, **kwargs):
+        return self.sidebar.selectbox(*args, **kwargs)
+
+    def checkbox(self, *args, **kwargs):
+        return self.sidebar.checkbox(*args, **kwargs)
+
+    def date_input(self, *args, **kwargs):
+        return self.sidebar.date_input(*args, **kwargs)
+
+    def multiselect(self, *args, **kwargs):
+        return self.sidebar.multiselect(*args, **kwargs)
+
+    def number_input(self, *args, **kwargs):
+        return self.sidebar.number_input(*args, **kwargs)
 
 
 def _dummy_streamlit(sidebar: _DummySidebar, session_state: dict) -> SimpleNamespace:
@@ -135,10 +189,12 @@ def test_render_analysis_controls_invalidates_stale_results(monkeypatch) -> None
     monkeypatch.setattr(app_shell, "resolve_xes_log", lambda *args, **kwargs: _loaded_log())
     monkeypatch.setattr(
         app_shell,
-        "compute_log_stats",
-        lambda *_args, **_kwargs: {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+        "get_log_profile",
+        lambda *_args, **_kwargs: {
+            "stats": {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+            "first_events": ["Start"],
+        },
     )
-    monkeypatch.setattr(app_shell, "first_event_names", lambda *_args, **_kwargs: ["Start"])
 
     _render_analysis_controls(state)
 
@@ -175,10 +231,12 @@ def test_render_analysis_controls_failure_clears_previous_results(monkeypatch) -
     monkeypatch.setattr(app_shell, "resolve_xes_log", lambda *args, **kwargs: _loaded_log())
     monkeypatch.setattr(
         app_shell,
-        "compute_log_stats",
-        lambda *_args, **_kwargs: {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+        "get_log_profile",
+        lambda *_args, **_kwargs: {
+            "stats": {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+            "first_events": ["Start"],
+        },
     )
-    monkeypatch.setattr(app_shell, "first_event_names", lambda *_args, **_kwargs: ["Start"])
     monkeypatch.setattr(app_shell, "run_discovery_comparison_pipeline", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
 
     _render_analysis_controls(state)
@@ -207,10 +265,12 @@ def test_render_analysis_controls_shows_sidebar_messages(monkeypatch) -> None:
     monkeypatch.setattr(app_shell, "resolve_xes_log", lambda *args, **kwargs: _loaded_log())
     monkeypatch.setattr(
         app_shell,
-        "compute_log_stats",
-        lambda *_args, **_kwargs: {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+        "get_log_profile",
+        lambda *_args, **_kwargs: {
+            "stats": {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+            "first_events": ["Start"],
+        },
     )
-    monkeypatch.setattr(app_shell, "first_event_names", lambda *_args, **_kwargs: ["Start"])
 
     _render_analysis_controls(state)
 
@@ -218,7 +278,7 @@ def test_render_analysis_controls_shows_sidebar_messages(monkeypatch) -> None:
     assert "Run failed" in calls["error"]
 
 
-def test_render_analysis_controls_places_run_button_before_advanced_and_log_stats(monkeypatch) -> None:
+def test_render_analysis_controls_places_run_button_before_data_drawer_and_log_summary(monkeypatch) -> None:
     import crpm.app_shell as app_shell
 
     session_state = {}
@@ -230,17 +290,53 @@ def test_render_analysis_controls_places_run_button_before_advanced_and_log_stat
     monkeypatch.setattr(app_shell, "resolve_xes_log", lambda *args, **kwargs: _loaded_log())
     monkeypatch.setattr(
         app_shell,
-        "compute_log_stats",
-        lambda *_args, **_kwargs: {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+        "get_log_profile",
+        lambda *_args, **_kwargs: {
+            "stats": {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+            "first_events": ["Start"],
+        },
     )
-    monkeypatch.setattr(app_shell, "first_event_names", lambda *_args, **_kwargs: ["Start"])
 
     _render_analysis_controls(state)
 
     run_index = sidebar.visible_order.index(("button", "Run analysis"))
-    advanced_index = sidebar.visible_order.index(("expander", "Advanced setup"))
-    log_stats_index = sidebar.visible_order.index(("markdown", "### Log Statistics"))
-    assert run_index < advanced_index < log_stats_index
+    drawer_index = sidebar.visible_order.index(("expander", "Data & run"))
+    advanced_index = sidebar.visible_order.index(("checkbox", "Advanced setup"))
+    log_stats_index = sidebar.visible_order.index(("markdown", "#### Log summary"))
+    assert run_index < drawer_index < advanced_index < log_stats_index
+
+
+def test_render_analysis_controls_keeps_advanced_settings_inline(monkeypatch) -> None:
+    import crpm.app_shell as app_shell
+
+    session_state = {}
+    state = get_crpm_state(session_state)
+    state.config.selected_log_path = str(Path("examples") / "running-example.xes")
+    sidebar = _DummySidebar(
+        checkbox_values={
+            "crpm_show_advanced_setup": True,
+            "crpm_discovery_algorithm_0": True,
+            "crpm_discovery_algorithm_3": True,
+        }
+    )
+
+    monkeypatch.setattr(app_shell, "st", _dummy_streamlit(sidebar, session_state))
+    monkeypatch.setattr(app_shell, "resolve_xes_log", lambda *args, **kwargs: _loaded_log())
+    monkeypatch.setattr(
+        app_shell,
+        "get_log_profile",
+        lambda *_args, **_kwargs: {
+            "stats": {"traces": 1, "events": 1, "start": datetime(2024, 1, 1), "end": datetime(2024, 1, 15)},
+            "first_events": ["Start"],
+        },
+    )
+
+    _render_analysis_controls(state)
+
+    assert ("checkbox", "Apply date filter") in sidebar.visible_order
+    assert ("checkbox", "Heuristics classic") in sidebar.visible_order
+    assert ("checkbox", "Inductive IMf") in sidebar.visible_order
+    assert state.config.selected_algorithms == ["Heuristics (Classic)", "Inductive (IMf)"]
 
 
 def test_page_change_scroll_reset_is_only_emitted_on_page_change(monkeypatch) -> None:
@@ -298,7 +394,7 @@ def test_render_header_prompts_rerun_with_note_and_toast(monkeypatch) -> None:
     assert calls["toast"]
 
 
-def test_render_header_renders_compact_shell_intro_for_non_conformance_pages(monkeypatch) -> None:
+def test_render_header_renders_compact_run_context_for_non_conformance_pages(monkeypatch) -> None:
     import crpm.app_shell as app_shell
 
     snapshot = SimpleNamespace(
@@ -308,16 +404,17 @@ def test_render_header_renders_compact_shell_intro_for_non_conformance_pages(mon
         comparison_df=pd.DataFrame([{"model_name": "Model"}]),
         input_name="running-example.xes",
         active_followup_label="Full available follow-up",
+        analysis_complete=True,
         config_change_message=None,
         filter_error_message=None,
     )
-    calls = {"markdown": [], "metrics": []}
+    calls = {"markdown": []}
     monkeypatch.setattr(
         app_shell,
         "st",
         SimpleNamespace(
             markdown=lambda text, **kwargs: calls["markdown"].append(text),
-            columns=lambda n: [SimpleNamespace(metric=lambda *args, **kwargs: calls["metrics"].append(args)) for _ in range(n)],
+            columns=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Run context should not render global metric columns")),
             caption=lambda *args, **kwargs: None,
             error=lambda *args, **kwargs: None,
             toast=lambda *args, **kwargs: None,
@@ -328,14 +425,17 @@ def test_render_header_renders_compact_shell_intro_for_non_conformance_pages(mon
     app_shell._render_header(snapshot, page="Discovery")
 
     rendered = " ".join(calls["markdown"])
-    assert "crpm-shell-hero--compact" in rendered
-    assert "Current run context" in rendered
+    assert 'data-qa="run-context-bar"' in rendered
+    assert "crpm-run-context__chip" in rendered
+    assert "Current run" in rendered
     assert "Screening Program Process Mining Workbench" not in rendered
     assert "running-example.xes" in rendered
-    assert len(calls["metrics"]) == 2
+    assert "Cases" in rendered
+    assert "Events" in rendered
+    assert "Models" in rendered
 
 
-def test_dfg_header_skips_global_metric_band_to_keep_map_first(monkeypatch) -> None:
+def test_dfg_header_uses_same_compact_run_context_to_keep_map_first(monkeypatch) -> None:
     import crpm.app_shell as app_shell
 
     snapshot = SimpleNamespace(
@@ -366,7 +466,7 @@ def test_dfg_header_skips_global_metric_band_to_keep_map_first(monkeypatch) -> N
     app_shell._render_header(snapshot, page="DFG Visualizations")
 
     rendered = " ".join(calls["markdown"])
-    assert "crpm-shell-hero--compact" in rendered
+    assert 'data-qa="run-context-bar"' in rendered
     assert "Read the directly-follows map first" in rendered
 
 
@@ -414,10 +514,35 @@ def test_render_header_brand_includes_author_site_badge(monkeypatch) -> None:
 
     rendered = " ".join(calls["markdown"])
     assert "crpm-header-badges" in rendered
+    assert 'data-qa="global-brand-strip"' in rendered
+    assert 'aria-label="CRPM institutional links"' in rendered
     assert "crpm-author-badge" in rendered
+    assert "crpm-build-badge" in rendered
+    assert f"Build {app_shell.__version__}" in rendered
     assert "crpm-fmup-badge" in rendered
     assert "hfmonteiro.com" in rendered
     assert app_shell.FMUP_HOME_URL in rendered
     assert app_shell.UP_HOME_URL in rendered
     assert 'rel="noopener noreferrer"' in rendered
     assert "data:image/svg+xml;base64" in rendered
+
+
+def test_render_footer_is_single_compact_provenance_signature(monkeypatch) -> None:
+    import crpm.app_shell as app_shell
+
+    calls = {"markdown": []}
+    monkeypatch.setattr(
+        app_shell,
+        "st",
+        SimpleNamespace(sidebar=SimpleNamespace(markdown=lambda text, **kwargs: calls["markdown"].append(text))),
+    )
+
+    app_shell._render_footer()
+
+    rendered = " ".join(calls["markdown"])
+    assert rendered.count('data-crpm-footer="sidebar"') == 1
+    assert "crpm-sidebar-provenance" in rendered
+    assert "PhD work" in rendered
+    assert app_shell.AUTHOR_WEBSITE in rendered
+    assert "crpm-footer__logo" not in rendered
+    assert app_shell.FMUP_BADGE_SRC not in rendered

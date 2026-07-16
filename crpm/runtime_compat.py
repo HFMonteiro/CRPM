@@ -3,7 +3,36 @@
 from __future__ import annotations
 
 import os
+import shutil
+from pathlib import Path
 from typing import Any
+
+
+def ensure_graphviz_on_path() -> str | None:
+    """Return Graphviz `dot`, adding common Windows install paths when needed."""
+    executable = shutil.which("dot")
+    if executable:
+        return executable
+
+    for candidate in _graphviz_dot_candidates():
+        if not candidate.exists():
+            continue
+        bin_dir = str(candidate.parent)
+        path_parts = [part for part in os.environ.get("PATH", "").split(os.pathsep) if part]
+        if not any(os.path.normcase(part) == os.path.normcase(bin_dir) for part in path_parts):
+            os.environ["PATH"] = os.pathsep.join([bin_dir, *path_parts])
+        return str(candidate)
+
+    return None
+
+
+def _graphviz_dot_candidates() -> tuple[Path, ...]:
+    candidates = [
+        Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Graphviz" / "bin" / "dot.exe",
+        Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Graphviz" / "bin" / "dot.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Graphviz" / "bin" / "dot.exe",
+    ]
+    return tuple(candidate for candidate in candidates if str(candidate))
 
 
 def install_pm4py_import_guard() -> None:
@@ -40,4 +69,4 @@ def install_pm4py_import_guard() -> None:
     psutil.Process = _safe_process  # type: ignore[assignment]
 
 
-__all__ = ["install_pm4py_import_guard"]
+__all__ = ["ensure_graphviz_on_path", "install_pm4py_import_guard"]
