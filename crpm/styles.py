@@ -44,6 +44,16 @@ def get_custom_css() -> str:
         scroll-padding-top: 4.25rem;
     }
 
+    /* Streamlit's actual page scroller is section.stMain. Keeping the
+       padding on the scroller prevents anchored sections and embedded maps
+       from sliding underneath the fixed CRPM/header controls. */
+    [data-testid="stMain"],
+    .stMain,
+    section.stMain {
+        scroll-padding-top: 4.25rem;
+        overflow-anchor: none;
+    }
+
     [data-testid="stAppViewContainer"],
     .stAppViewContainer,
     .main {
@@ -3383,12 +3393,11 @@ def get_custom_css() -> str:
         position: fixed;
         top: 0.42rem;
         left: calc(var(--crpm-sidebar-width) + 0.78rem);
+        right: 8rem;
         z-index: 1000001;
         display: flex;
         align-items: center;
         gap: 0.56rem;
-        width: calc(100vw - var(--crpm-sidebar-width) - 1.56rem);
-        max-width: calc(100vw - var(--crpm-sidebar-width) - 1.56rem);
         min-height: 2.55rem;
         pointer-events: none;
     }
@@ -3404,7 +3413,9 @@ def get_custom_css() -> str:
         display: flex;
         align-items: baseline;
         gap: 0.38rem;
+        flex: 1 1 auto;
         min-width: 0;
+        max-width: 100%;
         padding: 0.34rem 0.58rem;
         border: 1px solid rgba(30, 45, 54, 0.16);
         border-radius: 8px;

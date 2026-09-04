@@ -135,9 +135,12 @@ def test_dashboard_header_avoids_cockpit_clipping() -> None:
     assert '[data-testid="stHeader"]' in css
     assert "position: relative !important;" not in css
     assert "scroll-padding-top: 4.25rem;" in css
+    assert "overflow-anchor: none;" in css
+    assert '[data-testid="stMain"],\n    .stMain,\n    section.stMain' in css
     assert ".crpm-header-badges {\n        position: fixed;" in css
     assert "left: calc(var(--crpm-sidebar-width) + 0.78rem);" in css
     assert "max-width: calc(100vw - var(--crpm-sidebar-width) - 9.5rem);" in css
+    assert "right: 8rem;" in css
     assert "z-index: 1000001;" in css
     assert ".crpm-dashboard-map-toolbar" in css
     assert "scroll-margin-top: 4.25rem;" in css

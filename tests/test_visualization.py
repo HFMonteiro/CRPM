@@ -1,4 +1,4 @@
-"""Tests for crpm.visualization — Plotly chart builders."""
+"""Tests for crpm.visualization â€” Plotly chart builders."""
 
 from __future__ import annotations
 
@@ -34,6 +34,7 @@ from crpm.visualization import (
 
 def test_pan_zoom_svg_wrapper_exposes_desktop_controls() -> None:
     html = render_pan_zoom_svg_html('<svg viewBox="0 0 100 50"></svg>')
+    assert ".crpm-map-tools { position:absolute; top:56px;" in html
 
     assert "addEventListener('wheel'" in html
     assert "pointerdown" in html
@@ -44,7 +45,7 @@ def test_pan_zoom_svg_wrapper_exposes_desktop_controls() -> None:
 def test_bottleneck_chart_returns_figure():
     df = pd.DataFrame(
         {
-            "transition": ["A → B", "B → C"],
+            "transition": ["A â†’ B", "B â†’ C"],
             "bottleneck_score": [0.8, 0.5],
             "median_duration_s": [86400, 43200],
             "p90_duration_s": [172800, 86400],
@@ -60,7 +61,7 @@ def test_bottleneck_chart_returns_figure():
 def test_bottleneck_chart_collapses_equal_median_and_p90_values():
     df = pd.DataFrame(
         {
-            "transition": ["A → B", "B → C"],
+            "transition": ["A â†’ B", "B â†’ C"],
             "bottleneck_score": [0.8, 0.5],
             "median_duration_s": [86400, 43200],
             "p90_duration_s": [86400, 86400],
@@ -109,6 +110,9 @@ def test_performance_bpmn_svg_encodes_transfer_speed_and_volume():
     assert "Hospital care" in svg
     assert "#3f8f6b" in svg
     assert "#c95d68" in svg
+    assert (
+        'id="performance-arrow-fast" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse"' in svg
+    )
 
 
 def test_performance_bpmn_svg_reduces_variation_spaghetti():
@@ -172,8 +176,8 @@ def test_case_duration_histogram_returns_figure():
 def test_variant_frequency_chart_returns_figure():
     df = pd.DataFrame(
         {
-            "variant": ["A → B → C", "A → C"],
-            "variant_str": ["A → B → C", "A → C"],
+            "variant": ["A â†’ B â†’ C", "A â†’ C"],
+            "variant_str": ["A â†’ B â†’ C", "A â†’ C"],
             "frequency": [5, 3],
             "percentage": [62.5, 37.5],
         }
@@ -292,7 +296,7 @@ def test_queue_stock_chart_returns_figure():
 def test_stage_aging_chart_returns_figure():
     df = pd.DataFrame(
         {
-            "transition": ["FIT_mail → FIT_return", "PCC_observation → Colonoscopy_center"],
+            "transition": ["FIT_mail â†’ FIT_return", "PCC_observation â†’ Colonoscopy_center"],
             "frequency": [10, 5],
             "median_days": [7.0, 32.0],
             "p90_days": [14.0, 60.0],
@@ -421,6 +425,7 @@ def test_workflow_bpmn_style_svg_returns_bpmn_notation_without_trace_leaks():
     assert 'data-qa="bpmn-gateway"' in svg
     assert 'data-qa="bpmn-sequence-flow"' in svg
     assert 'data-qa="bpmn-swimlane-main"' in svg
+    assert 'id="crpm-bpmn-arrow-main" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse"' in svg
     assert "Reminder" in svg
     assert "RAW-CASE-ID-42" not in svg
     assert "private-log.xes" not in svg
@@ -1282,7 +1287,7 @@ def test_workflow_interactive_payload_and_html_use_business_labels_only():
                     "target": "FIT_mail",
                     "source_label": "Invitation",
                     "target_label": "FIT mail",
-                    "business_label": "Invitation → FIT mail",
+                    "business_label": "Invitation â†’ FIT mail",
                     "frequency": 662,
                     "median_days": 15.0,
                     "p90_days": 15.0,
@@ -1380,7 +1385,7 @@ def test_workflow_interactive_payload_selects_edge_by_edge_uid():
                     "edge_uid": edge_uid,
                     "source": "Invitation_mail",
                     "target": "FIT_mail",
-                    "business_label": "Invitation → FIT mail",
+                    "business_label": "Invitation â†’ FIT mail",
                     "frequency": 10,
                     "severity": "Low",
                     "conformance_bucket": "Conformant",
@@ -1680,7 +1685,7 @@ def test_workflow_interactive_payload_keeps_mainline_nodes_spaced_apart():
                     "target": "FIT_mail",
                     "source_label": "Invitation",
                     "target_label": "FIT mail",
-                    "business_label": "Invitation → FIT mail",
+                    "business_label": "Invitation â†’ FIT mail",
                     "frequency": 662,
                     "median_days": 15.0,
                     "p90_days": 15.0,
@@ -1697,7 +1702,7 @@ def test_workflow_interactive_payload_keeps_mainline_nodes_spaced_apart():
                     "target": "FIT_return",
                     "source_label": "FIT mail",
                     "target_label": "FIT return",
-                    "business_label": "FIT mail → FIT return",
+                    "business_label": "FIT mail â†’ FIT return",
                     "frequency": 662,
                     "median_days": 7.0,
                     "p90_days": 7.0,
@@ -1991,7 +1996,7 @@ def test_workflow_interactive_payload_bounds_cover_labels_and_anchors():
                     "target": "FIT_mail",
                     "source_label": "Invitation",
                     "target_label": "FIT mail",
-                    "business_label": "Invitation → FIT mail",
+                    "business_label": "Invitation â†’ FIT mail",
                     "frequency": 1000,
                     "median_days": 15.0,
                     "p90_days": 18.0,
@@ -2095,7 +2100,7 @@ def test_workflow_explorer_html_uses_lighter_arrowheads():
                 "id": "invitation->fit_mail",
                 "source": "invitation",
                 "target": "fit_mail",
-                "caption": "Invitation → FIT mail",
+                "caption": "Invitation â†’ FIT mail",
                 "frequency": 900,
                 "median_days": 15.0,
                 "p90_days": 18.0,
@@ -2133,13 +2138,14 @@ def test_workflow_explorer_html_uses_lighter_arrowheads():
 
     html = render_workflow_explorer_html(payload)
 
-    assert re.search(r'markerWidth="6\.4"', html)
-    assert re.search(r'markerHeight="6\.4"', html)
+    assert re.search(r'markerWidth="11\.0"', html)
+    assert re.search(r'markerHeight="10\.0"', html)
     assert 'id="workflow-explorer-arrow-mainline"' in html
     assert 'id="workflow-explorer-arrow-log"' in html
     assert 'id="workflow-explorer-arrow-model"' in html
     assert 'id="workflow-explorer-arrow-neutral"' in html
     assert 'marker-end="url(#workflow-explorer-arrow-mainline)"' in html
+    assert 'markerUnits="userSpaceOnUse"' in html
     assert 'stroke="#c8d4d8" stroke-width="0.8"' not in html
     assert 'preserveAspectRatio="xMidYMin meet"' in html
     assert 'viewBox="0 0 900 420"' in html
@@ -2385,7 +2391,7 @@ def test_filter_workflow_payload_summary_matches_visible_subset():
                     "case_id": "case-1",
                     "event_count": 4,
                     "throughput_days": 20.0,
-                    "variant_signature": "Invitation → FIT mail",
+                    "variant_signature": "Invitation â†’ FIT mail",
                     "has_deviation": False,
                     "node_ids": ["invitation", "fit_mail"],
                     "edge_ids": ["invitation -> fit_mail"],
@@ -2395,7 +2401,7 @@ def test_filter_workflow_payload_summary_matches_visible_subset():
                     "case_id": "case-2",
                     "event_count": 6,
                     "throughput_days": 42.0,
-                    "variant_signature": "Invitation → FIT mail → Admin review",
+                    "variant_signature": "Invitation â†’ FIT mail â†’ Admin review",
                     "has_deviation": True,
                     "node_ids": ["invitation", "fit_mail", "admin_review"],
                     "edge_ids": ["invitation -> fit_mail", "fit_mail -> admin_review"],
@@ -2486,7 +2492,7 @@ def test_filter_workflow_payload_matches_trace_profiles_by_edge_uid():
                     "case_id": "case-1",
                     "event_count": 3,
                     "throughput_days": 12.0,
-                    "variant_signature": "FIT mail → Admin review",
+                    "variant_signature": "FIT mail â†’ Admin review",
                     "has_deviation": True,
                     "has_model_deviation": True,
                     "node_ids": ["fit_mail", "admin_review"],

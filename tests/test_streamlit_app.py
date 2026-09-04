@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from streamlit.testing.v1 import AppTest
 
 from crpm.app_shell import ADVANCED_PAGES, WORKSPACE_PAGES
 
 
 def test_app_navigation_renders_each_workspace_page() -> None:
-    app = AppTest.from_file("app.py")
+    app = AppTest.from_file(Path(__file__).parents[1] / "app.py")
     app.run(timeout=45)
 
     for workspace, pages in WORKSPACE_PAGES.items():

@@ -201,6 +201,9 @@ def _reset_page_scroll_on_change(page: str) -> None:
               }
             } catch (_) {}
           };
+          try {
+            window.parent.history.scrollRestoration = "manual";
+          } catch (_) {}
           const reset = () => {
             scrollTop(window.parent);
             try {
@@ -208,6 +211,8 @@ def _reset_page_scroll_on_change(page: str) -> None:
               [
                 doc.querySelector("[data-testid='stMain']"),
                 doc.querySelector("[data-testid='stAppViewContainer']"),
+                doc.querySelector(".stMain"),
+                doc.querySelector("section.stMain"),
                 doc.querySelector(".main"),
                 doc.querySelector("section.main"),
                 doc.scrollingElement,
@@ -220,7 +225,9 @@ def _reset_page_scroll_on_change(page: str) -> None:
           try {
             window.parent.requestAnimationFrame(() => window.parent.requestAnimationFrame(reset));
           } catch (_) {}
-          [120, 360, 900].forEach((delay) => window.setTimeout(reset, delay));
+          [120, 360, 900, 1400, 2200, 3600].forEach((delay) => window.setTimeout(reset, delay));
+          const guard = window.setInterval(reset, 120);
+          window.setTimeout(() => window.clearInterval(guard), 10000);
         })();
         </script>
         """,
