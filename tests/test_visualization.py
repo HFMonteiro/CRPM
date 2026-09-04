@@ -1239,6 +1239,51 @@ def test_filter_workflow_payload_respects_coverage_and_deviation_filters():
     assert filtered["detail_level"] == "executive"
 
 
+def test_filter_workflow_payload_all_keeps_mixed_reference_flow():
+    payload = {
+        "nodes": pd.DataFrame(
+            [
+                {
+                    "activity": "Invitation_mail",
+                    "display_name": "Invitation",
+                    "cases": 1000,
+                    "coverage_group": "dominant",
+                    "conformance_bucket": "Mixed",
+                    "branch_role": "mainline",
+                },
+                {
+                    "activity": "FIT_mail",
+                    "display_name": "FIT mail",
+                    "cases": 980,
+                    "coverage_group": "dominant",
+                    "conformance_bucket": "Mixed",
+                    "branch_role": "mainline",
+                },
+            ]
+        ),
+        "edges": pd.DataFrame(
+            [
+                {
+                    "edge_id": "Invitation_mail -> FIT_mail",
+                    "source": "Invitation_mail",
+                    "target": "FIT_mail",
+                    "frequency": 980,
+                    "severity": "Low",
+                    "conformance_bucket": "Mixed",
+                    "coverage_group": "dominant",
+                    "branch_role": "mainline",
+                }
+            ]
+        ),
+        "legend": pd.DataFrame(),
+    }
+
+    filtered = filter_workflow_payload(payload, coverage_view="all", deviation_view="all", detail_level="analyst")
+
+    assert list(filtered["nodes"]["activity"]) == ["Invitation_mail", "FIT_mail"]
+    assert list(filtered["edges"]["edge_id"]) == ["Invitation_mail -> FIT_mail"]
+
+
 def test_workflow_interactive_payload_and_html_use_business_labels_only():
     payload = {
         "nodes": pd.DataFrame(

@@ -2816,7 +2816,11 @@ def filter_workflow_payload(
         "all": {"dominant", "mixed", "rare"},
     }.get(coverage_key, {"dominant", "mixed", "rare"})
     allowed_buckets = {
-        "all": {"Conformant", "Log deviation", "Model deviation"},
+        # Mixed items form the visible backbone when an observed pathway has
+        # both conformant and deviating evidence.  The default "All" view
+        # must retain them; otherwise the explorer can render only detached
+        # deviation cards and lose its reference flow.
+        "all": {"Conformant", "Log deviation", "Model deviation", "Mixed"},
         "conformant": {"Conformant"},
         "log deviations": {"Log deviation"},
         "model deviations": {"Model deviation"},
@@ -4867,6 +4871,7 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
     )
 
     if anchor_nodes:
+
         def _anchor_marker(node: Mapping[str, Any]) -> tuple[str, str]:
             bucket = str(node.get("conformance_bucket", "Conformant"))
             if bucket == "Model deviation":
