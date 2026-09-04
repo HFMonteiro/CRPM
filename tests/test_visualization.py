@@ -405,7 +405,7 @@ def _bpmn_style_workflow_payload() -> dict:
             [
                 {
                     "trace_ref": "RAW-CASE-ID-42",
-                    "case_path": r"C:\Users\hugof\Desktop\private-log.xes",
+                    "case_path": "sensitive-source://private-log.xes",
                     "representative_edge_uid": rare_edge_uid,
                 }
             ]
