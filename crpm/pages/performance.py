@@ -29,7 +29,12 @@ from crpm.pages.common import (
     store_cache_entry,
 )
 from crpm.screening import humanize_activity_label
-from crpm.visualization import create_activity_duration_chart, create_bottleneck_chart, render_performance_bpmn_svg
+from crpm.visualization import (
+    create_activity_duration_chart,
+    create_bottleneck_chart,
+    render_pan_zoom_svg_html,
+    render_performance_bpmn_svg,
+)
 
 
 def render_performance_page(snapshot: AnalysisSnapshot) -> None:
@@ -113,13 +118,14 @@ def render_performance_page(snapshot: AnalysisSnapshot) -> None:
     st.caption(
         "The map keeps the reference flow prominent and shows only the five highest-volume variation links; use the tables below for the full transition set."
     )
-    st.markdown(
-        render_performance_bpmn_svg(
-            transition_stats,
-            activity_stats=activity_stats,
-            case_durations=case_durations,
-        ),
-        unsafe_allow_html=True,
+    performance_svg = render_performance_bpmn_svg(
+        transition_stats,
+        activity_stats=activity_stats,
+        case_durations=case_durations,
+    )
+    st.iframe(
+        render_pan_zoom_svg_html(performance_svg, accessible_label="Interactive performance BPMN process map"),
+        height=560,
     )
 
     # --- Bottlenecks ---
@@ -218,6 +224,17 @@ def render_performance_page(snapshot: AnalysisSnapshot) -> None:
         _render_case_duration_summary(case_durations)
     else:
         render_inline_empty("No complete case duration summary could be computed for the current filtered selection.")
+
+    with st.expander("Metric definitions and research interpretation", expanded=False):
+        st.markdown(
+            "**Median** is the typical observed delay; **P90** is the delay below which 90% of observations fall. "
+            "**Dwell time** measures elapsed time between consecutive recorded events. **Throughput** is observed transfers per time unit. "
+            "Colour indicates relative transfer speed within this cohort; line weight indicates observed volume."
+        )
+        st.caption(
+            "Research context: the 45-day referral-to-colonoscopy value is a configurable study benchmark with provenance, not a universal clinical rule. "
+            "Administrative timestamps may differ from the true time of care; a 365-day follow-up horizon censors later completions; observational patterns do not establish causality."
+        )
 
 
 def _render_case_duration_summary(case_durations: pd.DataFrame) -> None:

@@ -73,6 +73,7 @@ def test_conformance_compact_shell_styles_exist() -> None:
 def test_overview_and_bi_card_styles_exist() -> None:
     css = get_custom_css()
     assert ".crpm-dashboard-topbar" in css
+    assert ".crpm-dashboard-badge--watch" in css
     assert ".crpm-dashboard-bar-list" in css
     assert ".crpm-dashboard-card-stack" in css
     assert ".crpm-filter-parent-label" in css
@@ -134,9 +135,12 @@ def test_dashboard_header_avoids_cockpit_clipping() -> None:
     assert '[data-testid="stHeader"]' in css
     assert "position: relative !important;" not in css
     assert "scroll-padding-top: 4.25rem;" in css
+    assert "overflow-anchor: none;" in css
+    assert '[data-testid="stMain"],\n    .stMain,\n    section.stMain' in css
     assert ".crpm-header-badges {\n        position: fixed;" in css
     assert "left: calc(var(--crpm-sidebar-width) + 0.78rem);" in css
     assert "max-width: calc(100vw - var(--crpm-sidebar-width) - 9.5rem);" in css
+    assert "right: 8rem;" in css
     assert "z-index: 1000001;" in css
     assert ".crpm-dashboard-map-toolbar" in css
     assert "scroll-margin-top: 4.25rem;" in css
@@ -156,6 +160,13 @@ def test_dense_filter_text_keeps_readable_minimum_sizes() -> None:
     assert ".crpm-active-filter-summary__title {\n        font-size: 0.74rem;" in css
     assert ".crpm-active-filter-summary__chip span {\n        font-size: 0.72rem;" in css
     assert ".crpm-conformance-hero__badge span {\n        font-size: 0.72rem;" in css
+
+
+def test_main_expander_summary_has_readable_light_surface() -> None:
+    css = get_custom_css()
+    assert '[data-testid="stMainBlockContainer"] [data-testid="stExpander"] > details > summary' in css
+    assert "background: rgba(252, 251, 253, 0.96) !important;" in css
+    assert "color: var(--crpm-text) !important;" in css
 
 
 def test_conformance_model_cards_stay_inside_narrow_rails() -> None:

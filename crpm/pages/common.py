@@ -119,7 +119,7 @@ def render_dashboard_topbar(
             tone = values[2] if len(values) > 2 else "neutral"
         badge_chunks.append(
             (
-                f"<span class='crpm-dashboard-badge crpm-dashboard-badge--{_slugify(str(tone))}'>"
+                f"<span class='crpm-dashboard-badge crpm-dashboard-badge--{_slugify(str(tone))}' role='listitem'>"
                 f"<span>{html.escape(redact_dashboard_value(label, max_chars=28))}</span>"
                 f"<strong>{html.escape(redact_dashboard_value(value, max_chars=42))}</strong>"
                 "</span>"
@@ -140,7 +140,7 @@ def render_dashboard_topbar(
             f"<div class='crpm-dashboard-topbar__subtitle'>{html.escape(redact_dashboard_value(subtitle, max_chars=140))}</div>"
             f"{meta_markup}"
             "</div>"
-            f"<div class='crpm-dashboard-topbar__badges'>{''.join(badge_chunks)}</div>"
+            f"<div class='crpm-dashboard-topbar__badges' role='list' aria-label='Analysis context'>{''.join(badge_chunks)}</div>"
             "</div>"
         ),
         unsafe_allow_html=True,

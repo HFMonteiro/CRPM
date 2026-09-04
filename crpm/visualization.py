@@ -331,9 +331,10 @@ def _humanize_transition_label(value: Any) -> str:
     if "->" in label:
         left, right = [part.strip() for part in label.split("->", 1)]
         return f"{humanize_activity_label(left) or left} → {humanize_activity_label(right) or right}"
-    if "→" in label:
-        left, right = [part.strip() for part in label.split("→", 1)]
-        return f"{humanize_activity_label(left) or left} → {humanize_activity_label(right) or right}"
+    for separator in ("→", "Ã¢â€ â€™"):
+        if separator in label:
+            left, right = [part.strip() for part in label.split(separator, 1)]
+            return f"{humanize_activity_label(left) or left} → {humanize_activity_label(right) or right}"
     return humanize_activity_label(label) or label
 
 
@@ -2356,7 +2357,7 @@ def render_workflow_conformance_svg(
                 f'<marker id="workflow-arrow" markerWidth="{float(profile["marker_width"]):.1f}" '
                 f'markerHeight="{float(profile["marker_height"]):.1f}" '
                 f'refX="{float(profile["marker_ref_x"]):.1f}" refY="{float(profile["marker_ref_y"]):.1f}" '
-                'orient="auto" markerUnits="strokeWidth">'
+                'orient="auto" markerUnits="userSpaceOnUse">'
             ),
             (
                 f'<path d="M 0 0 L {float(profile["marker_width"]):.1f} {float(profile["marker_ref_y"]):.1f} '
@@ -2645,7 +2646,7 @@ def render_workflow_conformance_svg(
         '<filter id="workflow-shadow" x="-20%" y="-20%" width="160%" height="160%">',
         '<feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#433655" flood-opacity="0.12"/>',
         "</filter>",
-        '<marker id="workflow-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth">',
+        '<marker id="workflow-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">',
         '<path d="M 0 0 L 7 3.5 L 0 7 z" fill="#51645a"/>',
         "</marker>",
         "</defs>",
@@ -2678,7 +2679,8 @@ def render_workflow_conformance_svg(
         source_x = source_layout["x"] + source_layout["width"] / 2
         source_y = source_layout["y"] + source_layout["height"]
         target_x = target_layout["x"] + target_layout["width"] / 2
-        target_y = target_layout["y"]
+        arrow_clearance = 8.0
+        target_y = target_layout["y"] - arrow_clearance
         source_lane = str(source_layout["row"].get("lane", "center") or "center").lower()
         target_lane = str(target_layout["row"].get("lane", "center") or "center").lower()
 
@@ -2814,7 +2816,11 @@ def filter_workflow_payload(
         "all": {"dominant", "mixed", "rare"},
     }.get(coverage_key, {"dominant", "mixed", "rare"})
     allowed_buckets = {
-        "all": {"Conformant", "Log deviation", "Model deviation"},
+        # Mixed items form the visible backbone when an observed pathway has
+        # both conformant and deviating evidence.  The default "All" view
+        # must retain them; otherwise the explorer can render only detached
+        # deviation cards and lose its reference flow.
+        "all": {"Conformant", "Log deviation", "Model deviation", "Mixed"},
         "conformant": {"Conformant"},
         "log deviations": {"Log deviation"},
         "model deviations": {"Model deviation"},
@@ -3081,9 +3087,9 @@ def render_workflow_bpmn_style_svg(
     parts = [
         f'<svg class="crpm-bpmn-style-board" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {board_width} {board_height}" width="{board_width}" height="{board_height}" role="img" aria-label="BPMN-style workflow process map" data-qa="bpmn-style-board" style="display:block;width:100%;height:auto;max-width:100%;font-family:Segoe UI, Arial, sans-serif;">',
         "<defs>",
-        '<marker id="crpm-bpmn-arrow-main" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 10 4 L 0 8 z" fill="#415967"/></marker>',
-        '<marker id="crpm-bpmn-arrow-log" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 10 4 L 0 8 z" fill="#b9842e"/></marker>',
-        '<marker id="crpm-bpmn-arrow-model" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 10 4 L 0 8 z" fill="#a45f8d"/></marker>',
+        '<marker id="crpm-bpmn-arrow-main" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 10 4 L 0 8 z" fill="#415967"/></marker>',
+        '<marker id="crpm-bpmn-arrow-log" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 10 4 L 0 8 z" fill="#b9842e"/></marker>',
+        '<marker id="crpm-bpmn-arrow-model" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 10 4 L 0 8 z" fill="#a45f8d"/></marker>',
         '<filter id="crpm-bpmn-shadow" x="-18%" y="-18%" width="140%" height="140%"><feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#395060" flood-opacity="0.12"/></filter>',
         "</defs>",
         '<rect x="0" y="0" width="100%" height="100%" rx="18" ry="18" fill="#ffffff" stroke="#d8e0e7" stroke-width="1.2"/>',
@@ -3399,6 +3405,7 @@ def render_performance_bpmn_svg(
         display_edges = transitions.sort_values(["frequency", "median_days"], ascending=[False, True]).head(8).copy()
         display_edges["edge_kind"] = "mainline"
     max_frequency = max(1.0, float(display_edges["frequency"].max()))
+    arrow_clearance = 8.0
 
     def connection(source: str, target: str) -> tuple[float, float, float, float]:
         source_position = positions[source]
@@ -3408,8 +3415,8 @@ def render_performance_bpmn_svg(
         tx = float(target_position["x"])
         ty = float(target_position["y"])
         if tx >= sx:
-            return sx + task_width / 2.0, sy, tx - task_width / 2.0, ty
-        return sx - task_width / 2.0, sy, tx + task_width / 2.0, ty
+            return sx + task_width / 2.0, sy, tx - task_width / 2.0 - arrow_clearance, ty
+        return sx - task_width / 2.0, sy, tx + task_width / 2.0 + arrow_clearance, ty
 
     def edge_path(
         sx: float,
@@ -3448,9 +3455,9 @@ def render_performance_bpmn_svg(
     parts = [
         f'<svg class="crpm-performance-bpmn-board" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {board_width} {board_height}" width="{board_width}" height="{board_height}" role="img" aria-label="Performance BPMN process map" data-qa="performance-bpmn-board" style="display:block;width:100%;height:auto;max-width:100%;font-family:Segoe UI, Arial, sans-serif;">',
         "<defs>",
-        '<marker id="performance-arrow-fast" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 10 4 L 0 8 z" fill="#3f8f6b"/></marker>',
-        '<marker id="performance-arrow-moderate" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 10 4 L 0 8 z" fill="#c59236"/></marker>',
-        '<marker id="performance-arrow-slow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 10 4 L 0 8 z" fill="#c95d68"/></marker>',
+        '<marker id="performance-arrow-fast" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 10 4 L 0 8 z" fill="#3f8f6b"/></marker>',
+        '<marker id="performance-arrow-moderate" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 10 4 L 0 8 z" fill="#c59236"/></marker>',
+        '<marker id="performance-arrow-slow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 10 4 L 0 8 z" fill="#c95d68"/></marker>',
         '<filter id="performance-bpmn-shadow" x="-18%" y="-18%" width="140%" height="140%"><feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#395060" flood-opacity="0.12"/></filter>',
         "</defs>",
         '<rect x="0" y="0" width="100%" height="100%" rx="18" fill="#ffffff" stroke="#d8e0e7" stroke-width="1.2"/>',
@@ -3489,10 +3496,10 @@ def render_performance_bpmn_svg(
         f'<g data-qa="performance-bpmn-end"><circle cx="{end_x:.1f}" cy="{mainline_y:.1f}" r="24" fill="#ffffff" stroke="#294354" stroke-width="3.2"/><circle cx="{end_x:.1f}" cy="{mainline_y:.1f}" r="16" fill="none" stroke="#294354" stroke-width="1.4"/><text x="{end_x:.1f}" y="{mainline_y + 4:.1f}" text-anchor="middle" font-size="10.5" font-weight="800" fill="#294354">End</text></g>'
     )
     parts.append(
-        f'<path d="M {start_x + 22:.1f} {mainline_y:.1f} L {float(first_main["x"]) - task_width / 2.0:.1f} {mainline_y:.1f}" fill="none" stroke="#415967" stroke-width="2" marker-end="url(#performance-arrow-fast)" data-qa="performance-anchor-flow"/>'
+        f'<path d="M {start_x + 22:.1f} {mainline_y:.1f} L {float(first_main["x"]) - task_width / 2.0 - arrow_clearance:.1f} {mainline_y:.1f}" fill="none" stroke="#415967" stroke-width="2" marker-end="url(#performance-arrow-fast)" data-qa="performance-anchor-flow"/>'
     )
     parts.append(
-        f'<path d="M {float(last_main["x"]) + task_width / 2.0:.1f} {mainline_y:.1f} L {end_x - 24:.1f} {mainline_y:.1f}" fill="none" stroke="#415967" stroke-width="2" marker-end="url(#performance-arrow-fast)" data-qa="performance-anchor-flow"/>'
+        f'<path d="M {float(last_main["x"]) + task_width / 2.0 + arrow_clearance:.1f} {mainline_y:.1f} L {end_x - 24:.1f} {mainline_y:.1f}" fill="none" stroke="#415967" stroke-width="2" marker-end="url(#performance-arrow-fast)" data-qa="performance-anchor-flow"/>'
     )
 
     for _, row in display_edges.sort_values(["edge_kind", "frequency"], ascending=[True, False]).iterrows():
@@ -3617,17 +3624,18 @@ def _workflow_bpmn_connection_points(
     sy = float(source_layout["center_y"])
     tx = float(target_layout["center_x"])
     ty = float(target_layout["center_y"])
+    arrow_clearance = 8.0
     if tx >= sx:
         return (
             float(source_layout["x"]) + float(source_layout["width"]),
             sy,
-            float(target_layout["x"]),
+            float(target_layout["x"]) - arrow_clearance,
             ty,
         )
     return (
         float(source_layout["x"]),
         sy,
-        float(target_layout["x"]) + float(target_layout["width"]),
+        float(target_layout["x"]) + float(target_layout["width"]) + arrow_clearance,
         ty,
     )
 
@@ -4373,8 +4381,8 @@ def create_workflow_interactive_payload(
             path_min_x = min(source_x, target_x, control1_x, control2_x) - 5.0
             path_max_x = max(source_x, target_x, control1_x, control2_x) + 5.0
         else:
-            start_y = source_item["center_y"]
-            end_y = target_item["center_y"]
+            start_y = source_item["y"] - 4.0
+            end_y = target_item["y"] + target_item["height"] + 4.0
             arc_x = (
                 min(source_x, target_x) - (60.0 + lane_index * 8.0)
                 if source_item["lane_position"] != "right"
@@ -4408,9 +4416,12 @@ def create_workflow_interactive_payload(
                 "branch_role": str(row.get("branch_role", "mainline")),
                 "stroke_style": str(row.get("stroke_style", "solid")),
                 "stroke_width": max(
-                    0.9 if is_mainline else 0.75,
+                    # The explorer is routinely scaled down to fit a desktop
+                    # viewport. Sub-pixel side links then disappear, leaving
+                    # an apparent sequence of disconnected cards.
+                    1.7 if is_mainline else 1.6,
                     min(
-                        2.2 if is_mainline else 1.35,
+                        2.6 if is_mainline else 2.1,
                         base_stroke + frequency_ratio * (0.72 if is_mainline else 0.34),
                     ),
                 ),
@@ -4797,28 +4808,28 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
         '<feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#7e9dc4" flood-opacity="0.18"/>',
         "</filter>",
         (
-            f'<marker id="workflow-explorer-arrow-mainline" markerWidth="{max(marker_width, 6.4):.1f}" markerHeight="{max(marker_height, 6.4):.1f}" '
-            f'refX="{max(marker_ref_x, 5.7):.1f}" refY="{max(marker_ref_y, 3.2):.1f}" orient="auto" markerUnits="strokeWidth">'
+            f'<marker id="workflow-explorer-arrow-mainline" markerWidth="{max(marker_width, 11.0):.1f}" markerHeight="{max(marker_height, 10.0):.1f}" '
+            f'refX="{max(marker_ref_x, 9.7):.1f}" refY="{max(marker_ref_y, 5.0):.1f}" orient="auto" markerUnits="userSpaceOnUse">'
         ),
-        f'<path d="M 0.4 0.6 L {max(marker_width, 6.4):.1f} {max(marker_ref_y, 3.2):.1f} L 0.4 {max(1.0, max(marker_height, 6.4) - 0.6):.1f} z" fill="#5f9074" fill-opacity="0.96"/>',
+        f'<path d="M 0.4 0.6 L {max(marker_width, 11.0):.1f} {max(marker_ref_y, 5.0):.1f} L 0.4 {max(1.0, max(marker_height, 10.0) - 0.6):.1f} z" fill="#5f9074" fill-opacity="0.98"/>',
         "</marker>",
         (
-            f'<marker id="workflow-explorer-arrow-log" markerWidth="{max(marker_width, 6.4):.1f}" markerHeight="{max(marker_height, 6.4):.1f}" '
-            f'refX="{max(marker_ref_x, 5.7):.1f}" refY="{max(marker_ref_y, 3.2):.1f}" orient="auto" markerUnits="strokeWidth">'
+            f'<marker id="workflow-explorer-arrow-log" markerWidth="{max(marker_width, 11.0):.1f}" markerHeight="{max(marker_height, 10.0):.1f}" '
+            f'refX="{max(marker_ref_x, 9.7):.1f}" refY="{max(marker_ref_y, 5.0):.1f}" orient="auto" markerUnits="userSpaceOnUse">'
         ),
-        f'<path d="M 0.4 0.6 L {max(marker_width, 6.4):.1f} {max(marker_ref_y, 3.2):.1f} L 0.4 {max(1.0, max(marker_height, 6.4) - 0.6):.1f} z" fill="#c69334" fill-opacity="0.96"/>',
+        f'<path d="M 0.4 0.6 L {max(marker_width, 11.0):.1f} {max(marker_ref_y, 5.0):.1f} L 0.4 {max(1.0, max(marker_height, 10.0) - 0.6):.1f} z" fill="#c69334" fill-opacity="0.98"/>',
         "</marker>",
         (
-            f'<marker id="workflow-explorer-arrow-model" markerWidth="{max(marker_width, 6.4):.1f}" markerHeight="{max(marker_height, 6.4):.1f}" '
-            f'refX="{max(marker_ref_x, 5.7):.1f}" refY="{max(marker_ref_y, 3.2):.1f}" orient="auto" markerUnits="strokeWidth">'
+            f'<marker id="workflow-explorer-arrow-model" markerWidth="{max(marker_width, 11.0):.1f}" markerHeight="{max(marker_height, 10.0):.1f}" '
+            f'refX="{max(marker_ref_x, 9.7):.1f}" refY="{max(marker_ref_y, 5.0):.1f}" orient="auto" markerUnits="userSpaceOnUse">'
         ),
-        f'<path d="M 0.4 0.6 L {max(marker_width, 6.4):.1f} {max(marker_ref_y, 3.2):.1f} L 0.4 {max(1.0, max(marker_height, 6.4) - 0.6):.1f} z" fill="#b57ea8" fill-opacity="0.96"/>',
+        f'<path d="M 0.4 0.6 L {max(marker_width, 11.0):.1f} {max(marker_ref_y, 5.0):.1f} L 0.4 {max(1.0, max(marker_height, 10.0) - 0.6):.1f} z" fill="#b57ea8" fill-opacity="0.98"/>',
         "</marker>",
         (
-            f'<marker id="workflow-explorer-arrow-neutral" markerWidth="{max(marker_width, 6.1):.1f}" markerHeight="{max(marker_height, 6.1):.1f}" '
-            f'refX="{max(marker_ref_x, 5.5):.1f}" refY="{max(marker_ref_y, 3.0):.1f}" orient="auto" markerUnits="strokeWidth">'
+            f'<marker id="workflow-explorer-arrow-neutral" markerWidth="{max(marker_width, 10.5):.1f}" markerHeight="{max(marker_height, 9.5):.1f}" '
+            f'refX="{max(marker_ref_x, 9.2):.1f}" refY="{max(marker_ref_y, 4.8):.1f}" orient="auto" markerUnits="userSpaceOnUse">'
         ),
-        f'<path d="M 0.4 0.6 L {max(marker_width, 6.1):.1f} {max(marker_ref_y, 3.0):.1f} L 0.4 {max(1.0, max(marker_height, 6.1) - 0.6):.1f} z" fill="#9aabb5" fill-opacity="0.9"/>',
+        f'<path d="M 0.4 0.6 L {max(marker_width, 10.5):.1f} {max(marker_ref_y, 4.8):.1f} L 0.4 {max(1.0, max(marker_height, 9.5) - 0.6):.1f} z" fill="#7f929f" fill-opacity="0.96"/>',
         "</marker>",
         "</defs>",
         '<g id="crpm-workflow-static-frame" data-testid="explorer-frame" data-qa="explorer-frame">',
@@ -4859,9 +4870,30 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
         ]
     )
 
+    if anchor_nodes:
+
+        def _anchor_marker(node: Mapping[str, Any]) -> tuple[str, str]:
+            bucket = str(node.get("conformance_bucket", "Conformant"))
+            if bucket == "Model deviation":
+                return "workflow-explorer-arrow-model", "#b57ea8"
+            if bucket == "Log deviation":
+                return "workflow-explorer-arrow-log", "#c69334"
+            return "workflow-explorer-arrow-mainline", "#5f9074"
+
+        first_marker, first_stroke = _anchor_marker(first_node)
+        last_marker, last_stroke = _anchor_marker(last_node)
+        first_target_y = float(first_node["y"]) - 4.0
+        last_source_y = float(last_node["y"]) + float(last_node["height"]) + 4.0
+        parts.extend(
+            [
+                f'<path d="M {first_anchor_x:.1f} {start_anchor_y + start_height / 2.0:.1f} L {first_anchor_x:.1f} {first_target_y:.1f}" fill="none" stroke="{first_stroke}" stroke-width="2.2" stroke-linecap="round" opacity="0.96" marker-end="url(#{first_marker})" data-qa="explorer-anchor-flow"/>',
+                f'<path d="M {last_anchor_x:.1f} {last_source_y:.1f} L {last_anchor_x:.1f} {end_anchor_y - start_height / 2.0:.1f}" fill="none" stroke="{last_stroke}" stroke-width="2.2" stroke-linecap="round" opacity="0.96" marker-end="url(#{last_marker})" data-qa="explorer-anchor-flow"/>',
+            ]
+        )
+
     for edge in edge_items:
         is_mainline_edge = str(edge.get("branch_role", "mainline")) == "mainline"
-        opacity = "0.98" if edge["selected"] else "0.78" if edge["neighbor"] else ("0.6" if is_mainline_edge else "0.42")
+        opacity = "0.98" if edge["selected"] else "0.86" if edge["neighbor"] else ("0.78" if is_mainline_edge else "0.70")
         dash = ' stroke-dasharray="9 6"' if str(edge.get("stroke_style", "solid")).lower() == "dashed" else ""
         if "activit" in conformance_lens.lower():
             label = [
@@ -4881,8 +4913,11 @@ def render_workflow_explorer_html(explorer_payload: Mapping[str, Any]) -> str:
             edge_classes.append("is-focus")
         elif edge["neighbor"]:
             edge_classes.append("is-neighbor")
-        edge_stroke = str(edge.get("stroke", "#86ae9b")) if is_mainline_edge else "#a9b5c0"
-        base_stroke_width = float(edge["stroke_width"]) + (1.0 if edge["selected"] else (0.18 if is_mainline_edge else 0.06))
+        edge_stroke = str(edge.get("stroke", "#86ae9b")) if is_mainline_edge else "#7f929f"
+        base_stroke_width = max(
+            1.15 if is_mainline_edge else 1.1,
+            float(edge["stroke_width"]) + (1.0 if edge["selected"] else (0.18 if is_mainline_edge else 0.06)),
+        )
         conformance_bucket = str(edge.get("conformance_bucket", "Conformant"))
         if edge["selected"]:
             marker_id = "workflow-explorer-arrow-mainline"
@@ -6032,9 +6067,10 @@ def _workflow_business_label(row: pd.Series) -> str:
 
     label = str(row.get("business_label") or "").strip()
     if label:
-        if "→" in label:
-            left, right = [part.strip() for part in label.split("→", 1)]
-            return f"{humanize_activity_label(left) or left} → {humanize_activity_label(right) or right}"
+        for separator in ("→", "Ã¢â€ â€™"):
+            if separator in label:
+                left, right = [part.strip() for part in label.split(separator, 1)]
+                return f"{humanize_activity_label(left) or left} → {humanize_activity_label(right) or right}"
         return humanize_activity_label(label) or label
     if row.get("source") is not None or row.get("target") is not None:
         source = humanize_activity_label(str(row.get("source_label") or row.get("source") or "?")) or "?"
@@ -6197,6 +6233,65 @@ def _safe_float(value: Any) -> Optional[float]:
         return None
 
 
+def render_pan_zoom_svg_html(svg_markup: str, *, accessible_label: str = "Interactive process map") -> str:
+    """Wrap a generated SVG with desktop wheel zoom, drag pan, hover, and reset controls."""
+    safe_label = escape(accessible_label)
+    return f"""
+    <!doctype html>
+    <html><head><meta charset="utf-8"><style>
+      html, body {{ margin:0; padding:0; background:#fff; overflow:hidden; font-family:Segoe UI,Arial,sans-serif; }}
+      .crpm-map-shell {{ position:relative; height:100vh; min-height:420px; border:1px solid #d8e0e7; background:#fff; }}
+      .crpm-map-canvas {{ width:100%; height:100%; cursor:grab; touch-action:none; overflow:hidden; }}
+      .crpm-map-canvas.is-dragging {{ cursor:grabbing; }}
+      .crpm-map-canvas svg {{ width:100% !important; height:100% !important; max-width:none !important; display:block; }}
+      .crpm-map-tools {{ position:absolute; top:56px; right:10px; z-index:4; display:flex; gap:4px; padding:4px; border:1px solid #cfd8df; background:rgba(255,255,255,.96); box-shadow:0 3px 12px rgba(31,48,58,.12); }}
+      .crpm-map-tools button {{ width:30px; height:30px; border:0; border-radius:4px; background:#f4f7f6; color:#263b32; font:700 17px/1 Segoe UI,Arial,sans-serif; cursor:pointer; }}
+      .crpm-map-tools button:hover, .crpm-map-tools button:focus-visible {{ background:#e3eee8; outline:2px solid #4f7664; outline-offset:1px; }}
+      .crpm-map-tools button[data-action="out"], .crpm-map-tools button[data-action="reset"] {{ font-size:0; }}
+      .crpm-map-tools button[data-action="out"]::before {{ content:"−"; font-size:17px; }}
+      .crpm-map-tools button[data-action="reset"]::before {{ content:"R"; font-size:14px; }}
+      .crpm-map-help {{ position:absolute; left:12px; bottom:9px; z-index:3; color:#53645b; background:rgba(255,255,255,.9); padding:3px 6px; font-size:11px; }}
+    </style></head><body>
+      <section class="crpm-map-shell" aria-label="{safe_label}">
+        <div class="crpm-map-tools" role="toolbar" aria-label="Map view controls">
+          <button type="button" data-action="in" title="Zoom in" aria-label="Zoom in">+</button>
+          <button type="button" data-action="out" title="Zoom out" aria-label="Zoom out">−</button>
+          <button type="button" data-action="reset" title="Reset view" aria-label="Reset view">R</button>
+        </div>
+        <div class="crpm-map-canvas">{svg_markup}</div>
+        <div class="crpm-map-help">Wheel to zoom · drag to pan · hover for context</div>
+      </section>
+      <script>
+      (() => {{
+        const canvas = document.querySelector('.crpm-map-canvas');
+        const svg = canvas && canvas.querySelector('svg');
+        if (!svg || !svg.viewBox || !svg.viewBox.baseVal) return;
+        const original = {{x:svg.viewBox.baseVal.x, y:svg.viewBox.baseVal.y, w:svg.viewBox.baseVal.width, h:svg.viewBox.baseVal.height}};
+        let view = {{...original}}, drag = null;
+        const apply = () => svg.setAttribute('viewBox', `${{view.x}} ${{view.y}} ${{view.w}} ${{view.h}}`);
+        const zoom = (factor, clientX, clientY) => {{
+          const rect = canvas.getBoundingClientRect();
+          const px = clientX == null ? .5 : Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+          const py = clientY == null ? .5 : Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+          const nextW = Math.max(original.w * .22, Math.min(original.w * 3, view.w * factor));
+          const nextH = Math.max(original.h * .22, Math.min(original.h * 3, view.h * factor));
+          view.x += (view.w - nextW) * px; view.y += (view.h - nextH) * py; view.w = nextW; view.h = nextH; apply();
+        }};
+        canvas.addEventListener('wheel', event => {{ event.preventDefault(); zoom(event.deltaY < 0 ? .86 : 1.16, event.clientX, event.clientY); }}, {{passive:false}});
+        canvas.addEventListener('pointerdown', event => {{ drag={{x:event.clientX,y:event.clientY,vx:view.x,vy:view.y}}; canvas.setPointerCapture(event.pointerId); canvas.classList.add('is-dragging'); }});
+        canvas.addEventListener('pointermove', event => {{ if(!drag) return; const rect=canvas.getBoundingClientRect(); view.x=drag.vx-(event.clientX-drag.x)*view.w/rect.width; view.y=drag.vy-(event.clientY-drag.y)*view.h/rect.height; apply(); }});
+        const stop = () => {{ drag=null; canvas.classList.remove('is-dragging'); }};
+        canvas.addEventListener('pointerup', stop); canvas.addEventListener('pointercancel', stop);
+        document.querySelector('.crpm-map-tools').addEventListener('click', event => {{
+          const action=event.target.dataset.action; if(action==='in') zoom(.8); if(action==='out') zoom(1.25); if(action==='reset') {{view={{...original}}; apply();}}
+        }});
+        apply();
+      }})();
+      </script>
+    </body></html>
+    """
+
+
 __all__ = [
     "create_bottleneck_chart",
     "create_activity_duration_chart",
@@ -6216,6 +6311,7 @@ __all__ = [
     "filter_workflow_payload",
     "create_workflow_interactive_payload",
     "render_workflow_explorer_html",
+    "render_pan_zoom_svg_html",
     "create_workflow_cytoscape_payload",
     "create_workflow_conformance_sankey",
     "workflow_edge_uid",
